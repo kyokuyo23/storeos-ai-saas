@@ -1,0 +1,62 @@
+:root{--b:#059669;--s:255,255,255;--sd:15,18,25}
+*{-webkit-tap-highlight-color:transparent;box-sizing:border-box}
+html{scroll-behavior:smooth}
+.shell{display:flex;min-height:100dvh}
+.side{width:220px;flex-shrink:0;transition:transform .25s}
+.main{flex:1;min-width:0;overflow-y:auto;max-height:100dvh}
+@media(max-width:767px){
+  .side{position:fixed;inset:0;z-index:802;transform:translateX(-100%);width:260px}
+  .side.open{transform:translateX(0)}
+  .side-bd{position:fixed;inset:0;z-index:801;background:rgba(0,0,0,.45);display:none}
+  .side-bd.show{display:block}
+  .main{max-height:none}
+}
+.c{background:rgba(var(--s),1);border:1px solid rgba(0,0,0,.06);border-radius:14px}
+:where(.dark) .c{background:rgba(var(--sd),1);border-color:rgba(255,255,255,.06)}
+.c:hover{box-shadow:0 2px 12px rgba(0,0,0,.03)}
+.fi{animation:fi .3s ease}
+@keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.pop{animation:pop .35s cubic-bezier(.34,1.56,.64,1)}
+@keyframes pop{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+.pulse{animation:pulse 2s ease infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.nl{display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:10px;font-size:12.5px;cursor:pointer;transition:all .12s;color:rgba(120,120,120,.6);user-select:none}
+.nl:hover{background:rgba(5,150,105,.05);color:#059669}
+.nl.act{background:rgba(5,150,105,.1);color:#059669;font-weight:700}
+:where(.dark) .nl:hover{background:rgba(16,185,129,.06)}
+:where(.dark) .nl.act{background:rgba(16,185,129,.1);color:#10b981}
+.pill{display:inline-flex;align-items:center;gap:3px;padding:3px 9px;border-radius:99px;font-size:10.5px;font-weight:700}
+.btn{padding:8px 18px;border-radius:10px;font-weight:700;font-size:12px;cursor:pointer;transition:all .12s;border:none;display:inline-flex;align-items:center;justify-content:center;gap:5px}
+.btn:active{transform:scale(.97)}
+.btn-p{background:#059669;color:#fff}.btn-p:hover{background:#047857}
+.btn-o{background:transparent;border:1px solid rgba(120,120,120,.15);color:inherit}.btn-o:hover{border-color:#059669;color:#059669}
+.btn-d{background:#ef4444;color:#fff}
+.btn-s{padding:6px 12px;font-size:11px;border-radius:8px}
+.bar-t{height:6px;background:rgba(120,120,120,.08);border-radius:99px;overflow:hidden}
+.bar-f{height:100%;border-radius:99px;transition:width .6s cubic-bezier(.4,0,.2,1)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;padding:9px 12px;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:rgba(120,120,120,.45)}
+.tbl td{padding:9px 12px;border-top:1px solid rgba(120,120,120,.06);vertical-align:middle}
+.tbl tr:hover td{background:rgba(5,150,105,.015)}
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.toast{padding:10px 16px;border-radius:10px;font-size:12px;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.12);animation:toastIn .3s ease;display:flex;align-items:center;gap:6px;max-width:320px;color:#fff}
+@keyframes toastIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+.modal-bg{background:rgba(0,0,0,.5);backdrop-filter:blur(3px)}
+.modal-c{background:rgba(var(--s),1);border-radius:18px;box-shadow:0 16px 50px rgba(0,0,0,.2);max-width:440px;width:calc(100% - 24px);max-height:calc(100dvh - 40px);overflow-y:auto}
+:where(.dark) .modal-c{background:rgba(var(--sd),1)}
+.numpad-btn{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;border-radius:12px;background:rgba(120,120,120,.05);cursor:pointer;transition:all .1s;user-select:none}
+.numpad-btn:active{transform:scale(.9);background:rgba(5,150,105,.12)}
+.input{width:100%;padding:8px 12px;border:1px solid rgba(120,120,120,.15);border-radius:10px;background:transparent;font-size:13px;outline:none;transition:border .15s}
+.input:focus{border-color:#059669;box-shadow:0 0 0 3px rgba(5,150,105,.08)}
+.health-ring{position:relative;width:140px;height:140px}
+.health-ring svg{transform:rotate(-90deg)}
+.health-ring .score{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.brief-bubble{background:#dcf8c6;color:#111;border-radius:12px 12px 12px 2px;padding:14px 16px;max-width:100%;font-size:13px;line-height:1.6}
+:where(.dark) .brief-bubble{background:#1a3a1a;color:#e5e7eb}
+.dash-grid{display:grid;gap:20px}
+@media(min-width:768px){.dash-grid{grid-template-columns:1fr 1fr}}
+@media(min-width:1200px){.dash-grid{grid-template-columns:2fr 1fr}}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-thumb{background:rgba(120,120,120,.18);border-radius:2px}
+.dec-card{transition:all .15s}
+.dec-card:hover{transform:translateY(-1px)}
