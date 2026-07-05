@@ -1,0 +1,111 @@
+/* StoreOS AI — SaaS Platform Styles */
+:root{--brand:#059669;--brand-l:#10b981;--brand-d:#047857;--accent:#f59e0b;--danger:#ef4444;--surface:255,255,255;--surface-dark:17,24,39}
+*{-webkit-tap-highlight-color:transparent;box-sizing:border-box}
+html{scroll-behavior:smooth}
+
+/* Layout */
+.shell{display:flex;min-height:100dvh}
+.sidebar{width:240px;flex-shrink:0;transition:transform .25s ease}
+.main-content{flex:1;min-width:0;overflow-y:auto;max-height:100dvh}
+
+@media(max-width:767px){
+  .sidebar{position:fixed;inset:0;z-index:802;transform:translateX(-100%);width:280px}
+  .sidebar.open{transform:translateX(0)}
+  .sidebar-backdrop{position:fixed;inset:0;z-index:801;background:rgba(0,0,0,.4);display:none}
+  .sidebar-backdrop.show{display:block}
+  .main-content{max-height:none}
+}
+
+/* Cards */
+.card{background:rgba(var(--surface),1);border:1px solid rgba(120,120,120,.12);border-radius:16px}
+:where(.dark) .card{background:rgba(var(--surface-dark),1);border-color:rgba(120,120,120,.15)}
+
+/* Animations */
+.fade-in{animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.slide-in{animation:slideIn .3s ease}
+@keyframes slideIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
+.scale-in{animation:scaleIn .2s ease}
+@keyframes scaleIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+
+/* Pulse */
+.live-dot{animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* Progress bars */
+.prog-track{height:6px;background:rgba(120,120,120,.12);border-radius:999px;overflow:hidden}
+.prog-fill{height:100%;border-radius:999px;transition:width .6s ease}
+
+/* Table */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;padding:10px 12px;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:rgba(120,120,120,.7)}
+.tbl td{padding:10px 12px;border-top:1px solid rgba(120,120,120,.08);vertical-align:middle}
+.tbl tbody tr:hover td{background:rgba(5,150,105,.03)}
+.table-wrapper{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* Nav */
+.nav-link{display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:10px;font-size:13px;color:rgba(120,120,120,.8);transition:all .15s;cursor:pointer;user-select:none}
+.nav-link:hover{background:rgba(5,150,105,.06);color:#059669}
+.nav-link.active{background:rgba(5,150,105,.1);color:#059669;font-weight:600}
+:where(.dark) .nav-link:hover{background:rgba(16,185,129,.08)}
+:where(.dark) .nav-link.active{background:rgba(16,185,129,.12);color:#10b981}
+
+/* Badge */
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;line-height:1.4}
+.badge-danger{background:#fef2f2;color:#dc2626}
+:where(.dark) .badge-danger{background:rgba(220,38,38,.12);color:#f87171}
+.badge-warn{background:#fffbeb;color:#d97706}
+:where(.dark) .badge-warn{background:rgba(217,119,6,.12);color:#fbbf24}
+.badge-ok{background:#ecfdf5;color:#059669}
+:where(.dark) .badge-ok{background:rgba(5,150,105,.12);color:#34d399}
+.badge-info{background:#eff6ff;color:#2563eb}
+:where(.dark) .badge-info{background:rgba(37,99,235,.12);color:#60a5fa}
+
+/* Button */
+.btn{padding:10px 20px;border-radius:12px;font-weight:600;font-size:13px;cursor:pointer;transition:all .15s;border:none;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:#059669;color:#fff}
+.btn-primary:hover{background:#047857}
+.btn-outline{background:transparent;border:1px solid rgba(120,120,120,.2);color:inherit}
+.btn-outline:hover{border-color:#059669;color:#059669}
+.btn-danger{background:#ef4444;color:#fff}
+.btn-sm{padding:6px 14px;font-size:12px;border-radius:8px}
+.btn-ghost{background:transparent;color:#059669;padding:6px 10px}
+.btn-ghost:hover{background:rgba(5,150,105,.06)}
+
+/* Toast */
+.toast{padding:12px 18px;border-radius:12px;font-size:13px;font-weight:500;box-shadow:0 8px 24px rgba(0,0,0,.12);animation:toastIn .3s ease;display:flex;align-items:center;gap:8px;max-width:360px}
+@keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+.toast-ok{background:#059669;color:#fff}
+.toast-err{background:#ef4444;color:#fff}
+.toast-warn{background:#f59e0b;color:#fff}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-thumb{background:rgba(120,120,120,.25);border-radius:3px}
+
+/* WA bubble */
+.wa-bg{background:#e5ddd5}
+:where(.dark) .wa-bg{background:#1a2e1a}
+.wa-bubble{border-radius:12px 12px 12px 2px;background:#fff;color:#111;padding:12px;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+:where(.dark) .wa-bubble{background:#1f3d1f;color:#e5e7eb}
+
+/* Skeleton loader */
+.skel{background:linear-gradient(90deg,rgba(120,120,120,.08) 25%,rgba(120,120,120,.15) 50%,rgba(120,120,120,.08) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:8px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* Modal */
+.modal-bg{background:rgba(0,0,0,.5);backdrop-filter:blur(4px)}
+.modal-card{background:rgba(var(--surface),1);border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,.2);max-width:480px;width:calc(100% - 32px);max-height:calc(100dvh - 40px);overflow-y:auto}
+:where(.dark) .modal-card{background:rgba(var(--surface-dark),1)}
+
+/* Input */
+.input{width:100%;padding:10px 14px;border:1px solid rgba(120,120,120,.2);border-radius:10px;background:transparent;font-size:14px;transition:border-color .15s;outline:none}
+.input:focus{border-color:#059669;box-shadow:0 0 0 3px rgba(5,150,105,.1)}
+
+/* Keypad */
+.keypad-btn{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600;border-radius:12px;background:rgba(120,120,120,.06);cursor:pointer;transition:all .1s;user-select:none}
+.keypad-btn:active{transform:scale(.92);background:rgba(5,150,105,.15)}
+
+/* Print */
+@media print{.no-print{display:none!important}}

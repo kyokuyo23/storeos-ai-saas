@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>StoreOS AI — Digital Store Manager</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.0/dist/index.global.js" integrity="sha384-nWTzRTCY/9V4Bo352ehygr1c4cnst4XN6lMR3fipakEQrhVpc0hEM5Dii3Amz0sT" crossorigin="anonymous"></script>
+  <style type="text/tailwindcss">@custom-variant dark (&:where(.dark, .dark *));</style>
+  <script>document.documentElement.classList.toggle('dark',window.matchMedia('(prefers-color-scheme:dark)').matches);</script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="min-h-dvh text-sm antialiased bg-gray-100 dark:bg-gray-950 text-gray-900 dark:text-gray-100 overflow-x-hidden">
+  <div id="app"></div>
+  <div id="toast-container" class="fixed top-4 right-4 z-[999] flex flex-col gap-2"></div>
+  <div id="modal-overlay" class="fixed inset-0 z-[900] hidden"></div>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
