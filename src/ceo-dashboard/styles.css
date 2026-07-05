@@ -1,0 +1,58 @@
+:root{--brand:#059669;--surface:255,255,255;--surface-d:15,18,25}
+*{-webkit-tap-highlight-color:transparent;box-sizing:border-box}
+html{scroll-behavior:smooth}
+
+/* Card system */
+.c{background:rgba(var(--surface),1);border:1px solid rgba(0,0,0,.06);border-radius:16px;transition:box-shadow .2s}
+:where(.dark) .c{background:rgba(var(--surface-d),1);border-color:rgba(255,255,255,.06)}
+.c:hover{box-shadow:0 4px 20px rgba(0,0,0,.04)}
+:where(.dark) .c:hover{box-shadow:0 4px 20px rgba(0,0,0,.3)}
+
+/* Health ring */
+.health-ring{position:relative;width:140px;height:140px}
+.health-ring svg{transform:rotate(-90deg)}
+.health-ring .score{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+
+/* Animations */
+.fi{animation:fi .35s ease}
+@keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.pop{animation:pop .4s cubic-bezier(.34,1.56,.64,1)}
+@keyframes pop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+
+/* Progress */
+.bar-track{height:6px;background:rgba(120,120,120,.1);border-radius:99px;overflow:hidden}
+.bar-fill{height:100%;border-radius:99px;transition:width .8s cubic-bezier(.4,0,.2,1)}
+
+/* Pulse */
+.pulse{animation:pulse 2s ease infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* Badge */
+.pill{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700}
+
+/* Sparkline area */
+.spark-area{fill:url(#sparkGrad);opacity:.15}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-thumb{background:rgba(120,120,120,.2);border-radius:2px}
+
+/* Timeline */
+.tl-dot{width:10px;height:10px;border-radius:50%;border:2px solid;flex-shrink:0}
+.tl-line{width:2px;background:rgba(120,120,120,.12);flex-shrink:0}
+
+/* Decision card hover */
+.dec-card{transition:all .15s}
+.dec-card:hover{border-color:#059669;transform:translateY(-1px)}
+
+/* Daily brief bubble */
+.brief-bubble{background:#dcf8c6;color:#111;border-radius:12px 12px 12px 2px;padding:14px 16px;max-width:100%;font-size:13px;line-height:1.6}
+:where(.dark) .brief-bubble{background:#1a3a1a;color:#e5e7eb}
+
+/* Responsive grid */
+.dash-grid{display:grid;gap:20px}
+@media(min-width:768px){.dash-grid{grid-template-columns:1fr 1fr}}
+@media(min-width:1200px){.dash-grid{grid-template-columns:2fr 1fr}}
+
+/* Revenue velocity chart */
+.vel-grid{background-image:repeating-linear-gradient(90deg,rgba(120,120,120,.06) 0,rgba(120,120,120,.06) 1px,transparent 1px,transparent);background-size:calc(100%/24) 100%}

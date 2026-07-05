@@ -1,0 +1,43 @@
+/* StoreOS AI — Strategy Document */
+:root { --brand: #059669; --brand-light: #10b981; --accent: #f59e0b; }
+* { -webkit-tap-highlight-color: transparent; scroll-behavior: smooth; }
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+.table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* Section animations */
+.section-enter { animation: slideUp .4s ease; }
+@keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+/* Severity / score bar */
+.score-track { background: rgba(120,120,120,.15); border-radius: 999px; overflow: hidden; height: 6px; }
+.score-fill { height: 100%; border-radius: 999px; transition: width .5s ease; }
+
+/* Navigation */
+.nav-item { transition: all .15s ease; }
+.nav-item:hover { background: rgba(5,150,105,.08); }
+.nav-item.active { background: rgba(5,150,105,.12); color: #059669; font-weight: 600; border-left: 3px solid #059669; }
+
+/* Print tweaks */
+@media print {
+  .no-print { display: none !important; }
+  body { font-size: 11px; }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { height: 5px; width: 5px; }
+::-webkit-scrollbar-thumb { background: rgba(120,120,120,.3); border-radius: 3px; }
+
+/* Pulse for emphasis */
+.pulse-dot { animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+/* Custom table styles */
+.strat-table { width: 100%; border-collapse: collapse; }
+.strat-table th { text-align: left; padding: 10px 12px; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.strat-table td { padding: 10px 12px; border-top: 1px solid rgba(120,120,120,.12); vertical-align: top; }
+.strat-table tr:hover td { background: rgba(5,150,105,.03); }

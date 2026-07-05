@@ -1,0 +1,42 @@
+:root{--brand:#059669;--brand-l:#10b981}
+*{-webkit-tap-highlight-color:transparent;box-sizing:border-box}
+html{scroll-behavior:smooth}
+
+.fade-in{animation:fadeIn .35s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+/* Nav */
+.toc-link{display:block;padding:6px 12px;border-radius:8px;font-size:12px;color:rgba(120,120,120,.7);transition:all .15s;border-left:2px solid transparent}
+.toc-link:hover{color:#059669;background:rgba(5,150,105,.04)}
+.toc-link.active{color:#059669;font-weight:600;border-left-color:#059669;background:rgba(5,150,105,.06)}
+
+/* Cards */
+.rcard{background:rgba(255,255,255,1);border:1px solid rgba(120,120,120,.1);border-radius:16px}
+:where(.dark) .rcard{background:rgba(17,24,39,1);border-color:rgba(120,120,120,.15)}
+
+/* Table */
+.rtbl{width:100%;border-collapse:collapse;font-size:13px}
+.rtbl th{text-align:left;padding:10px 14px;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:rgba(120,120,120,.6)}
+.rtbl td{padding:10px 14px;border-top:1px solid rgba(120,120,120,.08);vertical-align:top}
+.rtbl tr:hover td{background:rgba(5,150,105,.02)}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* Badge */
+.pill{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700}
+.pill-green{background:#ecfdf5;color:#059669}:where(.dark) .pill-green{background:rgba(5,150,105,.12);color:#34d399}
+.pill-blue{background:#eff6ff;color:#2563eb}:where(.dark) .pill-blue{background:rgba(37,99,235,.12);color:#60a5fa}
+.pill-amber{background:#fffbeb;color:#d97706}:where(.dark) .pill-amber{background:rgba(217,119,6,.12);color:#fbbf24}
+.pill-red{background:#fef2f2;color:#dc2626}:where(.dark) .pill-red{background:rgba(220,38,38,.12);color:#f87171}
+.pill-gray{background:#f3f4f6;color:#6b7280}:where(.dark) .pill-gray{background:rgba(107,114,128,.12);color:#9ca3af}
+.pill-purple{background:#faf5ff;color:#7c3aed}:where(.dark) .pill-purple{background:rgba(124,58,237,.12);color:#a78bfa}
+
+/* Code block */
+.codeblock{background:#1e293b;color:#e2e8f0;border-radius:12px;padding:16px 20px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7;overflow-x:auto;white-space:pre}
+.codeblock .kw{color:#7dd3fc}.codeblock .str{color:#86efac}.codeblock .cm{color:#64748b}.codeblock .fn{color:#c4b5fd}.codeblock .num{color:#fbbf24}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-thumb{background:rgba(120,120,120,.2);border-radius:3px}
+
+/* Print */
+@media print{.no-print{display:none!important}body{font-size:10px}}
