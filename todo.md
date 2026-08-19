@@ -22,3 +22,18 @@
 - [x] Add an explicit low-stock status to the inventory table alongside its theoretical-versus-actual variance status.
 - [x] Perform final cross-module validation across dashboard, POS, products, inventory, sales, alerts, Ask StoreOS, reports, and settings.
 - [x] Save the deployment-ready StoreOS version.
+- [x] Review the newly supplied StoreOS Step 2 specification and translate its requirements into implementation tasks.
+- [x] Replace the prior advanced demo workspace with a no-login Step 2 foundation and remove POS, analytics, AI, reports, alerts, stock-movement, and other advanced business logic.
+- [x] Define and apply persistent database tables for categories, products, ingredients, recipes, recipe items, and business settings.
+- [x] Create server-side category, product, ingredient, recipe, and settings services with validation-ready public procedures and query/mutation error states.
+- [x] Rebuild the responsive StoreOS shell with Dashboard, Products, Inventory, Settings, and clear Coming Soon states for deferred modules.
+- [x] Implement the zero-state dashboard with date, four zero KPI cards, and required empty sales, products, inventory, alerts, and AI insight sections.
+- [x] Implement persisted Category and Product management with SKU, description, pricing, unit, status, and Indonesian validation messages.
+- [x] Implement persisted Ingredient management with unit, cost per unit, minimum stock, status, and Indonesian validation messages.
+- [x] Implement persisted recipe creation and editing with ingredient quantities, without inventory deduction or automatic COGS logic.
+- [x] Implement persistent business settings for Kopi Nusantara, Cibitung Bekasi, IDR, and Asia/Jakarta.
+- [x] Add explicit Indonesian server-side error mapping for duplicate, invalid-reference, unavailable-database, and generic mutation failures, with unit tests.
+- [x] Validate persistence for the default Kopi Nusantara settings, zero states, error-state wiring, desktop/mobile layout, and the no-login direct-dashboard entry.
+- [x] Standardize the business location to the exact required value "Cibitung Bekasi" across application defaults and persisted settings.
+- [x] Add a unit test for the generic server-side database mutation failure mapping.
+- [x] Save and report the Step 2 foundation version, including tables, pages, components, tests, and known issues.

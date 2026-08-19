@@ -8,6 +8,13 @@
       "when": 1787102774364,
       "tag": "0000_equal_master_chief",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1787112942459,
+      "tag": "0001_parched_gertrude_yorkes",
+      "breakpoints": true
     }
   ]
 }
