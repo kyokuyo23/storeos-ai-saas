@@ -11,6 +11,9 @@ export function mapFoundationError(error: unknown, entity: string): TRPCError {
   if (databaseError.code === "ER_NO_REFERENCED_ROW_2" || databaseError.errno === 1452) {
     return new TRPCError({ code: "BAD_REQUEST", message: `Referensi ${entity.toLowerCase()} tidak valid. Silakan periksa data yang dipilih.` });
   }
+  if (databaseError.message === "Bahan tidak ditemukan.") {
+    return new TRPCError({ code: "BAD_REQUEST", message: "Bahan tidak ditemukan. Pilih bahan yang tersedia." });
+  }
   if (databaseError.message?.includes("Database tidak tersedia")) {
     return new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database tidak tersedia. Silakan coba lagi." });
   }

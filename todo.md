@@ -37,3 +37,14 @@
 - [x] Standardize the business location to the exact required value "Cibitung Bekasi" across application defaults and persisted settings.
 - [x] Add a unit test for the generic server-side database mutation failure mapping.
 - [x] Save and report the Step 2 foundation version, including tables, pages, components, tests, and known issues.
+- [x] Define stock-movement types and balance-update rules for purchases, adjustments, waste, and stock opnames, without enabling sales-linked deductions yet.
+- [x] Add a persistent stock-movement table with ingredient, type, quantity delta, balance snapshot, note, and timestamp fields.
+- [x] Add transactional server-side inventory procedures that validate quantities, record movements, and atomically update ingredient stock balances.
+- [x] Return an explicit Indonesian invalid-reference error when a stock movement targets a missing ingredient.
+- [x] Add tests for stock-movement invalid-reference and unavailable-database failure paths.
+- [x] Update the Inventory page to show current balances, minimum-stock signals, a stock-movement form, and an auditable movement-history table.
+- [x] Add unit tests for stock movement direction, resulting balance, validation, and unavailable/invalid-reference errors.
+- [x] Validate responsive inventory layout, empty states, dashboard summary, unit calculations, and server-side failure mapping.
+- [x] Explicitly verify the empty ingredient-balance and empty stock-movement states against the persisted database state.
+- [ ] Save a new checkpoint containing the inventory-balance and stock-movement implementation.
+- [ ] Verify the saved version includes the inventory migration, interface, dashboard summary, and stock-movement tests.

@@ -27,6 +27,17 @@ export const ingredientInput = z.object({
   isActive: z.boolean().default(true),
 });
 
+export const stockMovementInput = z.object({
+  ingredientId: z.coerce.number().int().positive("Bahan wajib dipilih."),
+  type: z.enum(["purchase", "adjustment", "waste", "opname"]),
+  quantity: z.coerce.number({ message: "Jumlah stok harus berupa angka." }).finite("Jumlah stok harus berupa angka."),
+  note: z.string().trim().max(1000).optional().nullable(),
+}).superRefine((input, context) => {
+  if ((input.type === "purchase" || input.type === "waste") && input.quantity <= 0) context.addIssue({ code: "custom", path: ["quantity"], message: "Jumlah harus lebih dari nol." });
+  if (input.type === "adjustment" && input.quantity === 0) context.addIssue({ code: "custom", path: ["quantity"], message: "Penyesuaian tidak boleh bernilai nol." });
+  if (input.type === "opname" && input.quantity < 0) context.addIssue({ code: "custom", path: ["quantity"], message: "Hasil stok opname tidak boleh negatif." });
+});
+
 export const recipeInput = z.object({
   productId: z.coerce.number().int().positive("Produk wajib dipilih."),
   name: requiredText("Nama resep wajib diisi."),

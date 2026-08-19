@@ -41,10 +41,22 @@ export const ingredients = mysqlTable("ingredients", {
   unit: varchar("unit", { length: 40 }).notNull(),
   costPerUnit: decimal("costPerUnit", { precision: 14, scale: 2, mode: "number" }).notNull(),
   minimumStock: decimal("minimumStock", { precision: 14, scale: 2, mode: "number" }).notNull(),
+  currentStock: decimal("currentStock", { precision: 14, scale: 3, mode: "number" }).default(0).notNull(),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
+
+export const stockMovements = mysqlTable("stockMovements", {
+  id: int("id").autoincrement().primaryKey(),
+  ingredientId: int("ingredientId").notNull().references(() => ingredients.id, { onDelete: "restrict" }),
+  type: mysqlEnum("type", ["purchase", "adjustment", "waste", "opname"]).notNull(),
+  quantityDelta: decimal("quantityDelta", { precision: 14, scale: 3, mode: "number" }).notNull(),
+  balanceAfter: decimal("balanceAfter", { precision: 14, scale: 3, mode: "number" }).notNull(),
+  note: text("note"),
+  occurredAt: timestamp("occurredAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [index("stock_movements_ingredient_occurred_idx").on(table.ingredientId, table.occurredAt)]);
 
 export const recipes = mysqlTable("recipes", {
   id: int("id").autoincrement().primaryKey(),
@@ -78,6 +90,7 @@ export type InsertUser = typeof users.$inferInsert;
 export type Category = typeof categories.$inferSelect;
 export type Product = typeof products.$inferSelect;
 export type Ingredient = typeof ingredients.$inferSelect;
+export type StockMovement = typeof stockMovements.$inferSelect;
 export type Recipe = typeof recipes.$inferSelect;
 export type RecipeItem = typeof recipeItems.$inferSelect;
 export type BusinessSettings = typeof businessSettings.$inferSelect;

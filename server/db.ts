@@ -1,9 +1,10 @@
 import { desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { businessSettings, categories, ingredients, InsertUser, products, recipeItems, recipes, users } from "../drizzle/schema";
+import { businessSettings, categories, ingredients, InsertUser, products, recipeItems, recipes, stockMovements, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import type { z } from "zod";
-import type { categoryInput, ingredientInput, productInput, recipeInput, settingsInput } from "./foundationSchemas";
+import type { categoryInput, ingredientInput, productInput, recipeInput, settingsInput, stockMovementInput } from "./foundationSchemas";
+import { resolveStockMovement } from "./inventory";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
@@ -57,6 +58,21 @@ export async function updateProduct(id: number, input: z.infer<typeof productInp
 export async function listIngredients() { return (await requireDb()).select().from(ingredients).orderBy(ingredients.name); }
 export async function createIngredient(input: z.infer<typeof ingredientInput>) { return Number((await (await requireDb()).insert(ingredients).values(input))[0].insertId); }
 export async function updateIngredient(id: number, input: z.infer<typeof ingredientInput>) { await (await requireDb()).update(ingredients).set(input).where(eq(ingredients.id, id)); }
+export async function listStockMovements() {
+  const db = await requireDb();
+  return db.select({ id: stockMovements.id, ingredientId: stockMovements.ingredientId, ingredientName: ingredients.name, unit: ingredients.unit, type: stockMovements.type, quantityDelta: stockMovements.quantityDelta, balanceAfter: stockMovements.balanceAfter, note: stockMovements.note, occurredAt: stockMovements.occurredAt }).from(stockMovements).innerJoin(ingredients, eq(stockMovements.ingredientId, ingredients.id)).orderBy(desc(stockMovements.occurredAt), desc(stockMovements.id));
+}
+export async function recordStockMovement(input: z.infer<typeof stockMovementInput>) {
+  const db = await requireDb();
+  return db.transaction(async (tx) => {
+    const ingredient = (await tx.select().from(ingredients).where(eq(ingredients.id, input.ingredientId)).limit(1))[0];
+    if (!ingredient) throw new Error("Bahan tidak ditemukan.");
+    const movement = resolveStockMovement(ingredient.currentStock, input);
+    await tx.update(ingredients).set({ currentStock: movement.balanceAfter }).where(eq(ingredients.id, ingredient.id));
+    const result = await tx.insert(stockMovements).values({ ingredientId: ingredient.id, type: input.type, quantityDelta: movement.quantityDelta, balanceAfter: movement.balanceAfter, note: input.note || null });
+    return { id: Number(result[0].insertId), ...movement };
+  });
+}
 export async function listRecipes() {
   const db = await requireDb();
   const recipeRows = await db.select({ id: recipes.id, productId: recipes.productId, productName: products.name, name: recipes.name, updatedAt: recipes.updatedAt }).from(recipes).innerJoin(products, eq(recipes.productId, products.id)).orderBy(desc(recipes.updatedAt));
