@@ -87,3 +87,7 @@
 - [x] Add persistent exchange-settlement records and a transactional public settlement procedure.
 - [x] Add Sales controls to settle a positive exchange balance by cash or card and show the resulting payment history.
 - [x] Add automated tests and responsive validation for exchange settlements, then save the delivery checkpoint.
+- [x] Define a Jakarta-day settlement aggregation for recorded cash and card exchange payments.
+- [x] Add a public dashboard data query that returns daily cash, card, combined totals, and settlement count.
+- [x] Add a responsive dashboard summary panel for the day's cash and card settlements with an informative zero state.
+- [x] Add settlement-summary tests, validate desktop/mobile dashboard rendering, and save the delivery checkpoint.

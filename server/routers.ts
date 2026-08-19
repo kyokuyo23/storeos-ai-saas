@@ -40,6 +40,9 @@ export const appRouter = router({
     list: publicProcedure.query(() => db.listRecipes()),
     save: publicProcedure.input(recipeInput).mutation(({ input }) => runMutation("Resep", () => db.saveRecipe(input))),
   }),
+  dashboard: router({
+    dailySettlements: publicProcedure.query(() => db.getDailySettlementSummary()),
+  }),
   sale: router({
     list: publicProcedure.query(() => db.listSales()),
     complete: publicProcedure.input(saleCompletionInput).mutation(({ input }) => runMutation("Penjualan", () => db.completeSale(input))),

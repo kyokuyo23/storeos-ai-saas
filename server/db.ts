@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { nanoid } from "nanoid";
 import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, users } from "../drizzle/schema";
@@ -294,6 +294,24 @@ export async function settleExchangeInTransaction(tx: any, input: z.infer<typeof
 }
 export async function settleExchangeWithClient(client: { transaction: (callback: (tx: any) => Promise<any>) => Promise<any> }, input: z.infer<typeof exchangeSettlementInput>) { return client.transaction((tx) => settleExchangeInTransaction(tx, input)); }
 export async function settleExchange(input: z.infer<typeof exchangeSettlementInput>) { return settleExchangeWithClient(await requireDb() as any, input); }
+
+export function summarizeDailySettlements(rows: Array<{ amount: number; paymentMethod: "cash" | "card" }>) {
+  const cashTotal = rows.filter((row) => row.paymentMethod === "cash").reduce((sum, row) => sum + row.amount, 0);
+  const cardTotal = rows.filter((row) => row.paymentMethod === "card").reduce((sum, row) => sum + row.amount, 0);
+  return { cashTotal, cardTotal, total: cashTotal + cardTotal, count: rows.length };
+}
+
+function jakartaDayRange(now = new Date()) {
+  const jakartaDate = new Date(now.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const start = new Date(`${jakartaDate}T00:00:00+07:00`);
+  return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
+}
+
+export async function getDailySettlementSummary() {
+  const { start, end } = jakartaDayRange();
+  const rows = await (await requireDb()).select({ amount: exchangeSettlements.amount, paymentMethod: exchangeSettlements.paymentMethod }).from(exchangeSettlements).where(and(gte(exchangeSettlements.createdAt, start), lt(exchangeSettlements.createdAt, end)));
+  return { ...summarizeDailySettlements(rows), dateStart: start, dateEnd: end };
+}
 
 export async function listSales() {
   const db = await requireDb();
