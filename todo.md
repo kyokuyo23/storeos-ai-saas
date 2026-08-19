@@ -48,3 +48,11 @@
 - [x] Explicitly verify the empty ingredient-balance and empty stock-movement states against the persisted database state.
 - [x] Save a new checkpoint containing the inventory-balance and stock-movement implementation.
 - [x] Verify the saved version includes the inventory migration, interface, dashboard summary, and stock-movement tests after reopening version 9b26e05a.
+- [x] Define completed-sale rules that deduct each recipe ingredient proportionally, record sale-source stock movements, and reject insufficient inventory atomically.
+- [x] Add persistent sales and sale-line records required to trace stock deductions back to a completed sale.
+- [x] Extend the inventory movement model and transactional server service to create recipe-driven sale deductions alongside sales completion.
+- [x] Add a focused POS sale-completion interface that selects recipe-configured products and shows stock-aware validation.
+- [x] Display sale-source deductions in inventory movement history with the linked completed-sale reference.
+- [x] Add integration tests for completed sales, including multi-ingredient deductions, multiple quantities, insufficient-stock rollback safety, and linked sale movement audit records.
+- [x] Validate the completed-sale transaction writes resulting balances and sale-linked audit records, and review the responsive empty-state POS and sales screens.
+- [x] Save the recipe-linked inventory update for delivery.

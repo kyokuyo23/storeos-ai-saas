@@ -1,10 +1,12 @@
-import { desc, eq } from "drizzle-orm";
+import { count, desc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { businessSettings, categories, ingredients, InsertUser, products, recipeItems, recipes, stockMovements, users } from "../drizzle/schema";
+import { nanoid } from "nanoid";
+import { businessSettings, categories, ingredients, InsertUser, products, recipeItems, recipes, saleItems, sales, stockMovements, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import type { z } from "zod";
-import type { categoryInput, ingredientInput, productInput, recipeInput, settingsInput, stockMovementInput } from "./foundationSchemas";
+import type { categoryInput, ingredientInput, productInput, recipeInput, saleCompletionInput, settingsInput, stockMovementInput } from "./foundationSchemas";
 import { resolveStockMovement } from "./inventory";
+import { planRecipeDeductions } from "./sales";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
@@ -60,7 +62,7 @@ export async function createIngredient(input: z.infer<typeof ingredientInput>) {
 export async function updateIngredient(id: number, input: z.infer<typeof ingredientInput>) { await (await requireDb()).update(ingredients).set(input).where(eq(ingredients.id, id)); }
 export async function listStockMovements() {
   const db = await requireDb();
-  return db.select({ id: stockMovements.id, ingredientId: stockMovements.ingredientId, ingredientName: ingredients.name, unit: ingredients.unit, type: stockMovements.type, quantityDelta: stockMovements.quantityDelta, balanceAfter: stockMovements.balanceAfter, note: stockMovements.note, occurredAt: stockMovements.occurredAt }).from(stockMovements).innerJoin(ingredients, eq(stockMovements.ingredientId, ingredients.id)).orderBy(desc(stockMovements.occurredAt), desc(stockMovements.id));
+  return db.select({ id: stockMovements.id, ingredientId: stockMovements.ingredientId, ingredientName: ingredients.name, unit: ingredients.unit, saleId: stockMovements.saleId, saleReceiptNumber: sales.receiptNumber, type: stockMovements.type, quantityDelta: stockMovements.quantityDelta, balanceAfter: stockMovements.balanceAfter, note: stockMovements.note, occurredAt: stockMovements.occurredAt }).from(stockMovements).innerJoin(ingredients, eq(stockMovements.ingredientId, ingredients.id)).leftJoin(sales, eq(stockMovements.saleId, sales.id)).orderBy(desc(stockMovements.occurredAt), desc(stockMovements.id));
 }
 export async function recordStockMovement(input: z.infer<typeof stockMovementInput>) {
   const db = await requireDb();
@@ -88,6 +90,47 @@ export async function saveRecipe(input: z.infer<typeof recipeInput>) {
     const activeRecipeId = recipeId ?? Number((await tx.insert(recipes).values({ productId: input.productId, name: input.name }))[0].insertId);
     await tx.insert(recipeItems).values(input.items.map((item) => ({ recipeId: activeRecipeId, ingredientId: item.ingredientId, quantity: item.quantity })));
   });
+}
+
+export async function completeSaleInTransaction(tx: any, input: z.infer<typeof saleCompletionInput>, receiptNumber = `TRX-${Date.now()}-${nanoid(5).toUpperCase()}`) {
+    const quantityByProduct = new Map<number, number>();
+    input.items.forEach((item) => quantityByProduct.set(item.productId, (quantityByProduct.get(item.productId) ?? 0) + item.quantity));
+    const lines = Array.from(quantityByProduct, ([productId, quantity]) => ({ productId, quantity }));
+    const productIds = lines.map((line) => line.productId);
+    const productRows = await tx.select().from(products).where(inArray(products.id, productIds)) as Array<{ id: number; sellingPrice: number; isActive: boolean }>;
+    if (productRows.length !== productIds.length || productRows.some((product) => !product.isActive)) throw new Error("Produk tidak tersedia.");
+
+    const recipeRows = await tx.select().from(recipes).where(inArray(recipes.productId, productIds)) as Array<{ id: number; productId: number }>;
+    if (recipeRows.length !== productIds.length) throw new Error("Produk belum memiliki resep.");
+    const recipeIds = recipeRows.map((recipe) => recipe.id);
+    const itemRows = await tx.select({ recipeId: recipeItems.recipeId, ingredientId: recipeItems.ingredientId, quantity: recipeItems.quantity }).from(recipeItems).where(inArray(recipeItems.recipeId, recipeIds)) as Array<{ recipeId: number; ingredientId: number; quantity: number }>;
+    const recipesForSale = recipeRows.map((recipe) => ({ productId: recipe.productId, items: itemRows.filter((item) => item.recipeId === recipe.id).map(({ ingredientId, quantity }) => ({ ingredientId, quantity })) }));
+    const ingredientIds = Array.from(new Set(itemRows.map((item) => item.ingredientId)));
+    const ingredientRows = ingredientIds.length ? await tx.select().from(ingredients).where(inArray(ingredients.id, ingredientIds)) as Array<{ id: number; name: string; currentStock: number; isActive: boolean }> : [];
+    if (ingredientRows.some((ingredient) => !ingredient.isActive)) throw new Error("Bahan resep tidak aktif.");
+    const deductions = planRecipeDeductions(lines, recipesForSale, ingredientRows);
+
+    const productById = new Map(productRows.map((product) => [product.id, product]));
+    const total = Number(lines.reduce((sum, line) => sum + ((productById.get(line.productId)?.sellingPrice ?? 0) * line.quantity), 0).toFixed(2));
+    const saleResult = await tx.insert(sales).values({ receiptNumber, total });
+    const saleId = Number(saleResult[0].insertId);
+    await tx.insert(saleItems).values(lines.map((line) => {
+      const product = productById.get(line.productId)!;
+      return { saleId, productId: product.id, quantity: line.quantity, unitPrice: product.sellingPrice, lineTotal: Number((product.sellingPrice * line.quantity).toFixed(2)) };
+    }));
+    for (const deduction of deductions) await tx.update(ingredients).set({ currentStock: deduction.balanceAfter }).where(eq(ingredients.id, deduction.ingredientId));
+    if (deductions.length) await tx.insert(stockMovements).values(deductions.map((deduction) => ({ ingredientId: deduction.ingredientId, saleId, type: "sale" as const, quantityDelta: deduction.quantityDelta, balanceAfter: deduction.balanceAfter, note: `Penjualan ${receiptNumber}` })));
+    return { id: saleId, receiptNumber, total, lines };
+}
+
+export async function completeSale(input: z.infer<typeof saleCompletionInput>) {
+  const db = await requireDb();
+  return db.transaction((tx) => completeSaleInTransaction(tx, input));
+}
+
+export async function listSales() {
+  const db = await requireDb();
+  return db.select({ id: sales.id, receiptNumber: sales.receiptNumber, total: sales.total, completedAt: sales.completedAt, itemCount: count(saleItems.id) }).from(sales).leftJoin(saleItems, eq(saleItems.saleId, sales.id)).groupBy(sales.id, sales.receiptNumber, sales.total, sales.completedAt).orderBy(desc(sales.completedAt), desc(sales.id));
 }
 const defaults = { businessName: "Kopi Nusantara", storeLocation: "Cibitung Bekasi", currency: "IDR", timezone: "Asia/Jakarta" };
 export async function getSettings() {

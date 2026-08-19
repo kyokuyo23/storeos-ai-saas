@@ -6,10 +6,10 @@ export type FoundationPage = "dashboard" | "products" | "inventory" | "settings"
 
 const items: Array<{ page: FoundationPage; label: string; href: string; icon: typeof LayoutDashboard; ready?: boolean }> = [
   { page: "dashboard", label: "Dashboard", href: "/", icon: LayoutDashboard, ready: true },
-  { page: "pos", label: "POS", href: "/pos", icon: Coffee },
+  { page: "pos", label: "POS", href: "/pos", icon: Coffee, ready: true },
   { page: "products", label: "Products", href: "/products", icon: Package, ready: true },
   { page: "inventory", label: "Inventory", href: "/inventory", icon: Box, ready: true },
-  { page: "sales", label: "Sales", href: "/sales", icon: BarChart3 },
+  { page: "sales", label: "Sales", href: "/sales", icon: BarChart3, ready: true },
   { page: "alerts", label: "Alerts", href: "/alerts", icon: AlertTriangle },
   { page: "insights", label: "AI Insights", href: "/insights", icon: Sparkles },
   { page: "reports", label: "Reports", href: "/reports", icon: ClipboardList },

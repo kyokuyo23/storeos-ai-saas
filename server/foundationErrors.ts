@@ -14,6 +14,21 @@ export function mapFoundationError(error: unknown, entity: string): TRPCError {
   if (databaseError.message === "Bahan tidak ditemukan.") {
     return new TRPCError({ code: "BAD_REQUEST", message: "Bahan tidak ditemukan. Pilih bahan yang tersedia." });
   }
+  if (databaseError.message === "Produk belum memiliki resep.") {
+    return new TRPCError({ code: "BAD_REQUEST", message: "Produk belum memiliki resep yang dapat digunakan untuk penjualan." });
+  }
+  if (databaseError.message === "Bahan resep tidak ditemukan.") {
+    return new TRPCError({ code: "BAD_REQUEST", message: "Salah satu bahan resep tidak tersedia. Periksa resep produk." });
+  }
+  if (databaseError.message?.startsWith("Stok bahan tidak mencukupi:")) {
+    return new TRPCError({ code: "BAD_REQUEST", message: databaseError.message });
+  }
+  if (databaseError.message === "Produk tidak tersedia.") {
+    return new TRPCError({ code: "BAD_REQUEST", message: "Produk tidak tersedia atau tidak aktif untuk dijual." });
+  }
+  if (databaseError.message === "Bahan resep tidak aktif.") {
+    return new TRPCError({ code: "BAD_REQUEST", message: "Bahan resep tidak aktif. Aktifkan bahan atau perbarui resep sebelum menjual produk." });
+  }
   if (databaseError.message?.includes("Database tidak tersedia")) {
     return new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database tidak tersedia. Silakan coba lagi." });
   }

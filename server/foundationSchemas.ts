@@ -47,6 +47,13 @@ export const recipeInput = z.object({
   })).min(1, "Tambahkan setidaknya satu bahan resep."),
 });
 
+export const saleCompletionInput = z.object({
+  items: z.array(z.object({
+    productId: z.coerce.number().int().positive("Produk wajib dipilih."),
+    quantity: z.coerce.number().int().positive("Jumlah penjualan harus lebih dari nol."),
+  })).min(1, "Tambahkan setidaknya satu produk ke keranjang."),
+});
+
 export const settingsInput = z.object({
   businessName: requiredText("Nama bisnis wajib diisi."),
   storeLocation: requiredText("Lokasi toko wajib diisi."),
