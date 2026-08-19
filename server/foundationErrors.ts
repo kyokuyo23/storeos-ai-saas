@@ -47,6 +47,15 @@ export function mapFoundationError(error: unknown, entity: string): TRPCError {
   if (databaseError.message?.startsWith("Jumlah refund melebihi sisa item")) {
     return new TRPCError({ code: "BAD_REQUEST", message: databaseError.message });
   }
+  if (databaseError.message === "Produk pengganti belum memiliki resep.") {
+    return new TRPCError({ code: "BAD_REQUEST", message: "Produk pengganti belum memiliki resep yang lengkap untuk diproses sebagai penukaran." });
+  }
+  if (databaseError.message?.startsWith("Jumlah penukaran melebihi sisa item")) {
+    return new TRPCError({ code: "BAD_REQUEST", message: databaseError.message });
+  }
+  if (databaseError.message?.startsWith("Stok bahan tidak mencukupi:")) {
+    return new TRPCError({ code: "BAD_REQUEST", message: databaseError.message });
+  }
   if (databaseError.message?.includes("Database tidak tersedia")) {
     return new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database tidak tersedia. Silakan coba lagi." });
   }

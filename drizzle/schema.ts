@@ -86,19 +86,53 @@ export const partialRefunds = mysqlTable("partialRefunds", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => [index("partial_refunds_sale_idx").on(table.saleId), index("partial_refunds_item_idx").on(table.saleItemId)]);
 
+/** A return from one original sale line combined with one or more replacement products. */
+export const exchanges = mysqlTable("exchanges", {
+  id: int("id").autoincrement().primaryKey(),
+  saleId: int("saleId").notNull().references(() => sales.id, { onDelete: "restrict" }),
+  saleItemId: int("saleItemId").notNull().references(() => saleItems.id, { onDelete: "restrict" }),
+  returnedQuantity: int("returnedQuantity").notNull(),
+  returnedTotal: decimal("returnedTotal", { precision: 14, scale: 2, mode: "number" }).default(0).notNull(),
+  replacementTotal: decimal("replacementTotal", { precision: 14, scale: 2, mode: "number" }).notNull(),
+  paymentAdjustment: decimal("paymentAdjustment", { precision: 14, scale: 2, mode: "number" }).default(0).notNull(),
+  reason: text("reason"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [index("exchanges_sale_idx").on(table.saleId), index("exchanges_sale_item_idx").on(table.saleItemId)]);
+
+/** Replacement products issued in an exchange, with their sale-time price snapshots. */
+export const exchangeItems = mysqlTable("exchangeItems", {
+  id: int("id").autoincrement().primaryKey(),
+  exchangeId: int("exchangeId").notNull().references(() => exchanges.id, { onDelete: "restrict" }),
+  productId: int("productId").notNull().references(() => products.id, { onDelete: "restrict" }),
+  quantity: int("quantity").notNull(),
+  unitPrice: decimal("unitPrice", { precision: 14, scale: 2, mode: "number" }).notNull(),
+  lineTotal: decimal("lineTotal", { precision: 14, scale: 2, mode: "number" }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [index("exchange_items_exchange_idx").on(table.exchangeId), index("exchange_items_product_idx").on(table.productId)]);
+
+/** Immutable per-unit recipe snapshot for each replacement product issued in an exchange. */
+export const exchangeItemIngredients = mysqlTable("exchangeItemIngredients", {
+  id: int("id").autoincrement().primaryKey(),
+  exchangeItemId: int("exchangeItemId").notNull().references(() => exchangeItems.id, { onDelete: "restrict" }),
+  ingredientId: int("ingredientId").notNull().references(() => ingredients.id, { onDelete: "restrict" }),
+  unitQuantity: decimal("unitQuantity", { precision: 14, scale: 3, mode: "number" }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [index("exchange_item_ingredients_item_idx").on(table.exchangeItemId), index("exchange_item_ingredients_ingredient_idx").on(table.ingredientId)]);
+
 export const stockMovements = mysqlTable("stockMovements", {
   id: int("id").autoincrement().primaryKey(),
   ingredientId: int("ingredientId").notNull().references(() => ingredients.id, { onDelete: "restrict" }),
   saleId: int("saleId").references(() => sales.id, { onDelete: "restrict" }),
   saleItemId: int("saleItemId").references(() => saleItems.id, { onDelete: "restrict" }),
   partialRefundId: int("partialRefundId").references(() => partialRefunds.id, { onDelete: "restrict" }),
-  type: mysqlEnum("type", ["purchase", "adjustment", "waste", "opname", "sale", "void", "refund", "partial_refund"]).notNull(),
+  exchangeId: int("exchangeId").references(() => exchanges.id, { onDelete: "restrict" }),
+  type: mysqlEnum("type", ["purchase", "adjustment", "waste", "opname", "sale", "void", "refund", "partial_refund", "exchange_return", "exchange_sale"]).notNull(),
   quantityDelta: decimal("quantityDelta", { precision: 14, scale: 3, mode: "number" }).notNull(),
   balanceAfter: decimal("balanceAfter", { precision: 14, scale: 3, mode: "number" }).notNull(),
   note: text("note"),
   occurredAt: timestamp("occurredAt").defaultNow().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-}, (table) => [index("stock_movements_ingredient_occurred_idx").on(table.ingredientId, table.occurredAt), index("stock_movements_sale_idx").on(table.saleId), index("stock_movements_sale_item_idx").on(table.saleItemId)]);
+}, (table) => [index("stock_movements_ingredient_occurred_idx").on(table.ingredientId, table.occurredAt), index("stock_movements_sale_idx").on(table.saleId), index("stock_movements_sale_item_idx").on(table.saleItemId), index("stock_movements_exchange_idx").on(table.exchangeId)]);
 
 export const recipes = mysqlTable("recipes", {
   id: int("id").autoincrement().primaryKey(),
@@ -137,6 +171,9 @@ export type Sale = typeof sales.$inferSelect;
 export type SaleItem = typeof saleItems.$inferSelect;
 export type SaleItemIngredient = typeof saleItemIngredients.$inferSelect;
 export type PartialRefund = typeof partialRefunds.$inferSelect;
+export type Exchange = typeof exchanges.$inferSelect;
+export type ExchangeItem = typeof exchangeItems.$inferSelect;
+export type ExchangeItemIngredient = typeof exchangeItemIngredients.$inferSelect;
 export type Recipe = typeof recipes.$inferSelect;
 export type RecipeItem = typeof recipeItems.$inferSelect;
 export type BusinessSettings = typeof businessSettings.$inferSelect;

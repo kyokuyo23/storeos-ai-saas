@@ -74,5 +74,12 @@
 - [x] Display partial-refund ingredient restorations in Inventory movement history with the sale and sale-line references.
 - [x] Add tests for partial quantities, multiple refunds up to the sale-line limit, aggregated recipe deductions, invalid states, and rollback safety.
 - [x] Verify the partial-refund Sales and Inventory zero states against the zero-record database and capture dedicated desktop/mobile evidence.
-- [ ] Save a new checkpoint containing partial-refund persistence, sale-line controls, inventory audit labels, and test coverage.
-- [ ] Verify the saved partial-refund checkpoint includes the delivery-ready implementation before handoff.
+- [x] Save a new checkpoint containing partial-refund persistence, sale-line controls, inventory audit labels, and test coverage.
+- [x] Verify checkpoint 2b7d21e0 includes the delivery-ready partial-refund transaction logic, sale-line controls, and audit data.
+- [x] Define exchange rules for returned sale-line quantities, replacement products, price differences, transaction references, and coexistence with partial refunds and full reversals.
+- [x] Add persistent exchange records and line items linked to the original sale, returned sale lines, replacement products, and net payment adjustment.
+- [x] Add a transactional exchange service that restores returned recipe ingredients, validates and deducts replacement ingredients, and records all net stock movements atomically.
+- [x] Add Sales exchange controls to select a completed sale line, enter return quantity, choose replacement products and quantities, and display the price difference before confirmation.
+- [x] Display exchange stock restorations and deductions in Inventory movement history with linked exchange, sale, and sale-line references.
+- [x] Add tests for same-item and different-item exchanges, inventory shortages, price differences, partial-refund limits, duplicate safeguards, and transaction rollback safety.
+- [x] Validate the exchange flow and save the exchange transaction update for delivery.

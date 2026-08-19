@@ -67,6 +67,17 @@ export const partialRefundInput = z.object({
   reason: z.string().trim().max(1000).optional().nullable(),
 });
 
+export const exchangeInput = z.object({
+  saleId: z.coerce.number().int().positive("Transaksi wajib dipilih."),
+  saleItemId: z.coerce.number().int().positive("Item penjualan wajib dipilih."),
+  returnedQuantity: z.coerce.number().int().positive("Jumlah item yang dikembalikan harus lebih dari nol."),
+  replacementItems: z.array(z.object({
+    productId: z.coerce.number().int().positive("Produk pengganti wajib dipilih."),
+    quantity: z.coerce.number().int().positive("Jumlah produk pengganti harus lebih dari nol."),
+  })).min(1, "Tambahkan setidaknya satu produk pengganti."),
+  reason: z.string().trim().max(1000).optional().nullable(),
+});
+
 export const settingsInput = z.object({
   businessName: requiredText("Nama bisnis wajib diisi."),
   storeLocation: requiredText("Lokasi toko wajib diisi."),
