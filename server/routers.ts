@@ -5,7 +5,7 @@ import { mapFoundationError } from "./foundationErrors";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
-import { categoryInput, ingredientInput, productInput, recipeInput, saleCompletionInput, settingsInput, stockMovementInput } from "./foundationSchemas";
+import { categoryInput, ingredientInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settingsInput, stockMovementInput } from "./foundationSchemas";
 
 const idInput = z.object({ id: z.number().int().positive() });
 const runMutation = async <T>(entity: string, operation: () => Promise<T>) => {
@@ -43,6 +43,7 @@ export const appRouter = router({
   sale: router({
     list: publicProcedure.query(() => db.listSales()),
     complete: publicProcedure.input(saleCompletionInput).mutation(({ input }) => runMutation("Penjualan", () => db.completeSale(input))),
+    reverse: publicProcedure.input(saleReversalInput).mutation(({ input }) => runMutation("Pembatalan transaksi", () => db.reverseSale(input))),
   }),
   settings: router({
     get: publicProcedure.query(() => db.getSettings()),

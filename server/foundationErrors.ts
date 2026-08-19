@@ -29,6 +29,15 @@ export function mapFoundationError(error: unknown, entity: string): TRPCError {
   if (databaseError.message === "Bahan resep tidak aktif.") {
     return new TRPCError({ code: "BAD_REQUEST", message: "Bahan resep tidak aktif. Aktifkan bahan atau perbarui resep sebelum menjual produk." });
   }
+  if (databaseError.message === "Penjualan tidak ditemukan.") {
+    return new TRPCError({ code: "NOT_FOUND", message: "Transaksi penjualan tidak ditemukan." });
+  }
+  if (databaseError.message === "Transaksi sudah dibatalkan atau direfund.") {
+    return new TRPCError({ code: "CONFLICT", message: "Transaksi ini sudah dibatalkan atau direfund dan tidak dapat diproses ulang." });
+  }
+  if (databaseError.message === "Catatan pengurangan stok tidak ditemukan.") {
+    return new TRPCError({ code: "BAD_REQUEST", message: "Catatan pengurangan stok transaksi tidak ditemukan sehingga stok tidak dapat dipulihkan." });
+  }
   if (databaseError.message?.includes("Database tidak tersedia")) {
     return new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database tidak tersedia. Silakan coba lagi." });
   }

@@ -50,9 +50,11 @@ export const ingredients = mysqlTable("ingredients", {
 export const sales = mysqlTable("sales", {
   id: int("id").autoincrement().primaryKey(),
   receiptNumber: varchar("receiptNumber", { length: 64 }).notNull().unique(),
-  status: mysqlEnum("status", ["completed"]).default("completed").notNull(),
+  status: mysqlEnum("status", ["completed", "voided", "refunded"]).default("completed").notNull(),
   total: decimal("total", { precision: 14, scale: 2, mode: "number" }).notNull(),
   completedAt: timestamp("completedAt").defaultNow().notNull(),
+  reversedAt: timestamp("reversedAt"),
+  reversalReason: text("reversalReason"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -70,7 +72,7 @@ export const stockMovements = mysqlTable("stockMovements", {
   id: int("id").autoincrement().primaryKey(),
   ingredientId: int("ingredientId").notNull().references(() => ingredients.id, { onDelete: "restrict" }),
   saleId: int("saleId").references(() => sales.id, { onDelete: "restrict" }),
-  type: mysqlEnum("type", ["purchase", "adjustment", "waste", "opname", "sale"]).notNull(),
+  type: mysqlEnum("type", ["purchase", "adjustment", "waste", "opname", "sale", "void", "refund"]).notNull(),
   quantityDelta: decimal("quantityDelta", { precision: 14, scale: 3, mode: "number" }).notNull(),
   balanceAfter: decimal("balanceAfter", { precision: 14, scale: 3, mode: "number" }).notNull(),
   note: text("note"),

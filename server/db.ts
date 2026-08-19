@@ -4,7 +4,7 @@ import { nanoid } from "nanoid";
 import { businessSettings, categories, ingredients, InsertUser, products, recipeItems, recipes, saleItems, sales, stockMovements, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import type { z } from "zod";
-import type { categoryInput, ingredientInput, productInput, recipeInput, saleCompletionInput, settingsInput, stockMovementInput } from "./foundationSchemas";
+import type { categoryInput, ingredientInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settingsInput, stockMovementInput } from "./foundationSchemas";
 import { resolveStockMovement } from "./inventory";
 import { planRecipeDeductions } from "./sales";
 
@@ -128,9 +128,43 @@ export async function completeSale(input: z.infer<typeof saleCompletionInput>) {
   return db.transaction((tx) => completeSaleInTransaction(tx, input));
 }
 
+export async function reverseSaleInTransaction(tx: any, input: z.infer<typeof saleReversalInput>) {
+  const sale = (await tx.select().from(sales).where(eq(sales.id, input.saleId)).limit(1))[0] as { id: number; receiptNumber: string; status: "completed" | "voided" | "refunded" } | undefined;
+  if (!sale) throw new Error("Penjualan tidak ditemukan.");
+  if (sale.status !== "completed") throw new Error("Transaksi sudah dibatalkan atau direfund.");
+
+  const originalMovements = await tx.select().from(stockMovements).where(eq(stockMovements.saleId, sale.id)) as Array<{ ingredientId: number; type: string; quantityDelta: number }>;
+  const deductions = originalMovements.filter((movement) => movement.type === "sale" && movement.quantityDelta < 0);
+  if (!deductions.length) throw new Error("Catatan pengurangan stok tidak ditemukan.");
+  const ingredientIds = deductions.map((movement) => movement.ingredientId);
+  const ingredientRows = await tx.select().from(ingredients).where(inArray(ingredients.id, ingredientIds)) as Array<{ id: number; currentStock: number }>;
+  if (ingredientRows.length !== ingredientIds.length) throw new Error("Bahan resep tidak ditemukan.");
+  const ingredientById = new Map(ingredientRows.map((ingredient) => [ingredient.id, ingredient]));
+  const restorations = deductions.map((deduction) => {
+    const ingredient = ingredientById.get(deduction.ingredientId)!;
+    const quantityDelta = Math.abs(deduction.quantityDelta);
+    return { ingredientId: deduction.ingredientId, quantityDelta, balanceAfter: Number((ingredient.currentStock + quantityDelta).toFixed(3)) };
+  });
+  for (const restoration of restorations) await tx.update(ingredients).set({ currentStock: restoration.balanceAfter }).where(eq(ingredients.id, restoration.ingredientId));
+  const status = input.type === "void" ? "voided" as const : "refunded" as const;
+  const actionLabel = input.type === "void" ? "Void" : "Refund";
+  await tx.insert(stockMovements).values(restorations.map((restoration) => ({ ingredientId: restoration.ingredientId, saleId: sale.id, type: input.type, quantityDelta: restoration.quantityDelta, balanceAfter: restoration.balanceAfter, note: `${actionLabel} ${sale.receiptNumber}${input.reason ? ` — ${input.reason}` : ""}` })));
+  await tx.update(sales).set({ status, reversedAt: new Date(), reversalReason: input.reason || null }).where(eq(sales.id, sale.id));
+  return { id: sale.id, receiptNumber: sale.receiptNumber, status, restorations };
+}
+
+export async function reverseSaleWithClient(client: { transaction: (callback: (tx: any) => Promise<any>) => Promise<any> }, input: z.infer<typeof saleReversalInput>) {
+  return client.transaction((tx) => reverseSaleInTransaction(tx, input));
+}
+
+export async function reverseSale(input: z.infer<typeof saleReversalInput>) {
+  const db = await requireDb();
+  return reverseSaleWithClient(db as any, input);
+}
+
 export async function listSales() {
   const db = await requireDb();
-  return db.select({ id: sales.id, receiptNumber: sales.receiptNumber, total: sales.total, completedAt: sales.completedAt, itemCount: count(saleItems.id) }).from(sales).leftJoin(saleItems, eq(saleItems.saleId, sales.id)).groupBy(sales.id, sales.receiptNumber, sales.total, sales.completedAt).orderBy(desc(sales.completedAt), desc(sales.id));
+  return db.select({ id: sales.id, receiptNumber: sales.receiptNumber, status: sales.status, total: sales.total, completedAt: sales.completedAt, reversedAt: sales.reversedAt, reversalReason: sales.reversalReason, itemCount: count(saleItems.id) }).from(sales).leftJoin(saleItems, eq(saleItems.saleId, sales.id)).groupBy(sales.id, sales.receiptNumber, sales.status, sales.total, sales.completedAt, sales.reversedAt, sales.reversalReason).orderBy(desc(sales.completedAt), desc(sales.id));
 }
 const defaults = { businessName: "Kopi Nusantara", storeLocation: "Cibitung Bekasi", currency: "IDR", timezone: "Asia/Jakarta" };
 export async function getSettings() {

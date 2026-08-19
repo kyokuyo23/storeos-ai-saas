@@ -3,6 +3,7 @@ import { AlertTriangle, Minus, Plus, ReceiptText, ShoppingCart } from "lucide-re
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { AppShell, EmptyState, ErrorState, PageHeader, Panel } from "@/components/FoundationShell";
+import { isCollectionEmpty } from "@/lib/emptyStates";
 
 const formatCurrency = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
 const formatDate = (value: Date) => new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" }).format(value);
@@ -49,6 +50,14 @@ export function SalePOS() {
 }
 
 export function SalesHistory() {
+  const utils = trpc.useUtils();
   const query = trpc.sale.list.useQuery();
-  return <AppShell active="sales" eyebrow="Operasional" title="Sales"><PageHeader eyebrow="RIWAYAT PENJUALAN" title="Sales" description="Setiap transaksi yang selesai telah memperbarui saldo stok berdasarkan resep produk." />{query.isLoading ? <div className="loading-state"><span className="loading-dot" /> Memuat penjualan…</div> : query.isError ? <ErrorState message="Riwayat penjualan gagal dimuat. Silakan coba lagi." /> : <Panel title="Penjualan selesai" description="Gunakan nomor transaksi untuk mencocokkan pergerakan stok yang bersumber dari penjualan.">{!query.data?.length ? <EmptyState title="Belum ada penjualan." description="Selesaikan transaksi melalui POS untuk menghasilkan riwayat dan potongan stok otomatis." icon={ReceiptText} /> : <div className="table-wrap"><table><thead><tr><th>Waktu</th><th>Nomor transaksi</th><th>Jenis produk</th><th>Total</th></tr></thead><tbody>{query.data.map((sale) => <tr key={sale.id}><td>{formatDate(sale.completedAt)}</td><td><strong>{sale.receiptNumber}</strong></td><td>{sale.itemCount}</td><td>{formatCurrency(sale.total)}</td></tr>)}</tbody></table></div>}</Panel>}</AppShell>;
+  const sales = query.data || [];
+  const [reasonBySale, setReasonBySale] = useState<Record<number, string>>({});
+  const reverse = trpc.sale.reverse.useMutation({
+    onSuccess: (sale) => { utils.sale.list.invalidate(); utils.ingredient.list.invalidate(); utils.stockMovement.list.invalidate(); toast.success(`${sale.status === "voided" ? "Void" : "Refund"} berhasil dan stok bahan telah dipulihkan.`); },
+    onError: (error) => toast.error(error.message || "Pembatalan transaksi gagal diproses."),
+  });
+  const statusLabel = (status: "completed" | "voided" | "refunded") => status === "completed" ? "Selesai" : status === "voided" ? "Void" : "Refund";
+  return <AppShell active="sales" eyebrow="Operasional" title="Sales"><PageHeader eyebrow="RIWAYAT PENJUALAN" title="Sales" description="Void dan refund memulihkan stok berdasarkan catatan pengurangan bahan dari transaksi asli." />{query.isLoading ? <div className="loading-state"><span className="loading-dot" /> Memuat penjualan…</div> : query.isError ? <ErrorState message="Riwayat penjualan gagal dimuat. Silakan coba lagi." /> : <Panel title="Riwayat transaksi" description="Setiap pembatalan hanya dapat diproses satu kali dan selalu menambah catatan pemulihan stok.">{isCollectionEmpty(sales) ? <EmptyState title="Belum ada penjualan." description="Selesaikan transaksi melalui POS untuk menghasilkan riwayat dan potongan stok otomatis." icon={ReceiptText} /> : <div className="table-wrap"><table><thead><tr><th>Waktu</th><th>Nomor transaksi</th><th>Status</th><th>Jenis produk</th><th>Total</th><th>Aksi</th></tr></thead><tbody>{sales.map((sale) => <tr key={sale.id}><td>{formatDate(sale.completedAt)}</td><td><strong>{sale.receiptNumber}</strong></td><td><span className={`badge ${sale.status === "completed" ? "success" : "neutral"}`}>{statusLabel(sale.status)}</span>{sale.reversedAt && <small>{formatDate(sale.reversedAt)}</small>}</td><td>{sale.itemCount}</td><td>{formatCurrency(sale.total)}</td><td>{sale.status === "completed" ? <div className="reversal-actions"><input className="form-input" aria-label={`Alasan pembatalan ${sale.receiptNumber}`} value={reasonBySale[sale.id] || ""} onChange={(event) => setReasonBySale((current) => ({ ...current, [sale.id]: event.target.value }))} placeholder="Alasan (opsional)" /><button className="button ghost" disabled={reverse.isPending} onClick={() => reverse.mutate({ saleId: sale.id, type: "void", reason: reasonBySale[sale.id] || null })}>Void</button><button className="button secondary" disabled={reverse.isPending} onClick={() => reverse.mutate({ saleId: sale.id, type: "refund", reason: reasonBySale[sale.id] || null })}>Refund</button></div> : <small>{sale.reversalReason || "Stok telah dipulihkan."}</small>}</td></tr>)}</tbody></table></div>}</Panel>}</AppShell>;
 }

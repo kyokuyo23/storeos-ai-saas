@@ -54,6 +54,12 @@ export const saleCompletionInput = z.object({
   })).min(1, "Tambahkan setidaknya satu produk ke keranjang."),
 });
 
+export const saleReversalInput = z.object({
+  saleId: z.coerce.number().int().positive("Transaksi wajib dipilih."),
+  type: z.enum(["void", "refund"]),
+  reason: z.string().trim().max(1000).optional().nullable(),
+});
+
 export const settingsInput = z.object({
   businessName: requiredText("Nama bisnis wajib diisi."),
   storeLocation: requiredText("Lokasi toko wajib diisi."),

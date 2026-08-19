@@ -56,3 +56,13 @@
 - [x] Add integration tests for completed sales, including multi-ingredient deductions, multiple quantities, insufficient-stock rollback safety, and linked sale movement audit records.
 - [x] Validate the completed-sale transaction writes resulting balances and sale-linked audit records, and review the responsive empty-state POS and sales screens.
 - [x] Save the recipe-linked inventory update for delivery.
+- [x] Define void and refund business rules, including full-sale reversals, inventory restoration from original sale deductions, receipt status, and duplicate-reversal prevention.
+- [x] Extend sales and stock-movement persistence with reversal status, reversal metadata, and linked restoration movements.
+- [x] Add transactional server-side void and refund procedures that restore original ingredient deductions exactly once.
+- [x] Add Sales-page controls to void or refund completed sales and show transaction status plus reversal audit details.
+- [x] Show void and refund inventory restorations in movement history with linked sale references.
+- [x] Add reversal failure-path tests for transactional rollback safety, missing-sale errors, and invalid-status duplicate prevention.
+- [x] Verify zero persisted sales and stock-movement records, then pair those counts with dedicated desktop and mobile empty-state captures.
+- [x] Add automated empty-state render-condition coverage for the Sales history and Inventory movement-history surfaces when their persisted datasets are empty.
+- [ ] Save a new checkpoint containing void/refund persistence, Sales controls, Inventory restoration labels, and empty-state coverage.
+- [ ] Verify the saved reversal checkpoint contains the transaction-restoration implementation before delivery.
