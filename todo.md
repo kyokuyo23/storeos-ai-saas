@@ -91,3 +91,7 @@
 - [x] Add a public dashboard data query that returns daily cash, card, combined totals, and settlement count.
 - [x] Add a responsive dashboard summary panel for the day's cash and card settlements with an informative zero state.
 - [x] Add settlement-summary tests, validate desktop/mobile dashboard rendering, and save the delivery checkpoint.
+- [x] Define selected-date and date-range filtering rules for Jakarta/WIB settlement reporting, including invalid-range handling.
+- [x] Extend the settlement-summary query with validated start and end dates while preserving the default daily view.
+- [x] Add Dashboard start/end date pickers, a reset-to-today control, and filtered settlement labels and zero state.
+- [x] Add date-range aggregation tests, validate desktop/mobile filtering UI, and save the delivery checkpoint.

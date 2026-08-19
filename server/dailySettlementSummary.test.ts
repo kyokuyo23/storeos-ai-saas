@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizeDailySettlements } from "./db";
+import { resolveSettlementDateRange, summarizeDailySettlements } from "./db";
 
 describe("daily settlement summary", () => {
   it("separates cash and card settlements while returning the combined daily total", () => {
@@ -12,5 +12,12 @@ describe("daily settlement summary", () => {
 
   it("returns an explicit zero summary when the Jakarta day has no settlements", () => {
     expect(summarizeDailySettlements([])).toEqual({ cashTotal: 0, cardTotal: 0, total: 0, count: 0 });
+  });
+
+  it("includes both selected calendar days in a Jakarta/WIB settlement range", () => {
+    const range = resolveSettlementDateRange({ startDate: "2026-08-10", endDate: "2026-08-12" });
+    expect(range).toMatchObject({ startDate: "2026-08-10", endDate: "2026-08-12" });
+    expect(range.start.toISOString()).toBe("2026-08-09T17:00:00.000Z");
+    expect(range.end.toISOString()).toBe("2026-08-12T17:00:00.000Z");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ingredientInput, productInput, recipeInput } from "./foundationSchemas";
+import { ingredientInput, productInput, recipeInput, settlementDateRangeInput } from "./foundationSchemas";
 
 describe("StoreOS Step 2 validation", () => {
   it("rejects an incomplete product", () => {
@@ -12,5 +12,10 @@ describe("StoreOS Step 2 validation", () => {
   it("requires a positive-quantity ingredient in a recipe", () => {
     expect(recipeInput.safeParse({ productId: 1, name: "Resep Kopi", items: [] }).success).toBe(false);
     expect(recipeInput.safeParse({ productId: 1, name: "Resep Kopi", items: [{ ingredientId: 2, quantity: 0 }] }).success).toBe(false);
+  });
+  it("requires valid ordered Jakarta dates for a settlement range", () => {
+    expect(settlementDateRangeInput.safeParse({ startDate: "2026-08-10", endDate: "2026-08-19" }).success).toBe(true);
+    expect(settlementDateRangeInput.safeParse({ startDate: "2026-08-19", endDate: "2026-08-10" }).success).toBe(false);
+    expect(settlementDateRangeInput.safeParse({ startDate: "2026-02-31", endDate: "2026-03-01" }).success).toBe(false);
   });
 });

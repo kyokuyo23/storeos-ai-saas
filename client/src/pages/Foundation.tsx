@@ -7,6 +7,13 @@ import { InventoryManagement } from "@/components/InventoryManagement";
 import { SalePOS, SalesHistory } from "@/components/SalePOS";
 
 const formatCurrency = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
+const jakartaDateValue = (date = new Date()) => new Date(date.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const formatSettlementRange = (startDate: string, endDate: string) => {
+  const formatter = new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Jakarta" });
+  const start = new Date(`${startDate}T00:00:00+07:00`);
+  const end = new Date(`${endDate}T00:00:00+07:00`);
+  return startDate === endDate ? formatter.format(start) : `${formatter.format(start)} – ${formatter.format(end)}`;
+};
 const emptyProduct = { categoryId: "", name: "", sku: "", description: "", sellingPrice: "", costPrice: "", unit: "", isActive: true };
 const emptyIngredient = { name: "", unit: "", costPerUnit: "", minimumStock: "", isActive: true };
 
@@ -17,7 +24,12 @@ function StatusBadge({ active }: { active: boolean }) { return <span className={
 function Dashboard() {
   const settings = trpc.settings.get.useQuery();
   const ingredients = trpc.ingredient.list.useQuery();
-  const settlements = trpc.dashboard.dailySettlements.useQuery();
+  const [todayValue] = useState(() => jakartaDateValue());
+  const [startDate, setStartDate] = useState(todayValue);
+  const [endDate, setEndDate] = useState(todayValue);
+  const invalidRange = startDate > endDate;
+  const settlementRange = useMemo(() => ({ startDate, endDate }), [startDate, endDate]);
+  const settlements = trpc.dashboard.dailySettlements.useQuery(settlementRange, { enabled: !invalidRange });
   const today = new Intl.DateTimeFormat("id-ID", { dateStyle: "full", timeZone: "Asia/Jakarta" }).format(new Date());
   const business = settings.data?.businessName ?? "Kopi Nusantara";
   const location = settings.data?.storeLocation ?? "Cibitung Bekasi";
@@ -30,7 +42,7 @@ function Dashboard() {
     <div className="dashboard-grid">
       <Panel title="Sales Overview" description="Ringkasan penjualan akan tersedia setelah transaksi digunakan."><EmptyState title="Belum ada data penjualan." description="Data penjualan akan tampil di sini saat modul POS tersedia." icon={Coffee} /></Panel>
       <Panel title="Top Products" description="Produk terlaris akan dihitung dari transaksi."><EmptyState title="Belum ada data produk." description="Belum ada aktivitas penjualan untuk menampilkan peringkat produk." /></Panel>
-      <Panel title="Settlement Hari Ini" description="Tambahan pembayaran penukaran yang tercatat hari ini (WIB).">{settlements.isLoading ? <Loading /> : settlements.isError ? <ErrorState message="Ringkasan settlement belum dapat dimuat. Silakan coba lagi." /> : !settlements.data?.count ? <EmptyState title="Belum ada settlement hari ini." description="Pembayaran tambahan dari penukaran akan diringkas menurut metode tunai dan kartu." /> : <div className="settlement-summary"><div><span>Tunai</span><strong>{formatCurrency(settlements.data.cashTotal)}</strong></div><div><span>Kartu</span><strong>{formatCurrency(settlements.data.cardTotal)}</strong></div><div><span>Total diterima</span><strong>{formatCurrency(settlements.data.total)}</strong><small>{settlements.data.count} settlement tercatat</small></div></div>}</Panel>
+      <Panel title="Settlement" description={`Tambahan pembayaran penukaran untuk ${formatSettlementRange(startDate, endDate)} (WIB).`}><div className="settlement-filters"><Field label="Dari tanggal"><input className="form-input" type="date" value={startDate} max={todayValue} onChange={(event) => setStartDate(event.target.value)} /></Field><Field label="Sampai tanggal"><input className="form-input" type="date" value={endDate} max={todayValue} onChange={(event) => setEndDate(event.target.value)} /></Field><button type="button" className="button ghost settlement-reset" onClick={() => { setStartDate(todayValue); setEndDate(todayValue); }} disabled={startDate === todayValue && endDate === todayValue}>Hari ini</button></div>{invalidRange ? <ErrorState message="Tanggal akhir tidak boleh lebih awal dari tanggal mulai." /> : settlements.isLoading ? <Loading /> : settlements.isError ? <ErrorState message="Ringkasan settlement belum dapat dimuat. Silakan coba lagi." /> : !settlements.data?.count ? <EmptyState title="Belum ada settlement pada periode ini." description="Pembayaran tambahan dari penukaran akan diringkas menurut metode tunai dan kartu." /> : <div className="settlement-summary"><div><span>Tunai</span><strong>{formatCurrency(settlements.data.cashTotal)}</strong></div><div><span>Kartu</span><strong>{formatCurrency(settlements.data.cardTotal)}</strong></div><div><span>Total diterima</span><strong>{formatCurrency(settlements.data.total)}</strong><small>{settlements.data.count} settlement tercatat</small></div></div>}</Panel>
       <Panel title="Inventory Status" description="Ringkasan saldo bahan diperbarui dari catatan pergerakan stok.">{ingredients.isLoading ? <Loading /> : !ingredients.data?.length ? <EmptyState title="Belum ada data inventory." description="Master bahan dapat dikelola dari halaman Inventory." icon={UtensilsCrossed} /> : <div className="inventory-summary"><strong>{ingredients.data.filter((ingredient) => ingredient.minimumStock > 0 && ingredient.currentStock <= ingredient.minimumStock).length}</strong><span>bahan berada pada atau di bawah stok minimum</span></div>}</Panel>
       <Panel title="Store Alerts" description="Peringatan operasional akan tampil di sini."><EmptyState title="Belum ada alert." description="Tidak ada alert pada fondasi aplikasi ini." /></Panel>
     </div>

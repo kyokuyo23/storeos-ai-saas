@@ -4,7 +4,7 @@ import { nanoid } from "nanoid";
 import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import type { z } from "zod";
-import type { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, partialRefundInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settingsInput, stockMovementInput } from "./foundationSchemas";
+import type { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, partialRefundInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput } from "./foundationSchemas";
 import { resolveStockMovement } from "./inventory";
 import { planRecipeDeductions } from "./sales";
 
@@ -304,13 +304,20 @@ export function summarizeDailySettlements(rows: Array<{ amount: number; paymentM
 function jakartaDayRange(now = new Date()) {
   const jakartaDate = new Date(now.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const start = new Date(`${jakartaDate}T00:00:00+07:00`);
-  return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
+  return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000), startDate: jakartaDate, endDate: jakartaDate };
 }
 
-export async function getDailySettlementSummary() {
-  const { start, end } = jakartaDayRange();
+export function resolveSettlementDateRange(input?: z.infer<typeof settlementDateRangeInput>, now = new Date()) {
+  if (!input?.startDate || !input.endDate) return jakartaDayRange(now);
+  const start = new Date(`${input.startDate}T00:00:00+07:00`);
+  const endStart = new Date(`${input.endDate}T00:00:00+07:00`);
+  return { start, end: new Date(endStart.getTime() + 24 * 60 * 60 * 1000), startDate: input.startDate, endDate: input.endDate };
+}
+
+export async function getDailySettlementSummary(input?: z.infer<typeof settlementDateRangeInput>) {
+  const { start, end, startDate, endDate } = resolveSettlementDateRange(input);
   const rows = await (await requireDb()).select({ amount: exchangeSettlements.amount, paymentMethod: exchangeSettlements.paymentMethod }).from(exchangeSettlements).where(and(gte(exchangeSettlements.createdAt, start), lt(exchangeSettlements.createdAt, end)));
-  return { ...summarizeDailySettlements(rows), dateStart: start, dateEnd: end };
+  return { ...summarizeDailySettlements(rows), dateStart: start, dateEnd: end, startDate, endDate };
 }
 
 export async function listSales() {

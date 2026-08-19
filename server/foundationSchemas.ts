@@ -83,6 +83,23 @@ export const exchangeSettlementInput = z.object({
   paymentMethod: z.enum(["cash", "card"]),
 });
 
+const jakartaDateInput = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Tanggal harus memakai format YYYY-MM-DD.");
+const isValidCalendarDate = (value: string) => {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+};
+
+export const settlementDateRangeInput = z.object({
+  startDate: jakartaDateInput.optional(),
+  endDate: jakartaDateInput.optional(),
+}).superRefine((input, context) => {
+  if (Boolean(input.startDate) !== Boolean(input.endDate)) context.addIssue({ code: "custom", path: [input.startDate ? "endDate" : "startDate"], message: "Tanggal mulai dan akhir harus diisi bersama." });
+  if (input.startDate && !isValidCalendarDate(input.startDate)) context.addIssue({ code: "custom", path: ["startDate"], message: "Tanggal mulai tidak valid." });
+  if (input.endDate && !isValidCalendarDate(input.endDate)) context.addIssue({ code: "custom", path: ["endDate"], message: "Tanggal akhir tidak valid." });
+  if (input.startDate && input.endDate && input.startDate > input.endDate) context.addIssue({ code: "custom", path: ["endDate"], message: "Tanggal akhir tidak boleh lebih awal dari tanggal mulai." });
+});
+
 export const settingsInput = z.object({
   businessName: requiredText("Nama bisnis wajib diisi."),
   storeLocation: requiredText("Lokasi toko wajib diisi."),
