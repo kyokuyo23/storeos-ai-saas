@@ -21,4 +21,4 @@
 - [x] Add a distinct Gross Margin KPI and a second dashboard visualization so the dashboard exposes every required KPI and both chart forms.
 - [x] Add an explicit low-stock status to the inventory table alongside its theoretical-versus-actual variance status.
 - [x] Perform final cross-module validation across dashboard, POS, products, inventory, sales, alerts, Ask StoreOS, reports, and settings.
-- [ ] Save the deployment-ready StoreOS version.
+- [x] Save the deployment-ready StoreOS version.
