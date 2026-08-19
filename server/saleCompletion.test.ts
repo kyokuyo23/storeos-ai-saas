@@ -25,9 +25,10 @@ describe("completed sale inventory transaction", () => {
 
     expect(result).toMatchObject({ id: 51, receiptNumber: "TRX-TEST-01", total: 36000 });
     expect(state.inserts[0]).toEqual({ receiptNumber: "TRX-TEST-01", total: 36000 });
-    expect(state.inserts[1]).toEqual([{ saleId: 51, productId: 1, quantity: 2, unitPrice: 18000, lineTotal: 36000 }]);
+    expect(state.inserts[1]).toEqual({ saleId: 51, productId: 1, quantity: 2, unitPrice: 18000, lineTotal: 36000 });
+    expect(state.inserts[2]).toEqual([{ saleItemId: 52, ingredientId: 11, unitQuantity: 0.2 }, { saleItemId: 52, ingredientId: 12, unitQuantity: 15 }]);
     expect(state.updates).toEqual([{ currentStock: 1.6 }, { currentStock: 10 }]);
-    expect(state.inserts[2]).toEqual([
+    expect(state.inserts[3]).toEqual([
       { ingredientId: 11, saleId: 51, type: "sale", quantityDelta: -0.4, balanceAfter: 1.6, note: "Penjualan TRX-TEST-01" },
       { ingredientId: 12, saleId: 51, type: "sale", quantityDelta: -30, balanceAfter: 10, note: "Penjualan TRX-TEST-01" },
     ]);

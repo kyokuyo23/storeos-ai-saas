@@ -38,6 +38,15 @@ export function mapFoundationError(error: unknown, entity: string): TRPCError {
   if (databaseError.message === "Catatan pengurangan stok tidak ditemukan.") {
     return new TRPCError({ code: "BAD_REQUEST", message: "Catatan pengurangan stok transaksi tidak ditemukan sehingga stok tidak dapat dipulihkan." });
   }
+  if (databaseError.message === "Baris penjualan tidak ditemukan.") {
+    return new TRPCError({ code: "NOT_FOUND", message: "Item penjualan tidak ditemukan pada transaksi ini." });
+  }
+  if (databaseError.message === "Catatan resep penjualan tidak ditemukan.") {
+    return new TRPCError({ code: "BAD_REQUEST", message: "Catatan resep untuk item penjualan tidak ditemukan sehingga stok tidak dapat dipulihkan." });
+  }
+  if (databaseError.message?.startsWith("Jumlah refund melebihi sisa item")) {
+    return new TRPCError({ code: "BAD_REQUEST", message: databaseError.message });
+  }
   if (databaseError.message?.includes("Database tidak tersedia")) {
     return new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database tidak tersedia. Silakan coba lagi." });
   }

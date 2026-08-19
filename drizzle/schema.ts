@@ -50,7 +50,7 @@ export const ingredients = mysqlTable("ingredients", {
 export const sales = mysqlTable("sales", {
   id: int("id").autoincrement().primaryKey(),
   receiptNumber: varchar("receiptNumber", { length: 64 }).notNull().unique(),
-  status: mysqlEnum("status", ["completed", "voided", "refunded"]).default("completed").notNull(),
+  status: mysqlEnum("status", ["completed", "partially_refunded", "voided", "refunded"]).default("completed").notNull(),
   total: decimal("total", { precision: 14, scale: 2, mode: "number" }).notNull(),
   completedAt: timestamp("completedAt").defaultNow().notNull(),
   reversedAt: timestamp("reversedAt"),
@@ -68,17 +68,37 @@ export const saleItems = mysqlTable("saleItems", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => [index("sale_items_sale_idx").on(table.saleId), index("sale_items_product_idx").on(table.productId)]);
 
+/** Immutable per-unit recipe snapshot, retained so refunds follow the recipe used at sale time. */
+export const saleItemIngredients = mysqlTable("saleItemIngredients", {
+  id: int("id").autoincrement().primaryKey(),
+  saleItemId: int("saleItemId").notNull().references(() => saleItems.id, { onDelete: "restrict" }),
+  ingredientId: int("ingredientId").notNull().references(() => ingredients.id, { onDelete: "restrict" }),
+  unitQuantity: decimal("unitQuantity", { precision: 14, scale: 3, mode: "number" }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [index("sale_item_ingredients_item_idx").on(table.saleItemId), index("sale_item_ingredients_ingredient_idx").on(table.ingredientId)]);
+
+export const partialRefunds = mysqlTable("partialRefunds", {
+  id: int("id").autoincrement().primaryKey(),
+  saleId: int("saleId").notNull().references(() => sales.id, { onDelete: "restrict" }),
+  saleItemId: int("saleItemId").notNull().references(() => saleItems.id, { onDelete: "restrict" }),
+  quantity: int("quantity").notNull(),
+  reason: text("reason"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [index("partial_refunds_sale_idx").on(table.saleId), index("partial_refunds_item_idx").on(table.saleItemId)]);
+
 export const stockMovements = mysqlTable("stockMovements", {
   id: int("id").autoincrement().primaryKey(),
   ingredientId: int("ingredientId").notNull().references(() => ingredients.id, { onDelete: "restrict" }),
   saleId: int("saleId").references(() => sales.id, { onDelete: "restrict" }),
-  type: mysqlEnum("type", ["purchase", "adjustment", "waste", "opname", "sale", "void", "refund"]).notNull(),
+  saleItemId: int("saleItemId").references(() => saleItems.id, { onDelete: "restrict" }),
+  partialRefundId: int("partialRefundId").references(() => partialRefunds.id, { onDelete: "restrict" }),
+  type: mysqlEnum("type", ["purchase", "adjustment", "waste", "opname", "sale", "void", "refund", "partial_refund"]).notNull(),
   quantityDelta: decimal("quantityDelta", { precision: 14, scale: 3, mode: "number" }).notNull(),
   balanceAfter: decimal("balanceAfter", { precision: 14, scale: 3, mode: "number" }).notNull(),
   note: text("note"),
   occurredAt: timestamp("occurredAt").defaultNow().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-}, (table) => [index("stock_movements_ingredient_occurred_idx").on(table.ingredientId, table.occurredAt), index("stock_movements_sale_idx").on(table.saleId)]);
+}, (table) => [index("stock_movements_ingredient_occurred_idx").on(table.ingredientId, table.occurredAt), index("stock_movements_sale_idx").on(table.saleId), index("stock_movements_sale_item_idx").on(table.saleItemId)]);
 
 export const recipes = mysqlTable("recipes", {
   id: int("id").autoincrement().primaryKey(),
@@ -115,6 +135,8 @@ export type Ingredient = typeof ingredients.$inferSelect;
 export type StockMovement = typeof stockMovements.$inferSelect;
 export type Sale = typeof sales.$inferSelect;
 export type SaleItem = typeof saleItems.$inferSelect;
+export type SaleItemIngredient = typeof saleItemIngredients.$inferSelect;
+export type PartialRefund = typeof partialRefunds.$inferSelect;
 export type Recipe = typeof recipes.$inferSelect;
 export type RecipeItem = typeof recipeItems.$inferSelect;
 export type BusinessSettings = typeof businessSettings.$inferSelect;

@@ -64,5 +64,15 @@
 - [x] Add reversal failure-path tests for transactional rollback safety, missing-sale errors, and invalid-status duplicate prevention.
 - [x] Verify zero persisted sales and stock-movement records, then pair those counts with dedicated desktop and mobile empty-state captures.
 - [x] Add automated empty-state render-condition coverage for the Sales history and Inventory movement-history surfaces when their persisted datasets are empty.
-- [ ] Save a new checkpoint containing void/refund persistence, Sales controls, Inventory restoration labels, and empty-state coverage.
-- [ ] Verify the saved reversal checkpoint contains the transaction-restoration implementation before delivery.
+- [x] Save a new checkpoint containing void/refund persistence, Sales controls, Inventory restoration labels, and empty-state coverage.
+- [x] Inspect checkpoint 110496bd persistence files to verify void/refund stock-restoration logic and persisted reversal metadata.
+- [x] Inspect checkpoint 110496bd empty-state test coverage before completing the delivery verification.
+- [x] Define partial-refund rules for sale lines, including returned quantity limits, exact recipe-ingredient restoration, receipt status, and coexistence with full void/refund actions.
+- [x] Add persistent partial-refund records linked to sale lines, including refunded quantity, reason, timestamp, and reversal audit reference.
+- [x] Add transactional server-side partial-refund procedures that restore only the selected product line's recipe ingredients and prevent over-refunds.
+- [x] Add Sales controls to choose a completed sale line, specify its refund quantity, display remaining refundable quantity, and show partial-refund history.
+- [x] Display partial-refund ingredient restorations in Inventory movement history with the sale and sale-line references.
+- [x] Add tests for partial quantities, multiple refunds up to the sale-line limit, aggregated recipe deductions, invalid states, and rollback safety.
+- [x] Verify the partial-refund Sales and Inventory zero states against the zero-record database and capture dedicated desktop/mobile evidence.
+- [ ] Save a new checkpoint containing partial-refund persistence, sale-line controls, inventory audit labels, and test coverage.
+- [ ] Verify the saved partial-refund checkpoint includes the delivery-ready implementation before handoff.

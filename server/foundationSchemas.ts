@@ -60,6 +60,13 @@ export const saleReversalInput = z.object({
   reason: z.string().trim().max(1000).optional().nullable(),
 });
 
+export const partialRefundInput = z.object({
+  saleId: z.coerce.number().int().positive("Transaksi wajib dipilih."),
+  saleItemId: z.coerce.number().int().positive("Item penjualan wajib dipilih."),
+  quantity: z.coerce.number().int().positive("Jumlah refund harus lebih dari nol."),
+  reason: z.string().trim().max(1000).optional().nullable(),
+});
+
 export const settingsInput = z.object({
   businessName: requiredText("Nama bisnis wajib diisi."),
   storeLocation: requiredText("Lokasi toko wajib diisi."),
