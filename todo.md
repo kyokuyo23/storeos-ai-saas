@@ -1,0 +1,24 @@
+# Project TODO
+
+- [x] Review the supplied StoreOS specification and the reference repository for product and interface guidance.
+- [x] Define a shared data model for the business profile, categories, products, recipes, ingredients, sales, sale items, stock movements, alerts, and settings.
+- [x] Seed coherent Kopi Nusantara demo data for Cibitung Bekasi, including products, recipes, inventory, historical sales, movements, and calculated variance signals.
+- [x] Implement a public, no-login StoreOS shell with responsive sidebar navigation and Indonesian Rupiah formatting.
+- [x] Implement the Dashboard with calculated daily KPIs, "Rp Diselamatkan StoreOS", Store Health Score, charts, product rankings, and AI Morning Brief.
+- [x] Implement Sales Analytics with today, 7-day, and 30-day line/bar visualizations and product ranking tables.
+- [x] Implement the POS with searchable, filterable product grid, cart quantity controls, per-item discount, payment selection, checkout, and receipt view.
+- [x] Write completed POS transactions as sales and sale items while updating inventory, product sales metrics, stock movements, dashboard values, and audit history from one source of truth.
+- [x] Implement Product Management CRUD with pricing, COGS, stock, minimum stock, unit, status, gross-profit, and margin calculations.
+- [x] Implement recipe management so product ingredients and quantities determine theoretical stock consumption.
+- [x] Implement Inventory with live stock balances, low-stock statuses, and recorded Purchase, Sale, Waste, Adjustment, and Stock Opname movements.
+- [x] Implement theoretical-versus-actual variance calculations and create waste or variance alerts from those results.
+- [x] Implement Alerts with low-stock, transaction-anomaly, and variance flags, each carrying a severity level.
+- [x] Implement the "Ask StoreOS" page with a deterministic insight engine that responds from current live application data through a future-LLM-ready abstraction.
+- [x] Implement Reports with exportable sales, inventory, and waste summaries.
+- [x] Implement Settings with editable business name, location, and currency fields.
+- [x] Add unit tests for financial calculations, inventory deductions, deterministic insights, operational alerts, and the completed POS state transition.
+- [x] Validate desktop and mobile UI flows, run the test suite and type checking, then save a deployment-ready version.
+- [x] Add a distinct Gross Margin KPI and a second dashboard visualization so the dashboard exposes every required KPI and both chart forms.
+- [x] Add an explicit low-stock status to the inventory table alongside its theoretical-versus-actual variance status.
+- [x] Perform final cross-module validation across dashboard, POS, products, inventory, sales, alerts, Ask StoreOS, reports, and settings.
+- [ ] Save the deployment-ready StoreOS version.
