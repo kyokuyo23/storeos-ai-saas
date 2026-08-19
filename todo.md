@@ -98,3 +98,11 @@
 - [x] Define Jakarta/WIB week-to-date and month-to-date preset boundaries for settlement reporting.
 - [x] Add This Week and This Month dashboard date-range shortcuts while retaining custom dates and Today reset.
 - [x] Add preset-boundary tests, validate desktop/mobile controls, and save the delivery checkpoint.
+- [x] Audit the existing persisted sales, sale-line, recipe, ingredient, inventory, refund, void, and exchange architecture for Financial Core reuse.
+- [x] Define Jakarta/WIB revenue, recipe-cost COGS, gross profit, gross margin, reversal, and exchange calculation rules without duplicate financial models.
+- [x] Add immutable recipe-cost snapshots at completed-sale time and preserve transactional safety across refunds, voids, and exchanges.
+- [x] Add public Financial Core reporting services for dashboard KPIs, sales financial summaries, and product performance.
+- [x] Add responsive financial dashboard and sales UI using the existing StoreOS screens.
+- [x] Add financial acceptance tests, run the full suite, TypeScript check, production build, and desktop/mobile validation, then save the delivery checkpoint.
+- [x] Capture final desktop evidence for the Financial Core dashboard and Sales financial summary.
+- [x] Save the completed Financial Core implementation as a delivery checkpoint.

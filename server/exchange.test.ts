@@ -25,12 +25,13 @@ describe("sale-line exchanges", () => {
       [{ id: 1, sellingPrice: 10000, isActive: true }],
       [{ id: 21, productId: 1 }],
       [{ recipeId: 21, ingredientId: 11, quantity: 0.2 }, { recipeId: 21, ingredientId: 12, quantity: 15 }],
-      [{ id: 11, name: "Susu", currentStock: 1.6, isActive: true }, { id: 12, name: "Kopi", currentStock: 10, isActive: true }],
+      [{ id: 11, name: "Susu", currentStock: 1.6, costPerUnit: 12000, isActive: true }, { id: 12, name: "Kopi", currentStock: 10, costPerUnit: 200, isActive: true }],
     ]);
     const result = await exchangeInTransaction(state.tx, { saleId: 51, saleItemId: 61, returnedQuantity: 1, replacementItems: [{ productId: 1, quantity: 1 }], reason: "Ganti gelas" });
     expect(result).toMatchObject({ saleId: 51, saleItemId: 61, returnedQuantity: 1, returnedTotal: 10000, replacementTotal: 10000, priceDifference: 0, remainingQuantity: 1 });
     expect(state.updates).toEqual([{ currentStock: 1.6 }, { currentStock: 10 }, { status: "partially_refunded" }]);
     expect(state.inserts[0]).toEqual({ saleId: 51, saleItemId: 61, returnedQuantity: 1, returnedTotal: 10000, replacementTotal: 10000, paymentAdjustment: 0, reason: "Ganti gelas" });
+    expect(state.inserts[2]).toEqual([{ exchangeItemId: 72, ingredientId: 11, unitQuantity: 0.2, unitCost: 12000 }, { exchangeItemId: 72, ingredientId: 12, unitQuantity: 15, unitCost: 200 }]);
     expect(state.inserts[3]).toEqual([
       { ingredientId: 11, quantityDelta: 0.2, balanceAfter: 1.8, saleId: 51, saleItemId: 61, exchangeId: 71, type: "exchange_return", note: "Penukaran TRX-01 · pengembalian item #61 ×1 — Ganti gelas" },
       { ingredientId: 12, quantityDelta: 15, balanceAfter: 25, saleId: 51, saleItemId: 61, exchangeId: 71, type: "exchange_return", note: "Penukaran TRX-01 · pengembalian item #61 ×1 — Ganti gelas" },

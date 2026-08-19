@@ -74,6 +74,8 @@ export const saleItemIngredients = mysqlTable("saleItemIngredients", {
   saleItemId: int("saleItemId").notNull().references(() => saleItems.id, { onDelete: "restrict" }),
   ingredientId: int("ingredientId").notNull().references(() => ingredients.id, { onDelete: "restrict" }),
   unitQuantity: decimal("unitQuantity", { precision: 14, scale: 3, mode: "number" }).notNull(),
+  /** Immutable ingredient unit cost captured when the sale is completed. */
+  unitCost: decimal("unitCost", { precision: 14, scale: 2, mode: "number" }).default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => [index("sale_item_ingredients_item_idx").on(table.saleItemId), index("sale_item_ingredients_ingredient_idx").on(table.ingredientId)]);
 
@@ -116,6 +118,8 @@ export const exchangeItemIngredients = mysqlTable("exchangeItemIngredients", {
   exchangeItemId: int("exchangeItemId").notNull().references(() => exchangeItems.id, { onDelete: "restrict" }),
   ingredientId: int("ingredientId").notNull().references(() => ingredients.id, { onDelete: "restrict" }),
   unitQuantity: decimal("unitQuantity", { precision: 14, scale: 3, mode: "number" }).notNull(),
+  /** Immutable ingredient unit cost captured when the replacement product is issued. */
+  unitCost: decimal("unitCost", { precision: 14, scale: 2, mode: "number" }).default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => [index("exchange_item_ingredients_item_idx").on(table.exchangeItemId), index("exchange_item_ingredients_ingredient_idx").on(table.ingredientId)]);
 

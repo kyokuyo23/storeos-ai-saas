@@ -7,6 +7,7 @@ import type { z } from "zod";
 import type { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, partialRefundInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput } from "./foundationSchemas";
 import { resolveStockMovement } from "./inventory";
 import { planRecipeDeductions } from "./sales";
+import { summarizeFinancialSales, type FinancialSale } from "./financials";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
@@ -105,10 +106,11 @@ export async function completeSaleInTransaction(tx: any, input: z.infer<typeof s
   const itemRows = await tx.select({ recipeId: recipeItems.recipeId, ingredientId: recipeItems.ingredientId, quantity: recipeItems.quantity }).from(recipeItems).where(inArray(recipeItems.recipeId, recipeIds)) as Array<{ recipeId: number; ingredientId: number; quantity: number }>;
   const recipesForSale = recipeRows.map((recipe) => ({ productId: recipe.productId, items: itemRows.filter((item) => item.recipeId === recipe.id).map(({ ingredientId, quantity }) => ({ ingredientId, quantity })) }));
   const ingredientIds = Array.from(new Set(itemRows.map((item) => item.ingredientId)));
-  const ingredientRows = ingredientIds.length ? await tx.select().from(ingredients).where(inArray(ingredients.id, ingredientIds)) as Array<{ id: number; name: string; currentStock: number; isActive: boolean }> : [];
+  const ingredientRows = ingredientIds.length ? await tx.select().from(ingredients).where(inArray(ingredients.id, ingredientIds)) as Array<{ id: number; name: string; currentStock: number; costPerUnit: number; isActive: boolean }> : [];
   if (ingredientRows.some((ingredient) => !ingredient.isActive)) throw new Error("Bahan resep tidak aktif.");
   const deductions = planRecipeDeductions(lines, recipesForSale, ingredientRows);
   const productById = new Map(productRows.map((product) => [product.id, product]));
+  const ingredientById = new Map(ingredientRows.map((ingredient) => [ingredient.id, ingredient]));
   const total = Number(lines.reduce((sum, line) => sum + ((productById.get(line.productId)?.sellingPrice ?? 0) * line.quantity), 0).toFixed(2));
   const saleResult = await tx.insert(sales).values({ receiptNumber, total });
   const saleId = Number(saleResult[0].insertId);
@@ -119,7 +121,7 @@ export async function completeSaleInTransaction(tx: any, input: z.infer<typeof s
     const saleItemId = Number(saleItemResult[0].insertId);
     saleLineRecords.push({ saleItemId, productId: product.id, quantity: line.quantity });
     const recipe = recipesForSale.find((candidate) => candidate.productId === product.id)!;
-    await tx.insert(saleItemIngredients).values(recipe.items.map((item) => ({ saleItemId, ingredientId: item.ingredientId, unitQuantity: item.quantity })));
+    await tx.insert(saleItemIngredients).values(recipe.items.map((item) => ({ saleItemId, ingredientId: item.ingredientId, unitQuantity: item.quantity, unitCost: ingredientById.get(item.ingredientId)!.costPerUnit })));
   }
   for (const deduction of deductions) await tx.update(ingredients).set({ currentStock: deduction.balanceAfter }).where(eq(ingredients.id, deduction.ingredientId));
   if (deductions.length) await tx.insert(stockMovements).values(deductions.map((deduction) => ({ ingredientId: deduction.ingredientId, saleId, type: "sale" as const, quantityDelta: deduction.quantityDelta, balanceAfter: deduction.balanceAfter, note: `Penjualan ${receiptNumber}` })));
@@ -202,7 +204,7 @@ export async function exchangeInTransaction(tx: any, input: z.infer<typeof excha
   if (sale.status === "voided" || sale.status === "refunded") throw new Error("Transaksi sudah dibatalkan atau direfund.");
   const saleItem = (await tx.select().from(saleItems).where(and(eq(saleItems.id, input.saleItemId), eq(saleItems.saleId, sale.id))).limit(1))[0] as { id: number; productId: number; quantity: number; unitPrice: number } | undefined;
   if (!saleItem) throw new Error("Baris penjualan tidak ditemukan.");
-  const returnedRecipe = await tx.select().from(saleItemIngredients).where(eq(saleItemIngredients.saleItemId, saleItem.id)) as Array<{ ingredientId: number; unitQuantity: number }>;
+  const returnedRecipe = await tx.select().from(saleItemIngredients).where(eq(saleItemIngredients.saleItemId, saleItem.id)) as Array<{ ingredientId: number; unitQuantity: number; unitCost: number }>;
   if (!returnedRecipe.length) throw new Error("Catatan resep penjualan tidak ditemukan.");
   const existingRefunds = await tx.select({ quantity: partialRefunds.quantity }).from(partialRefunds).where(eq(partialRefunds.saleItemId, saleItem.id)) as Array<{ quantity: number }>;
   const existingExchanges = await tx.select({ returnedQuantity: exchanges.returnedQuantity }).from(exchanges).where(eq(exchanges.saleItemId, saleItem.id)) as Array<{ returnedQuantity: number }>;
@@ -229,7 +231,7 @@ export async function exchangeInTransaction(tx: any, input: z.infer<typeof excha
     replacementRecipeItems.filter((item) => item.recipeId === recipe.id).forEach((item) => deductionByIngredient.set(item.ingredientId, Number(((deductionByIngredient.get(item.ingredientId) ?? 0) + item.quantity * line.quantity).toFixed(3))));
   });
   const ingredientIds = Array.from(new Set([...Array.from(restorationByIngredient.keys()), ...Array.from(deductionByIngredient.keys())]));
-  const ingredientRows = await tx.select().from(ingredients).where(inArray(ingredients.id, ingredientIds)) as Array<{ id: number; name: string; currentStock: number; isActive: boolean }>;
+  const ingredientRows = await tx.select().from(ingredients).where(inArray(ingredients.id, ingredientIds)) as Array<{ id: number; name: string; currentStock: number; costPerUnit: number; isActive: boolean }>;
   if (ingredientRows.length !== ingredientIds.length) throw new Error("Bahan resep tidak ditemukan.");
   if (ingredientRows.some((ingredient) => !ingredient.isActive)) throw new Error("Bahan resep tidak aktif.");
   const ingredientById = new Map(ingredientRows.map((ingredient) => [ingredient.id, ingredient]));
@@ -253,7 +255,7 @@ export async function exchangeInTransaction(tx: any, input: z.infer<typeof excha
     const exchangeItemId = Number(exchangeItemResult[0].insertId);
     issuedItems.push({ exchangeItemId, productId: product.id, quantity: line.quantity });
     const recipe = replacementRecipes.find((candidate) => candidate.productId === product.id)!;
-    await tx.insert(exchangeItemIngredients).values(replacementRecipeItems.filter((item) => item.recipeId === recipe.id).map((item) => ({ exchangeItemId, ingredientId: item.ingredientId, unitQuantity: item.quantity })));
+    await tx.insert(exchangeItemIngredients).values(replacementRecipeItems.filter((item) => item.recipeId === recipe.id).map((item) => ({ exchangeItemId, ingredientId: item.ingredientId, unitQuantity: item.quantity, unitCost: ingredientById.get(item.ingredientId)!.costPerUnit })));
   }
   const restorationMovements = ingredientIds.flatMap((ingredientId) => {
     const quantityDelta = restorationByIngredient.get(ingredientId) ?? 0;
@@ -320,24 +322,34 @@ export async function getDailySettlementSummary(input?: z.infer<typeof settlemen
   return { ...summarizeDailySettlements(rows), dateStart: start, dateEnd: end, startDate, endDate };
 }
 
+export async function getFinancialDashboard(input?: z.infer<typeof settlementDateRangeInput>) {
+  const { start, end, startDate, endDate } = resolveSettlementDateRange(input);
+  const reportSales = (await listSales()).filter((sale) => sale.completedAt >= start && sale.completedAt < end) as FinancialSale[];
+  return { ...summarizeFinancialSales(reportSales), dateStart: start, dateEnd: end, startDate, endDate };
+}
+
 export async function listSales() {
   const db = await requireDb();
   const saleRows = await db.select({ id: sales.id, receiptNumber: sales.receiptNumber, status: sales.status, total: sales.total, completedAt: sales.completedAt, reversedAt: sales.reversedAt, reversalReason: sales.reversalReason, itemCount: count(saleItems.id) }).from(sales).leftJoin(saleItems, eq(saleItems.saleId, sales.id)).groupBy(sales.id, sales.receiptNumber, sales.status, sales.total, sales.completedAt, sales.reversedAt, sales.reversalReason).orderBy(desc(sales.completedAt), desc(sales.id));
   const saleIds = saleRows.map((sale) => sale.id);
-  if (!saleIds.length) return saleRows.map((sale) => ({ ...sale, lines: [] }));
+  if (!saleIds.length) return [];
   const itemRows = await db.select({ id: saleItems.id, saleId: saleItems.saleId, productId: saleItems.productId, productName: products.name, quantity: saleItems.quantity, unitPrice: saleItems.unitPrice, lineTotal: saleItems.lineTotal }).from(saleItems).innerJoin(products, eq(saleItems.productId, products.id)).where(inArray(saleItems.saleId, saleIds)).orderBy(saleItems.id);
   const refundRows = await db.select({ id: partialRefunds.id, saleId: partialRefunds.saleId, saleItemId: partialRefunds.saleItemId, quantity: partialRefunds.quantity, reason: partialRefunds.reason, createdAt: partialRefunds.createdAt }).from(partialRefunds).where(inArray(partialRefunds.saleId, saleIds)).orderBy(partialRefunds.createdAt, partialRefunds.id);
   const exchangeRows = await db.select({ id: exchanges.id, saleId: exchanges.saleId, saleItemId: exchanges.saleItemId, returnedQuantity: exchanges.returnedQuantity, returnedTotal: exchanges.returnedTotal, replacementTotal: exchanges.replacementTotal, paymentAdjustment: exchanges.paymentAdjustment, reason: exchanges.reason, createdAt: exchanges.createdAt }).from(exchanges).where(inArray(exchanges.saleId, saleIds)).orderBy(exchanges.createdAt, exchanges.id);
   const exchangeIds = exchangeRows.map((exchange) => exchange.id);
-  const exchangeItemRows = exchangeIds.length ? await db.select({ exchangeId: exchangeItems.exchangeId, productName: products.name, quantity: exchangeItems.quantity, unitPrice: exchangeItems.unitPrice, lineTotal: exchangeItems.lineTotal }).from(exchangeItems).innerJoin(products, eq(exchangeItems.productId, products.id)).where(inArray(exchangeItems.exchangeId, exchangeIds)).orderBy(exchangeItems.id) : [];
+  const itemIngredientRows = itemRows.length ? await db.select({ saleItemId: saleItemIngredients.saleItemId, ingredientId: saleItemIngredients.ingredientId, unitQuantity: saleItemIngredients.unitQuantity, unitCost: saleItemIngredients.unitCost }).from(saleItemIngredients).where(inArray(saleItemIngredients.saleItemId, itemRows.map((item) => item.id))) : [];
+  const exchangeItemRows = exchangeIds.length ? await db.select({ id: exchangeItems.id, exchangeId: exchangeItems.exchangeId, productId: exchangeItems.productId, productName: products.name, quantity: exchangeItems.quantity, unitPrice: exchangeItems.unitPrice, lineTotal: exchangeItems.lineTotal }).from(exchangeItems).innerJoin(products, eq(exchangeItems.productId, products.id)).where(inArray(exchangeItems.exchangeId, exchangeIds)).orderBy(exchangeItems.id) : [];
+  const exchangeIngredientRows = exchangeItemRows.length ? await db.select({ exchangeItemId: exchangeItemIngredients.exchangeItemId, ingredientId: exchangeItemIngredients.ingredientId, unitQuantity: exchangeItemIngredients.unitQuantity, unitCost: exchangeItemIngredients.unitCost }).from(exchangeItemIngredients).where(inArray(exchangeItemIngredients.exchangeItemId, exchangeItemRows.map((item) => item.id))) : [];
   const settlementRows = exchangeIds.length ? await db.select({ id: exchangeSettlements.id, exchangeId: exchangeSettlements.exchangeId, amount: exchangeSettlements.amount, paymentMethod: exchangeSettlements.paymentMethod, createdAt: exchangeSettlements.createdAt }).from(exchangeSettlements).where(inArray(exchangeSettlements.exchangeId, exchangeIds)).orderBy(exchangeSettlements.createdAt, exchangeSettlements.id) : [];
-  return saleRows.map((sale) => ({ ...sale, lines: itemRows.filter((item) => item.saleId === sale.id).map((item) => {
+  const records = saleRows.map((sale) => ({ ...sale, lines: itemRows.filter((item) => item.saleId === sale.id).map((item) => {
     const refunds = refundRows.filter((refund) => refund.saleItemId === item.id);
-    const itemExchanges = exchangeRows.filter((exchange) => exchange.saleItemId === item.id).map((exchange) => ({ ...exchange, items: exchangeItemRows.filter((exchangeItem) => exchangeItem.exchangeId === exchange.id), settlement: settlementRows.find((settlement) => settlement.exchangeId === exchange.id) || null }));
+    const itemExchanges = exchangeRows.filter((exchange) => exchange.saleItemId === item.id).map((exchange) => ({ ...exchange, items: exchangeItemRows.filter((exchangeItem) => exchangeItem.exchangeId === exchange.id).map((exchangeItem) => ({ ...exchangeItem, ingredientSnapshots: exchangeIngredientRows.filter((ingredient) => ingredient.exchangeItemId === exchangeItem.id) })), settlement: settlementRows.find((settlement) => settlement.exchangeId === exchange.id) || null }));
     const refundedQuantity = refunds.reduce((sum, refund) => sum + refund.quantity, 0);
     const exchangedQuantity = itemExchanges.reduce((sum, exchange) => sum + exchange.returnedQuantity, 0);
-    return { ...item, refundedQuantity, exchangedQuantity, refundableQuantity: item.quantity - refundedQuantity - exchangedQuantity, partialRefunds: refunds, exchanges: itemExchanges };
+    return { ...item, ingredientSnapshots: itemIngredientRows.filter((ingredient) => ingredient.saleItemId === item.id), refundedQuantity, exchangedQuantity, refundableQuantity: item.quantity - refundedQuantity - exchangedQuantity, partialRefunds: refunds, exchanges: itemExchanges };
   }) }));
+  const financialBySaleId = new Map(summarizeFinancialSales(records as FinancialSale[]).saleSummaries.map((summary) => [summary.saleId, summary]));
+  return records.map((sale) => ({ ...sale, financial: financialBySaleId.get(sale.id) ?? { saleId: sale.id, revenue: 0, cogs: 0, grossProfit: 0, grossMargin: 0, unitsSold: 0 } }));
 }
 
 const defaults = { businessName: "Kopi Nusantara", storeLocation: "Cibitung Bekasi", currency: "IDR", timezone: "Asia/Jakarta" };
