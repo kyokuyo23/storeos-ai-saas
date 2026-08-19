@@ -112,3 +112,8 @@
 - [x] Add product drill-down tests, run the full suite, TypeScript check, production build, desktop/mobile validation, and save a delivery checkpoint.
 - [x] Capture explicit desktop and mobile validation of the product drill-down entry point and no-transaction states; detailed history rendering is covered by immutable-snapshot acceptance tests because the persisted workspace has no products or sales.
 - [x] Save the completed product financial drill-down as a delivery checkpoint.
+- [x] Audit immutable product cost-history snapshots and existing chart components for ingredient cost trends.
+- [x] Add a deterministic ingredient cost-trend data transformation and selection behavior within the product drill-down period.
+- [x] Add a responsive line chart and empty state for individual ingredient cost history.
+- [x] Add chart data tests, run the full suite, TypeScript check, production build, desktop/mobile validation, and save a delivery checkpoint.
+- [x] Save a delivery checkpoint for the validated ingredient cost-trend chart enhancement.
