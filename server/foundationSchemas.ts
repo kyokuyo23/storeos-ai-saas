@@ -78,6 +78,11 @@ export const exchangeInput = z.object({
   reason: z.string().trim().max(1000).optional().nullable(),
 });
 
+export const exchangeSettlementInput = z.object({
+  exchangeId: z.coerce.number().int().positive("Penukaran wajib dipilih."),
+  paymentMethod: z.enum(["cash", "card"]),
+});
+
 export const settingsInput = z.object({
   businessName: requiredText("Nama bisnis wajib diisi."),
   storeLocation: requiredText("Lokasi toko wajib diisi."),

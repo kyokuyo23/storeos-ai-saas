@@ -53,6 +53,15 @@ export function mapFoundationError(error: unknown, entity: string): TRPCError {
   if (databaseError.message?.startsWith("Jumlah penukaran melebihi sisa item")) {
     return new TRPCError({ code: "BAD_REQUEST", message: databaseError.message });
   }
+  if (databaseError.message === "Penukaran tidak ditemukan.") {
+    return new TRPCError({ code: "NOT_FOUND", message: "Catatan penukaran tidak ditemukan." });
+  }
+  if (databaseError.message === "Penukaran ini tidak memerlukan tambahan pembayaran.") {
+    return new TRPCError({ code: "BAD_REQUEST", message: "Penukaran ini tidak memiliki tambahan pembayaran yang perlu dicatat." });
+  }
+  if (databaseError.message === "Pembayaran tambahan penukaran sudah dicatat.") {
+    return new TRPCError({ code: "CONFLICT", message: "Tambahan pembayaran untuk penukaran ini sudah dicatat." });
+  }
   if (databaseError.message?.startsWith("Stok bahan tidak mencukupi:")) {
     return new TRPCError({ code: "BAD_REQUEST", message: databaseError.message });
   }

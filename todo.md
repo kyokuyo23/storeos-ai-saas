@@ -83,3 +83,7 @@
 - [x] Display exchange stock restorations and deductions in Inventory movement history with linked exchange, sale, and sale-line references.
 - [x] Add tests for same-item and different-item exchanges, inventory shortages, price differences, partial-refund limits, duplicate safeguards, and transaction rollback safety.
 - [x] Validate the exchange flow and save the exchange transaction update for delivery.
+- [x] Define cash and card settlement rules for positive exchange payment adjustments, including duplicate-payment prevention.
+- [x] Add persistent exchange-settlement records and a transactional public settlement procedure.
+- [x] Add Sales controls to settle a positive exchange balance by cash or card and show the resulting payment history.
+- [x] Add automated tests and responsive validation for exchange settlements, then save the delivery checkpoint.

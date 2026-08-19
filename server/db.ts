@@ -1,10 +1,10 @@
 import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { nanoid } from "nanoid";
-import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, users } from "../drizzle/schema";
+import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import type { z } from "zod";
-import type { categoryInput, exchangeInput, ingredientInput, partialRefundInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settingsInput, stockMovementInput } from "./foundationSchemas";
+import type { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, partialRefundInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settingsInput, stockMovementInput } from "./foundationSchemas";
 import { resolveStockMovement } from "./inventory";
 import { planRecipeDeductions } from "./sales";
 
@@ -280,6 +280,21 @@ export async function exchangeInTransaction(tx: any, input: z.infer<typeof excha
 export async function exchangeWithClient(client: { transaction: (callback: (tx: any) => Promise<any>) => Promise<any> }, input: z.infer<typeof exchangeInput>) { return client.transaction((tx) => exchangeInTransaction(tx, input)); }
 export async function exchangeSaleItem(input: z.infer<typeof exchangeInput>) { return exchangeWithClient(await requireDb() as any, input); }
 
+export async function settleExchangeInTransaction(tx: any, input: z.infer<typeof exchangeSettlementInput>) {
+  const exchange = (await tx.select().from(exchanges).where(eq(exchanges.id, input.exchangeId)).limit(1))[0] as { id: number; saleId: number; paymentAdjustment: number } | undefined;
+  if (!exchange) throw new Error("Penukaran tidak ditemukan.");
+  if (exchange.paymentAdjustment <= 0) throw new Error("Penukaran ini tidak memerlukan tambahan pembayaran.");
+  const sale = (await tx.select().from(sales).where(eq(sales.id, exchange.saleId)).limit(1))[0] as { id: number; status: "completed" | "partially_refunded" | "voided" | "refunded" } | undefined;
+  if (!sale) throw new Error("Penjualan tidak ditemukan.");
+  if (sale.status === "voided" || sale.status === "refunded") throw new Error("Transaksi sudah dibatalkan atau direfund.");
+  const existing = await tx.select().from(exchangeSettlements).where(eq(exchangeSettlements.exchangeId, exchange.id)) as Array<{ id: number }>;
+  if (existing.length) throw new Error("Pembayaran tambahan penukaran sudah dicatat.");
+  const result = await tx.insert(exchangeSettlements).values({ exchangeId: exchange.id, amount: exchange.paymentAdjustment, paymentMethod: input.paymentMethod });
+  return { id: Number(result[0].insertId), exchangeId: exchange.id, amount: exchange.paymentAdjustment, paymentMethod: input.paymentMethod };
+}
+export async function settleExchangeWithClient(client: { transaction: (callback: (tx: any) => Promise<any>) => Promise<any> }, input: z.infer<typeof exchangeSettlementInput>) { return client.transaction((tx) => settleExchangeInTransaction(tx, input)); }
+export async function settleExchange(input: z.infer<typeof exchangeSettlementInput>) { return settleExchangeWithClient(await requireDb() as any, input); }
+
 export async function listSales() {
   const db = await requireDb();
   const saleRows = await db.select({ id: sales.id, receiptNumber: sales.receiptNumber, status: sales.status, total: sales.total, completedAt: sales.completedAt, reversedAt: sales.reversedAt, reversalReason: sales.reversalReason, itemCount: count(saleItems.id) }).from(sales).leftJoin(saleItems, eq(saleItems.saleId, sales.id)).groupBy(sales.id, sales.receiptNumber, sales.status, sales.total, sales.completedAt, sales.reversedAt, sales.reversalReason).orderBy(desc(sales.completedAt), desc(sales.id));
@@ -290,9 +305,10 @@ export async function listSales() {
   const exchangeRows = await db.select({ id: exchanges.id, saleId: exchanges.saleId, saleItemId: exchanges.saleItemId, returnedQuantity: exchanges.returnedQuantity, returnedTotal: exchanges.returnedTotal, replacementTotal: exchanges.replacementTotal, paymentAdjustment: exchanges.paymentAdjustment, reason: exchanges.reason, createdAt: exchanges.createdAt }).from(exchanges).where(inArray(exchanges.saleId, saleIds)).orderBy(exchanges.createdAt, exchanges.id);
   const exchangeIds = exchangeRows.map((exchange) => exchange.id);
   const exchangeItemRows = exchangeIds.length ? await db.select({ exchangeId: exchangeItems.exchangeId, productName: products.name, quantity: exchangeItems.quantity, unitPrice: exchangeItems.unitPrice, lineTotal: exchangeItems.lineTotal }).from(exchangeItems).innerJoin(products, eq(exchangeItems.productId, products.id)).where(inArray(exchangeItems.exchangeId, exchangeIds)).orderBy(exchangeItems.id) : [];
+  const settlementRows = exchangeIds.length ? await db.select({ id: exchangeSettlements.id, exchangeId: exchangeSettlements.exchangeId, amount: exchangeSettlements.amount, paymentMethod: exchangeSettlements.paymentMethod, createdAt: exchangeSettlements.createdAt }).from(exchangeSettlements).where(inArray(exchangeSettlements.exchangeId, exchangeIds)).orderBy(exchangeSettlements.createdAt, exchangeSettlements.id) : [];
   return saleRows.map((sale) => ({ ...sale, lines: itemRows.filter((item) => item.saleId === sale.id).map((item) => {
     const refunds = refundRows.filter((refund) => refund.saleItemId === item.id);
-    const itemExchanges = exchangeRows.filter((exchange) => exchange.saleItemId === item.id).map((exchange) => ({ ...exchange, items: exchangeItemRows.filter((exchangeItem) => exchangeItem.exchangeId === exchange.id) }));
+    const itemExchanges = exchangeRows.filter((exchange) => exchange.saleItemId === item.id).map((exchange) => ({ ...exchange, items: exchangeItemRows.filter((exchangeItem) => exchangeItem.exchangeId === exchange.id), settlement: settlementRows.find((settlement) => settlement.exchangeId === exchange.id) || null }));
     const refundedQuantity = refunds.reduce((sum, refund) => sum + refund.quantity, 0);
     const exchangedQuantity = itemExchanges.reduce((sum, exchange) => sum + exchange.returnedQuantity, 0);
     return { ...item, refundedQuantity, exchangedQuantity, refundableQuantity: item.quantity - refundedQuantity - exchangedQuantity, partialRefunds: refunds, exchanges: itemExchanges };

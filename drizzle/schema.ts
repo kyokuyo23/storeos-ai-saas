@@ -119,6 +119,15 @@ export const exchangeItemIngredients = mysqlTable("exchangeItemIngredients", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => [index("exchange_item_ingredients_item_idx").on(table.exchangeItemId), index("exchange_item_ingredients_ingredient_idx").on(table.ingredientId)]);
 
+/** A single full payment collected when an exchange has a positive payment adjustment. */
+export const exchangeSettlements = mysqlTable("exchangeSettlements", {
+  id: int("id").autoincrement().primaryKey(),
+  exchangeId: int("exchangeId").notNull().unique().references(() => exchanges.id, { onDelete: "restrict" }),
+  amount: decimal("amount", { precision: 14, scale: 2, mode: "number" }).notNull(),
+  paymentMethod: mysqlEnum("paymentMethod", ["cash", "card"]).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export const stockMovements = mysqlTable("stockMovements", {
   id: int("id").autoincrement().primaryKey(),
   ingredientId: int("ingredientId").notNull().references(() => ingredients.id, { onDelete: "restrict" }),
@@ -174,6 +183,7 @@ export type PartialRefund = typeof partialRefunds.$inferSelect;
 export type Exchange = typeof exchanges.$inferSelect;
 export type ExchangeItem = typeof exchangeItems.$inferSelect;
 export type ExchangeItemIngredient = typeof exchangeItemIngredients.$inferSelect;
+export type ExchangeSettlement = typeof exchangeSettlements.$inferSelect;
 export type Recipe = typeof recipes.$inferSelect;
 export type RecipeItem = typeof recipeItems.$inferSelect;
 export type BusinessSettings = typeof businessSettings.$inferSelect;
