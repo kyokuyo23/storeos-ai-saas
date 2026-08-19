@@ -95,3 +95,6 @@
 - [x] Extend the settlement-summary query with validated start and end dates while preserving the default daily view.
 - [x] Add Dashboard start/end date pickers, a reset-to-today control, and filtered settlement labels and zero state.
 - [x] Add date-range aggregation tests, validate desktop/mobile filtering UI, and save the delivery checkpoint.
+- [x] Define Jakarta/WIB week-to-date and month-to-date preset boundaries for settlement reporting.
+- [x] Add This Week and This Month dashboard date-range shortcuts while retaining custom dates and Today reset.
+- [x] Add preset-boundary tests, validate desktop/mobile controls, and save the delivery checkpoint.
