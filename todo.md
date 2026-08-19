@@ -46,5 +46,5 @@
 - [x] Add unit tests for stock movement direction, resulting balance, validation, and unavailable/invalid-reference errors.
 - [x] Validate responsive inventory layout, empty states, dashboard summary, unit calculations, and server-side failure mapping.
 - [x] Explicitly verify the empty ingredient-balance and empty stock-movement states against the persisted database state.
-- [ ] Save a new checkpoint containing the inventory-balance and stock-movement implementation.
-- [ ] Verify the saved version includes the inventory migration, interface, dashboard summary, and stock-movement tests.
+- [x] Save a new checkpoint containing the inventory-balance and stock-movement implementation.
+- [x] Verify the saved version includes the inventory migration, interface, dashboard summary, and stock-movement tests after reopening version 9b26e05a.
