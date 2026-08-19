@@ -4,10 +4,10 @@ import { nanoid } from "nanoid";
 import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import type { z } from "zod";
-import type { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, partialRefundInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput } from "./foundationSchemas";
+import type { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput } from "./foundationSchemas";
 import { resolveStockMovement } from "./inventory";
 import { planRecipeDeductions } from "./sales";
-import { summarizeFinancialSales, type FinancialSale } from "./financials";
+import { summarizeFinancialSales, summarizeProductFinancialDetail, type FinancialSale } from "./financials";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
@@ -326,6 +326,28 @@ export async function getFinancialDashboard(input?: z.infer<typeof settlementDat
   const { start, end, startDate, endDate } = resolveSettlementDateRange(input);
   const reportSales = (await listSales()).filter((sale) => sale.completedAt >= start && sale.completedAt < end) as FinancialSale[];
   return { ...summarizeFinancialSales(reportSales), dateStart: start, dateEnd: end, startDate, endDate };
+}
+
+export async function getProductFinancialDetail(input: z.infer<typeof productFinancialInput>) {
+  const db = await requireDb();
+  const product = (await db.select({ id: products.id, name: products.name, unit: products.unit, sellingPrice: products.sellingPrice, isActive: products.isActive }).from(products).where(eq(products.id, input.productId)).limit(1))[0];
+  if (!product) throw new Error("Produk tidak ditemukan.");
+  const { start, end, startDate, endDate } = resolveSettlementDateRange(input);
+  const reportSales = (await listSales()).filter((sale) => sale.completedAt >= start && sale.completedAt < end) as Array<FinancialSale & { receiptNumber?: string }>;
+  const detail = summarizeProductFinancialDetail(product.id, reportSales);
+  const ingredientIds = Array.from(new Set(detail.history.flatMap((entry) => entry.ingredientSnapshots.map((snapshot) => snapshot.ingredientId).filter((id): id is number => Boolean(id)))));
+  const ingredientRows = ingredientIds.length ? await db.select({ id: ingredients.id, name: ingredients.name, unit: ingredients.unit }).from(ingredients).where(inArray(ingredients.id, ingredientIds)) : [];
+  const ingredientById = new Map(ingredientRows.map((ingredient) => [ingredient.id, ingredient]));
+  return {
+    product,
+    ...detail,
+    productName: detail.productName || product.name,
+    dateStart: start,
+    dateEnd: end,
+    startDate,
+    endDate,
+    history: detail.history.map((entry) => ({ ...entry, ingredients: entry.ingredientSnapshots.map((snapshot) => ({ ...snapshot, ingredient: snapshot.ingredientId ? ingredientById.get(snapshot.ingredientId) ?? null : null })) })),
+  };
 }
 
 export async function listSales() {

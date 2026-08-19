@@ -100,6 +100,17 @@ export const settlementDateRangeInput = z.object({
   if (input.startDate && input.endDate && input.startDate > input.endDate) context.addIssue({ code: "custom", path: ["endDate"], message: "Tanggal akhir tidak boleh lebih awal dari tanggal mulai." });
 });
 
+export const productFinancialInput = z.object({
+  productId: z.coerce.number().int().positive("Produk wajib dipilih."),
+  startDate: jakartaDateInput.optional(),
+  endDate: jakartaDateInput.optional(),
+}).superRefine((input, context) => {
+  if (Boolean(input.startDate) !== Boolean(input.endDate)) context.addIssue({ code: "custom", path: [input.startDate ? "endDate" : "startDate"], message: "Tanggal mulai dan akhir harus diisi bersama." });
+  if (input.startDate && !isValidCalendarDate(input.startDate)) context.addIssue({ code: "custom", path: ["startDate"], message: "Tanggal mulai tidak valid." });
+  if (input.endDate && !isValidCalendarDate(input.endDate)) context.addIssue({ code: "custom", path: ["endDate"], message: "Tanggal akhir tidak valid." });
+  if (input.startDate && input.endDate && input.startDate > input.endDate) context.addIssue({ code: "custom", path: ["endDate"], message: "Tanggal akhir tidak boleh lebih awal dari tanggal mulai." });
+});
+
 export const settingsInput = z.object({
   businessName: requiredText("Nama bisnis wajib diisi."),
   storeLocation: requiredText("Lokasi toko wajib diisi."),

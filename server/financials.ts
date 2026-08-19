@@ -1,4 +1,4 @@
-export type FinancialIngredientSnapshot = { unitQuantity: number; unitCost: number };
+export type FinancialIngredientSnapshot = { ingredientId?: number; unitQuantity: number; unitCost: number };
 export type FinancialExchangeItem = { productId: number; productName: string; quantity: number; lineTotal: number; ingredientSnapshots: FinancialIngredientSnapshot[] };
 export type FinancialExchange = { id: number; saleItemId: number; returnedQuantity: number; returnedTotal: number; replacementTotal: number; items: FinancialExchangeItem[] };
 export type FinancialSaleLine = { id: number; productId: number; productName: string; quantity: number; unitPrice: number; lineTotal: number; refundedQuantity: number; exchanges: FinancialExchange[]; ingredientSnapshots: FinancialIngredientSnapshot[] };
@@ -10,6 +10,21 @@ export const percentage = (numerator: number, denominator: number) => denominato
 
 export type FinancialTotals = { revenue: number; cogs: number; grossProfit: number; grossMargin: number; saleCount: number; unitsSold: number };
 export type ProductPerformance = { productId: number; productName: string; quantity: number; revenue: number; cogs: number; grossProfit: number; grossMargin: number };
+export type ProductFinancialHistory = {
+  id: string;
+  saleId: number;
+  receiptNumber?: string;
+  occurredAt: Date;
+  source: "sale" | "exchange";
+  quantity: number;
+  revenue: number;
+  cogs: number;
+  grossProfit: number;
+  unitCogs: number;
+  status: FinancialSale["status"];
+  includedInPeriod: boolean;
+  ingredientSnapshots: FinancialIngredientSnapshot[];
+};
 
 function blankTotals(): FinancialTotals { return { revenue: 0, cogs: 0, grossProfit: 0, grossMargin: 0, saleCount: 0, unitsSold: 0 }; }
 function addProduct(products: Map<number, ProductPerformance>, product: Omit<ProductPerformance, "grossProfit" | "grossMargin">) {
@@ -60,4 +75,31 @@ export function summarizeFinancialSales(sales: FinancialSale[]) {
   totals.grossMargin = percentage(totals.grossProfit, totals.revenue);
   const productPerformance = Array.from(products.values()).map((product) => ({ ...product, quantity: round(product.quantity, 3), revenue: round(product.revenue), cogs: round(product.cogs), grossProfit: round(product.revenue - product.cogs), grossMargin: percentage(product.revenue - product.cogs, product.revenue) })).sort((left, right) => right.grossProfit - left.grossProfit || right.revenue - left.revenue || left.productName.localeCompare(right.productName, "id-ID"));
   return { ...totals, productPerformance, saleSummaries };
+}
+
+export function summarizeProductFinancialDetail(productId: number, sales: Array<FinancialSale & { receiptNumber?: string }>) {
+  const summary = summarizeFinancialSales(sales);
+  const performance = summary.productPerformance.find((product) => product.productId === productId) ?? { productId, productName: "", quantity: 0, revenue: 0, cogs: 0, grossProfit: 0, grossMargin: 0 };
+  const history: ProductFinancialHistory[] = [];
+  sales.forEach((sale) => sale.lines.forEach((line) => {
+    const finalized = sale.status === "voided" || sale.status === "refunded";
+    if (line.productId === productId) {
+      const returnedQuantity = line.refundedQuantity + line.exchanges.reduce((sum, exchange) => sum + exchange.returnedQuantity, 0);
+      const retainedQuantity = finalized ? 0 : Math.max(0, line.quantity - returnedQuantity);
+      const unitCogs = cogsForSnapshots(line.ingredientSnapshots);
+      const revenue = round(line.unitPrice * retainedQuantity);
+      const cogs = round(unitCogs * retainedQuantity);
+      history.push({ id: `sale-${sale.id}-${line.id}`, saleId: sale.id, receiptNumber: sale.receiptNumber, occurredAt: sale.completedAt, source: "sale", quantity: retainedQuantity, revenue, cogs, grossProfit: round(revenue - cogs), unitCogs, status: sale.status, includedInPeriod: retainedQuantity > 0, ingredientSnapshots: line.ingredientSnapshots });
+    }
+    line.exchanges.forEach((exchange) => exchange.items.forEach((item) => {
+      if (item.productId !== productId) return;
+      const unitCogs = cogsForSnapshots(item.ingredientSnapshots);
+      const quantity = finalized ? 0 : item.quantity;
+      const revenue = finalized ? 0 : item.lineTotal;
+      const cogs = finalized ? 0 : cogsForSnapshots(item.ingredientSnapshots, item.quantity);
+      history.push({ id: `exchange-${exchange.id}-${item.productId}`, saleId: sale.id, receiptNumber: sale.receiptNumber, occurredAt: (exchange as FinancialExchange & { createdAt?: Date }).createdAt ?? sale.completedAt, source: "exchange", quantity, revenue, cogs, grossProfit: round(revenue - cogs), unitCogs, status: sale.status, includedInPeriod: quantity > 0, ingredientSnapshots: item.ingredientSnapshots });
+    }));
+  }));
+  history.sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime() || right.id.localeCompare(left.id));
+  return { ...performance, history };
 }

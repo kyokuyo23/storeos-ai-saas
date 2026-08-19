@@ -106,3 +106,9 @@
 - [x] Add financial acceptance tests, run the full suite, TypeScript check, production build, and desktop/mobile validation, then save the delivery checkpoint.
 - [x] Capture final desktop evidence for the Financial Core dashboard and Sales financial summary.
 - [x] Save the completed Financial Core implementation as a delivery checkpoint.
+- [x] Audit existing product, sales, immutable cost snapshot, refund, void, and exchange read models for a financial drill-down.
+- [x] Add a Jakarta/WIB product financial detail service with net revenue, COGS, gross profit, gross margin, transaction history, and immutable cost history.
+- [x] Add a responsive product-performance drill-down interface linked from the Financial Core dashboard.
+- [x] Add product drill-down tests, run the full suite, TypeScript check, production build, desktop/mobile validation, and save a delivery checkpoint.
+- [x] Capture explicit desktop and mobile validation of the product drill-down entry point and no-transaction states; detailed history rendering is covered by immutable-snapshot acceptance tests because the persisted workspace has no products or sales.
+- [x] Save the completed product financial drill-down as a delivery checkpoint.

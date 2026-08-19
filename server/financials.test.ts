@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cogsForSnapshots, summarizeFinancialSales, type FinancialSale } from "./financials";
+import { cogsForSnapshots, summarizeFinancialSales, summarizeProductFinancialDetail, type FinancialSale } from "./financials";
 
 const soldAt = new Date("2026-08-19T03:00:00.000Z");
 const coffeeSnapshots = [{ unitQuantity: 1, unitCost: 2000 }];
@@ -35,5 +35,21 @@ describe("Financial Core", () => {
     const result = summarizeFinancialSales([exchanged]);
     expect(result).toMatchObject({ revenue: 20000, cogs: 5000, grossProfit: 15000, grossMargin: 75, saleCount: 1, unitsSold: 1 });
     expect(result.productPerformance).toEqual([{ productId: 2, productName: "Kopi Signature", quantity: 1, revenue: 20000, cogs: 5000, grossProfit: 15000, grossMargin: 75 }]);
+  });
+
+  it("provides product-specific financial totals and immutable cost history for the selected period", () => {
+    const records = [{ ...sale({ refundedQuantity: 1, exchanges: [{ id: 7, saleItemId: 11, returnedQuantity: 1, returnedTotal: 10000, replacementTotal: 20000, items: [{ productId: 2, productName: "Kopi Signature", quantity: 1, lineTotal: 20000, ingredientSnapshots: replacementSnapshots }] }] }), receiptNumber: "TRX-001" }];
+    const original = summarizeProductFinancialDetail(1, records);
+    expect(original).toMatchObject({ productId: 1, quantity: 0, revenue: 0, cogs: 0, grossProfit: 0, grossMargin: 0 });
+    expect(original.history).toEqual([expect.objectContaining({ source: "sale", receiptNumber: "TRX-001", quantity: 0, revenue: 0, cogs: 0, unitCogs: 2000, includedInPeriod: false, ingredientSnapshots: coffeeSnapshots })]);
+    const replacement = summarizeProductFinancialDetail(2, records);
+    expect(replacement).toMatchObject({ productId: 2, productName: "Kopi Signature", quantity: 1, revenue: 20000, cogs: 5000, grossProfit: 15000, grossMargin: 75 });
+    expect(replacement.history).toEqual([expect.objectContaining({ source: "exchange", receiptNumber: "TRX-001", quantity: 1, revenue: 20000, cogs: 5000, unitCogs: 5000, includedInPeriod: true, ingredientSnapshots: replacementSnapshots })]);
+  });
+
+  it("keeps a zero-value drill-down history entry when a product sale is later voided", () => {
+    const detail = summarizeProductFinancialDetail(1, [{ ...sale({}, "voided"), receiptNumber: "TRX-VOID" }]);
+    expect(detail).toMatchObject({ quantity: 0, revenue: 0, cogs: 0, grossProfit: 0, grossMargin: 0 });
+    expect(detail.history).toEqual([expect.objectContaining({ receiptNumber: "TRX-VOID", status: "voided", quantity: 0, revenue: 0, cogs: 0, includedInPeriod: false })]);
   });
 });

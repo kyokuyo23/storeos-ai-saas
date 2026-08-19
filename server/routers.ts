@@ -5,7 +5,7 @@ import { mapFoundationError } from "./foundationErrors";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
-import { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, partialRefundInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput } from "./foundationSchemas";
+import { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput } from "./foundationSchemas";
 
 const idInput = z.object({ id: z.number().int().positive() });
 const runMutation = async <T>(entity: string, operation: () => Promise<T>) => {
@@ -24,6 +24,7 @@ export const appRouter = router({
   }),
   product: router({
     list: publicProcedure.query(() => db.listProducts()),
+    financialDetail: publicProcedure.input(productFinancialInput).query(({ input }) => runMutation("Produk", () => db.getProductFinancialDetail(input))),
     create: publicProcedure.input(productInput).mutation(({ input }) => runMutation("Produk", () => db.createProduct(input))),
     update: publicProcedure.input(idInput.extend({ data: productInput })).mutation(({ input }) => runMutation("Produk", () => db.updateProduct(input.id, input.data))),
   }),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ingredientInput, productInput, recipeInput, settlementDateRangeInput } from "./foundationSchemas";
+import { ingredientInput, productFinancialInput, productInput, recipeInput, settlementDateRangeInput } from "./foundationSchemas";
 
 describe("StoreOS Step 2 validation", () => {
   it("rejects an incomplete product", () => {
@@ -17,5 +17,10 @@ describe("StoreOS Step 2 validation", () => {
     expect(settlementDateRangeInput.safeParse({ startDate: "2026-08-10", endDate: "2026-08-19" }).success).toBe(true);
     expect(settlementDateRangeInput.safeParse({ startDate: "2026-08-19", endDate: "2026-08-10" }).success).toBe(false);
     expect(settlementDateRangeInput.safeParse({ startDate: "2026-02-31", endDate: "2026-03-01" }).success).toBe(false);
+  });
+  it("requires a product and valid ordered dates for financial drill-down reporting", () => {
+    expect(productFinancialInput.safeParse({ productId: 7, startDate: "2026-08-01", endDate: "2026-08-19" }).success).toBe(true);
+    expect(productFinancialInput.safeParse({ productId: 0, startDate: "2026-08-01", endDate: "2026-08-19" }).success).toBe(false);
+    expect(productFinancialInput.safeParse({ productId: 7, startDate: "2026-08-19", endDate: "2026-08-01" }).success).toBe(false);
   });
 });
