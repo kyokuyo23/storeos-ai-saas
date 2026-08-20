@@ -191,3 +191,7 @@
 - [x] Definisikan klasifikasi prioritas serta ikon dan label yang dapat diakses untuk setiap sesi.
 - [x] Implementasikan ikon prioritas berbasis ambang usia yang tersimpan pada Riwayat Opname.
 - [x] Tambahkan pengujian indikator sesi, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
+- [x] Audit filter Riwayat Opname dan utilitas klasifikasi prioritas usia yang tersedia.
+- [x] Definisikan opsi filter prioritas dan parameter URL yang dapat dibagikan.
+- [x] Implementasikan penyaringan sesi berbasis ambang usia tersimpan dan kontrol filter pada Riwayat Opname.
+- [x] Tambahkan pengujian filter prioritas, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.

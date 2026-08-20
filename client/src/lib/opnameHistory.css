@@ -1,4 +1,4 @@
-.opname-history-filter { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; }
+.opname-history-filter { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(160px, .7fr) minmax(160px, .7fr) auto; align-items: end; gap: 12px; }
 .opname-history-filter .field, .opname-history-filter .form-actions { margin: 0; }
 .opname-filter-input { position: relative; }
 .opname-filter-input svg { position: absolute; z-index: 1; top: 50%; left: 12px; color: #779086; transform: translateY(-50%); pointer-events: none; }
