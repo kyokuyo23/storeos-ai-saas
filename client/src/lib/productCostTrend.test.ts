@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildIngredientCostTrends, COST_SPIKE_THRESHOLD_PERCENT, getConsecutiveCostChange, makeCostTrendGeometry } from "./productCostTrend";
+import { buildIngredientCostTrends, COST_SPIKE_THRESHOLD_PERCENT, getConsecutiveCostChange, getLargestCostIncrease, makeCostTrendGeometry } from "./productCostTrend";
 
 describe("immutable ingredient cost trends", () => {
   it("groups and chronologically sorts immutable ingredient snapshots without using current ingredient cost", () => {
@@ -43,5 +43,21 @@ describe("immutable ingredient cost trends", () => {
     expect(spike.percentage).toBeCloseTo(10.1, 8);
     expect(getConsecutiveCostChange(1000, 900).isPriceSpike).toBe(false);
     expect(getConsecutiveCostChange(0, 500).isPriceSpike).toBe(false);
+  });
+
+  it("selects the greatest positive comparable cost increase across ingredients and excludes zero-cost bases", () => {
+    const trends = buildIngredientCostTrends([
+      { id: "sale-1", occurredAt: "2026-08-18T03:00:00.000Z", ingredients: [{ ingredientId: 4, unitCost: 1000, unitQuantity: 0.2, ingredient: { name: "Susu", unit: "ml" } }, { ingredientId: 7, unitCost: 0, unitQuantity: 12, ingredient: { name: "Kopi", unit: "g" } }] },
+      { id: "sale-2", occurredAt: "2026-08-19T03:00:00.000Z", ingredients: [{ ingredientId: 4, unitCost: 1300, unitQuantity: 0.2, ingredient: { name: "Susu", unit: "ml" } }, { ingredientId: 7, unitCost: 800, unitQuantity: 12, ingredient: { name: "Kopi", unit: "g" } }] },
+    ]);
+    expect(getLargestCostIncrease(trends)).toMatchObject({ ingredientId: 4, name: "Susu", previousCost: 1000, unitCost: 1300, difference: 300, percentage: 30 });
+  });
+
+  it("returns no largest increase when snapshots are initial, unchanged, declining, or from a zero-cost basis", () => {
+    const trends = buildIngredientCostTrends([
+      { id: "sale-1", occurredAt: "2026-08-18T03:00:00.000Z", ingredients: [{ ingredientId: 4, unitCost: 0, unitQuantity: 0.2, ingredient: { name: "Susu", unit: "ml" } }] },
+      { id: "sale-2", occurredAt: "2026-08-19T03:00:00.000Z", ingredients: [{ ingredientId: 4, unitCost: 800, unitQuantity: 0.2, ingredient: { name: "Susu", unit: "ml" } }] },
+    ]);
+    expect(getLargestCostIncrease(trends)).toBeNull();
   });
 });

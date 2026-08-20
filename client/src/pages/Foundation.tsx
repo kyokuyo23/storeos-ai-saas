@@ -3,7 +3,7 @@ import { CirclePlus, Coffee, Edit3, PackagePlus, Plus, Save, Settings2, Utensils
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { getSettlementDatePresets, jakartaDateValue } from "@/lib/settlementDateRanges";
-import { buildIngredientCostTrends, makeCostTrendGeometry, type IngredientCostTrend } from "@/lib/productCostTrend";
+import { buildIngredientCostTrends, getLargestCostIncrease, makeCostTrendGeometry, type IngredientCostTrend } from "@/lib/productCostTrend";
 import { AppShell, EmptyState, ErrorState, PageHeader, Panel, type FoundationPage } from "@/components/FoundationShell";
 import { InventoryManagement } from "@/components/InventoryManagement";
 import { SalePOS, SalesHistory } from "@/components/SalePOS";
@@ -37,7 +37,8 @@ function IngredientCostTrendChart({ trend }: { trend: IngredientCostTrend }) {
   const geometry = useMemo(() => makeCostTrendGeometry(trend.points), [trend]);
   const dateFormatter = useMemo(() => new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", timeZone: "Asia/Jakarta" }), []);
   const latestChange = geometry.coordinates[geometry.coordinates.length - 1]?.change;
-  return <div className="cost-trend-chart" aria-label={`Tren biaya per satuan ${trend.name}`}>
+  const largestCostIncrease = useMemo(() => getLargestCostIncrease([trend]), [trend]);
+  return <div className="cost-trend-stack"><div className={`largest-cost-increase-card ${largestCostIncrease ? "" : "empty"}`} aria-live="polite">{largestCostIncrease ? <><div><span>Kenaikan biaya terbesar</span><strong>{largestCostIncrease.name}</strong><p>Dari {formatCurrency(largestCostIncrease.previousCost)} ke {formatCurrency(largestCostIncrease.unitCost)} per {largestCostIncrease.unit || "satuan"}</p></div><div><em>+{formatCurrency(largestCostIncrease.difference)}</em><b>+{largestCostIncrease.percentage.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%</b><small>{new Date(largestCostIncrease.occurredAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Jakarta" })}</small></div></> : <div><span>Kenaikan biaya terbesar</span><strong>Belum ada kenaikan biaya yang dapat dibandingkan</strong><p>Snapshot awal dan perubahan dari biaya nol tidak memiliki persentase pembanding.</p></div>}</div><div className="cost-trend-chart" aria-label={`Tren biaya per satuan ${trend.name}`}>
     <div className="cost-trend-legend"><span><i aria-hidden="true" />Biaya per {trend.unit || "satuan"}</span><div><strong>{formatCurrency(trend.points[trend.points.length - 1]?.unitCost ?? 0)}</strong>{latestChange && latestChange.direction !== "initial" && <em className={`cost-change-indicator ${latestChange.direction} ${latestChange.isPriceSpike ? "spike" : ""}`}>{latestChange.isPriceSpike ? `Lonjakan ${formatCostChange(latestChange)}` : formatCostChange(latestChange)}</em>}</div></div>
     <svg viewBox={`0 0 ${geometry.width} ${geometry.height}`} role="img" aria-label={`Grafik garis biaya ${trend.name} dari ${formatCurrency(geometry.min)} hingga ${formatCurrency(geometry.max)}`}>
       <line x1={geometry.inset.left} x2={geometry.width - geometry.inset.right} y1={geometry.inset.top} y2={geometry.inset.top} className="cost-grid-line" />
@@ -47,7 +48,7 @@ function IngredientCostTrendChart({ trend }: { trend: IngredientCostTrend }) {
       {geometry.coordinates.map((point, index) => <g key={point.id}><circle cx={point.x} cy={point.y} r={point.change.isPriceSpike ? "5.5" : "4"} className={`cost-trend-point ${point.change.isPriceSpike ? "spike" : ""}`}><title>{`${dateFormatter.format(point.occurredAt)} · ${formatCurrency(point.unitCost)} · ${describeCostChange(point.change)}${point.change.isPriceSpike ? " · Lonjakan biaya di atas 10%" : ""}`}</title></circle>{point.change.direction !== "initial" && <text className={`cost-change-label ${point.change.direction} ${point.change.isPriceSpike ? "spike" : ""}`} x={point.x} y={point.y < 42 ? point.y + 18 : point.y - 11} textAnchor="middle">{point.change.isPriceSpike ? `⚠ ${formatCostChange(point.change)}` : formatCostChange(point.change)}</text>}<text x={point.x} y={geometry.height - 10} textAnchor={index === 0 ? "start" : index === geometry.coordinates.length - 1 ? "end" : "middle"}>{dateFormatter.format(point.occurredAt)}</text></g>)}
     </svg>
     <p>{trend.points.length} snapshot biaya tersimpan pada periode ini. Perubahan dibandingkan dengan snapshot sebelumnya; nilai berasal dari saat transaksi dibuat, bukan biaya bahan saat ini.</p>
-  </div>;
+  </div></div>;
 }
 
 function Dashboard() {

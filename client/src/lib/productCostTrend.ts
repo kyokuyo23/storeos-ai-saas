@@ -24,6 +24,17 @@ export type CostChange = {
   isPriceSpike: boolean;
 };
 
+export type LargestCostIncrease = {
+  ingredientId: number;
+  name: string;
+  unit: string;
+  occurredAt: Date;
+  previousCost: number;
+  unitCost: number;
+  difference: number;
+  percentage: number;
+};
+
 export const COST_SPIKE_THRESHOLD_PERCENT = 10;
 
 export function buildIngredientCostTrends(history: ProductCostHistoryEntry[]): IngredientCostTrend[] {
@@ -54,6 +65,24 @@ export function getConsecutiveCostChange(previousCost: number | undefined, unitC
   }
   const percentage = (difference / previousCost) * 100;
   return { previousCost, difference, percentage, direction: difference > 0 ? "increase" : difference < 0 ? "decrease" : "unchanged", isPriceSpike: percentage > COST_SPIKE_THRESHOLD_PERCENT };
+}
+
+export function getLargestCostIncrease(trends: IngredientCostTrend[]): LargestCostIncrease | null {
+  const candidates = trends.flatMap((trend) => trend.points.slice(1).flatMap((point, index) => {
+    const change = getConsecutiveCostChange(trend.points[index]?.unitCost, point.unitCost);
+    if (change.direction !== "increase" || change.previousCost === null || change.percentage === null) return [];
+    return [{
+      ingredientId: trend.ingredientId,
+      name: trend.name,
+      unit: trend.unit,
+      occurredAt: point.occurredAt,
+      previousCost: change.previousCost,
+      unitCost: point.unitCost,
+      difference: change.difference,
+      percentage: change.percentage,
+    }];
+  }));
+  return candidates.sort((left, right) => right.difference - left.difference || right.percentage - left.percentage || right.occurredAt.getTime() - left.occurredAt.getTime())[0] ?? null;
 }
 
 export function makeCostTrendGeometry(points: IngredientCostTrend["points"], width = 640, height = 224) {

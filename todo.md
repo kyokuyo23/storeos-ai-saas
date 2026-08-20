@@ -125,3 +125,8 @@
 - [x] Add deterministic spike flags, red data points, chart labels, and accessible price-spike descriptions.
 - [x] Add cost-spike tests, run the full suite, TypeScript check, production build, desktop/mobile validation, and save the delivery checkpoint.
 - [x] Save the delivery checkpoint for the validated red ingredient cost-spike indicators.
+- [x] Define the selected-period largest immutable ingredient cost-increase metric and no-positive-increase state.
+- [x] Add deterministic largest-increase summary data with ingredient, value, percentage, and snapshot date.
+- [x] Add a responsive largest-cost-increase card above the product ingredient trend chart.
+- [x] Add largest-increase tests, run the full suite, TypeScript check, production build, desktop/mobile validation, and save the delivery checkpoint.
+- [x] Save the delivery checkpoint for the validated largest-cost-increase summary card.
