@@ -16,6 +16,16 @@
 .opname-history-metrics strong { color: #263630; font-size: 14px; }
 .opname-history-detail { padding-top: 2px; border-top: 1px solid #edf2ee; }
 .opname-history-detail .table-wrap { margin-top: 12px; }
+.opname-follow-up { display: flex; align-items: end; justify-content: space-between; gap: 12px; padding: 11px 12px; border: 1px solid #e7eee9; border-radius: 10px; background: #fbfdfb; }
+.opname-follow-up > div, .opname-status-control { display: grid; gap: 5px; }
+.opname-follow-up span { color: #809087; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.opname-follow-up small { color: #738279; font-size: 12px; }
+.opname-status { width: fit-content; padding: 4px 8px; border-radius: 99px; font-size: 11px; font-weight: 800; }
+.opname-status.needs-follow-up { color: #a84d1d; background: #fff0e5; }
+.opname-status.in-progress { color: #1d5d88; background: #e8f4fd; }
+.opname-status.resolved, .opname-status.not-required { color: #1c7251; background: #e7f7ed; }
+.opname-status-control .form-input { min-width: 205px; height: 34px; padding-top: 4px; padding-bottom: 4px; }
+.opname-follow-up-error { margin: -5px 0 0; color: #b54742; font-size: 12px; }
 .opname-match { color: #16734f; }
 .opname-over { color: #1b6387; }
 .opname-under { color: #b54742; }
@@ -26,4 +36,6 @@
   .opname-history-card-top { flex-direction: column; }
   .opname-history-card-top .button { width: 100%; }
   .opname-history-metrics { grid-template-columns: 1fr; }
+  .opname-follow-up { align-items: stretch; flex-direction: column; }
+  .opname-status-control .form-input { width: 100%; min-width: 0; }
 }

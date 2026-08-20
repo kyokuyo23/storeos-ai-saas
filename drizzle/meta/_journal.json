@@ -71,6 +71,13 @@
       "when": 1787125364376,
       "tag": "0009_sharp_rumiko_fujikawa",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1787234699631,
+      "tag": "0010_chief_sway",
+      "breakpoints": true
     }
   ]
 }

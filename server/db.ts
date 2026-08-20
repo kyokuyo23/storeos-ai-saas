@@ -1,15 +1,15 @@
 import { and, count, desc, eq, gte, inArray, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { nanoid } from "nanoid";
-import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, users } from "../drizzle/schema";
+import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, stockOpnameFollowUps, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import type { z } from "zod";
-import type { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput, stockOpnameHistoryInput } from "./foundationSchemas";
+import type { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput, stockOpnameFollowUpInput, stockOpnameHistoryInput } from "./foundationSchemas";
 import { planStockOpname, resolveStockMovement } from "./inventory";
 import { planRecipeDeductions } from "./sales";
 import { summarizeFinancialSales, summarizeProductFinancialDetail, type FinancialSale } from "./financials";
 import { summarizeInventoryIntelligence } from "./inventoryIntelligence";
-import { summarizeStockOpnameSessions } from "./opnameHistory";
+import { applyStockOpnameFollowUpStatuses, summarizeStockOpnameSessions } from "./opnameHistory";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
@@ -71,7 +71,19 @@ export async function listStockMovements() {
 export async function listStockOpnameSessions(input?: z.infer<typeof stockOpnameHistoryInput>) {
   const db = await requireDb();
   const rows = await db.select({ id: stockMovements.id, ingredientId: stockMovements.ingredientId, ingredientName: ingredients.name, unit: ingredients.unit, quantityDelta: stockMovements.quantityDelta, balanceAfter: stockMovements.balanceAfter, note: stockMovements.note, occurredAt: stockMovements.occurredAt }).from(stockMovements).innerJoin(ingredients, eq(stockMovements.ingredientId, ingredients.id)).where(eq(stockMovements.type, "opname")).orderBy(desc(stockMovements.occurredAt), desc(stockMovements.id));
-  return summarizeStockOpnameSessions(rows, input?.reference);
+  const sessions = summarizeStockOpnameSessions(rows, input?.reference);
+  if (!sessions.length) return sessions;
+  const followUps = await db.select({ auditReference: stockOpnameFollowUps.auditReference, status: stockOpnameFollowUps.status }).from(stockOpnameFollowUps).where(inArray(stockOpnameFollowUps.auditReference, sessions.map((session) => session.reference)));
+  return applyStockOpnameFollowUpStatuses(sessions, followUps);
+}
+
+export async function updateStockOpnameFollowUp(input: z.infer<typeof stockOpnameFollowUpInput>) {
+  const session = (await listStockOpnameSessions({ reference: input.reference })).find((item) => item.reference === input.reference);
+  if (!session) throw new Error("Sesi opname dengan referensi audit tersebut tidak ditemukan.");
+  if (session.differenceItems === 0) throw new Error("Status tindak lanjut hanya tersedia untuk sesi yang memiliki selisih stok.");
+  const db = await requireDb();
+  await db.insert(stockOpnameFollowUps).values({ auditReference: session.reference, status: input.status }).onDuplicateKeyUpdate({ set: { status: input.status } });
+  return { reference: session.reference, status: input.status };
 }
 
 export async function getIngredientMovementDrillDown(input: z.infer<typeof inventoryMovementDrillDownInput>) {

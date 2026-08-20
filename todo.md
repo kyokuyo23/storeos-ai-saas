@@ -150,3 +150,8 @@
 - [x] Tambahkan query riwayat sesi opname dan route publik tanpa tabel atau model inventory baru.
 - [x] Buat halaman riwayat sesi opname responsif dengan filter nomor referensi, ringkasan sesi, dan rincian bahan.
 - [x] Tambahkan pengujian riwayat opname, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
+- [x] Audit data sesi opname dan pola persistensi yang tersedia untuk menyimpan status tindak lanjut per referensi audit.
+- [x] Definisikan status tindak lanjut untuk sesi dengan selisih dan kontrak validasi berbasis referensi audit.
+- [x] Tambahkan penyimpanan, query, dan mutasi publik status tindak lanjut tanpa mengubah ledger stok.
+- [x] Tambahkan kontrol status tindak lanjut responsif pada riwayat sesi opname yang memiliki selisih stok.
+- [x] Tambahkan pengujian status tindak lanjut, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.

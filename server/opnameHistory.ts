@@ -16,6 +16,7 @@ export type StockOpnameSession = {
   totalItems: number;
   differenceItems: number;
   totalAbsoluteDifference: number;
+  followUpStatus: "not_required" | "needs_follow_up" | "in_progress" | "resolved";
   items: Array<Pick<StockOpnameHistoryMovement, "id" | "ingredientId" | "ingredientName" | "unit" | "quantityDelta" | "balanceAfter">>;
 };
 
@@ -32,7 +33,7 @@ export function summarizeStockOpnameSessions(rows: StockOpnameHistoryMovement[],
   for (const row of rows) {
     const parsed = parseSessionNote(row.note);
     if (!parsed || (normalizedFilter && !parsed.reference.toLocaleLowerCase("id-ID").includes(normalizedFilter))) continue;
-    const session = grouped.get(parsed.reference) ?? { reference: parsed.reference, occurredAt: row.occurredAt, note: parsed.note, totalItems: 0, differenceItems: 0, totalAbsoluteDifference: 0, items: [] };
+    const session = grouped.get(parsed.reference) ?? { reference: parsed.reference, occurredAt: row.occurredAt, note: parsed.note, totalItems: 0, differenceItems: 0, totalAbsoluteDifference: 0, followUpStatus: "not_required" as const, items: [] };
     session.occurredAt = session.occurredAt > row.occurredAt ? session.occurredAt : row.occurredAt;
     session.totalItems += 1;
     if (row.quantityDelta !== 0) session.differenceItems += 1;
@@ -40,5 +41,10 @@ export function summarizeStockOpnameSessions(rows: StockOpnameHistoryMovement[],
     session.items.push({ id: row.id, ingredientId: row.ingredientId, ingredientName: row.ingredientName, unit: row.unit, quantityDelta: row.quantityDelta, balanceAfter: row.balanceAfter });
     grouped.set(parsed.reference, session);
   }
-  return Array.from(grouped.values()).sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime()).map((session) => ({ ...session, items: session.items.sort((left, right) => left.ingredientName.localeCompare(right.ingredientName, "id-ID")) }));
+  return Array.from(grouped.values()).sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime()).map((session) => ({ ...session, followUpStatus: session.differenceItems > 0 ? "needs_follow_up" : "not_required", items: session.items.sort((left, right) => left.ingredientName.localeCompare(right.ingredientName, "id-ID")) }));
+}
+
+export function applyStockOpnameFollowUpStatuses(sessions: StockOpnameSession[], followUps: Array<{ auditReference: string; status: "needs_follow_up" | "in_progress" | "resolved" }>): StockOpnameSession[] {
+  const byReference = new Map(followUps.map((followUp) => [followUp.auditReference, followUp.status]));
+  return sessions.map((session) => ({ ...session, followUpStatus: session.differenceItems > 0 ? (byReference.get(session.reference) ?? "needs_follow_up") : "not_required" }));
 }

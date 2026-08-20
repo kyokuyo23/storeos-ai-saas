@@ -147,6 +147,15 @@ export const stockMovements = mysqlTable("stockMovements", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => [index("stock_movements_ingredient_occurred_idx").on(table.ingredientId, table.occurredAt), index("stock_movements_sale_idx").on(table.saleId), index("stock_movements_sale_item_idx").on(table.saleItemId), index("stock_movements_exchange_idx").on(table.exchangeId)]);
 
+/** Follow-up metadata only; the immutable inventory audit remains in stockMovements. */
+export const stockOpnameFollowUps = mysqlTable("stockOpnameFollowUps", {
+  id: int("id").autoincrement().primaryKey(),
+  auditReference: varchar("auditReference", { length: 80 }).notNull().unique(),
+  status: mysqlEnum("status", ["needs_follow_up", "in_progress", "resolved"]).default("needs_follow_up").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export const recipes = mysqlTable("recipes", {
   id: int("id").autoincrement().primaryKey(),
   productId: int("productId").notNull().unique().references(() => products.id, { onDelete: "cascade" }),
@@ -180,6 +189,7 @@ export type Category = typeof categories.$inferSelect;
 export type Product = typeof products.$inferSelect;
 export type Ingredient = typeof ingredients.$inferSelect;
 export type StockMovement = typeof stockMovements.$inferSelect;
+export type StockOpnameFollowUp = typeof stockOpnameFollowUps.$inferSelect;
 export type Sale = typeof sales.$inferSelect;
 export type SaleItem = typeof saleItems.$inferSelect;
 export type SaleItemIngredient = typeof saleItemIngredients.$inferSelect;

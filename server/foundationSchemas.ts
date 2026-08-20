@@ -56,6 +56,11 @@ export const stockOpnameHistoryInput = z.object({
   reference: z.string().trim().max(100, "Nomor referensi audit terlalu panjang.").optional(),
 });
 
+export const stockOpnameFollowUpInput = z.object({
+  reference: requiredText("Nomor referensi audit wajib diisi.").max(80, "Nomor referensi audit terlalu panjang."),
+  status: z.enum(["needs_follow_up", "in_progress", "resolved"]),
+});
+
 export const recipeInput = z.object({
   productId: z.coerce.number().int().positive("Produk wajib dipilih."),
   name: requiredText("Nama resep wajib diisi."),

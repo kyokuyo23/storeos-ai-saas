@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ingredientInput, productFinancialInput, productInput, recipeInput, settlementDateRangeInput } from "./foundationSchemas";
+import { ingredientInput, productFinancialInput, productInput, recipeInput, settlementDateRangeInput, stockOpnameFollowUpInput } from "./foundationSchemas";
 
 describe("StoreOS Step 2 validation", () => {
   it("rejects an incomplete product", () => {
@@ -22,5 +22,10 @@ describe("StoreOS Step 2 validation", () => {
     expect(productFinancialInput.safeParse({ productId: 7, startDate: "2026-08-01", endDate: "2026-08-19" }).success).toBe(true);
     expect(productFinancialInput.safeParse({ productId: 0, startDate: "2026-08-01", endDate: "2026-08-19" }).success).toBe(false);
     expect(productFinancialInput.safeParse({ productId: 7, startDate: "2026-08-19", endDate: "2026-08-01" }).success).toBe(false);
+  });
+  it("accepts only a valid audit reference and follow-up status", () => {
+    expect(stockOpnameFollowUpInput.safeParse({ reference: "OPN-1724-ABCDE", status: "in_progress" }).success).toBe(true);
+    expect(stockOpnameFollowUpInput.safeParse({ reference: "", status: "resolved" }).success).toBe(false);
+    expect(stockOpnameFollowUpInput.safeParse({ reference: "OPN-1724-ABCDE", status: "closed" }).success).toBe(false);
   });
 });
