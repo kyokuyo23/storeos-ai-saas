@@ -121,3 +121,7 @@
 - [x] Add deterministic cost-change values, chart annotations, and an accessible selected-ingredient trend summary.
 - [x] Add percentage-indicator tests, run the full suite, TypeScript check, production build, desktop/mobile validation, and save the delivery checkpoint.
 - [x] Save the delivery checkpoint for the validated consecutive cost-change indicators.
+- [x] Define a strict greater-than 10 percent consecutive immutable cost-spike threshold, including zero-cost edge cases.
+- [x] Add deterministic spike flags, red data points, chart labels, and accessible price-spike descriptions.
+- [x] Add cost-spike tests, run the full suite, TypeScript check, production build, desktop/mobile validation, and save the delivery checkpoint.
+- [x] Save the delivery checkpoint for the validated red ingredient cost-spike indicators.

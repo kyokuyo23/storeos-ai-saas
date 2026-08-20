@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildIngredientCostTrends, getConsecutiveCostChange, makeCostTrendGeometry } from "./productCostTrend";
+import { buildIngredientCostTrends, COST_SPIKE_THRESHOLD_PERCENT, getConsecutiveCostChange, makeCostTrendGeometry } from "./productCostTrend";
 
 describe("immutable ingredient cost trends", () => {
   it("groups and chronologically sorts immutable ingredient snapshots without using current ingredient cost", () => {
@@ -33,5 +33,15 @@ describe("immutable ingredient cost trends", () => {
     ]);
     expect(geometry.coordinates[0].change).toMatchObject({ direction: "initial" });
     expect(geometry.coordinates[1].change).toMatchObject({ percentage: 25, direction: "increase" });
+  });
+
+  it("flags only cost increases strictly above the 10 percent spike threshold", () => {
+    expect(COST_SPIKE_THRESHOLD_PERCENT).toBe(10);
+    expect(getConsecutiveCostChange(1000, 1100).isPriceSpike).toBe(false);
+    const spike = getConsecutiveCostChange(1000, 1101);
+    expect(spike.isPriceSpike).toBe(true);
+    expect(spike.percentage).toBeCloseTo(10.1, 8);
+    expect(getConsecutiveCostChange(1000, 900).isPriceSpike).toBe(false);
+    expect(getConsecutiveCostChange(0, 500).isPriceSpike).toBe(false);
   });
 });

@@ -21,7 +21,10 @@ export type CostChange = {
   difference: number;
   percentage: number | null;
   direction: "initial" | "increase" | "decrease" | "unchanged" | "from_zero";
+  isPriceSpike: boolean;
 };
+
+export const COST_SPIKE_THRESHOLD_PERCENT = 10;
 
 export function buildIngredientCostTrends(history: ProductCostHistoryEntry[]): IngredientCostTrend[] {
   const trends = new Map<number, IngredientCostTrend>();
@@ -43,14 +46,14 @@ export function buildIngredientCostTrends(history: ProductCostHistoryEntry[]): I
 }
 
 export function getConsecutiveCostChange(previousCost: number | undefined, unitCost: number): CostChange {
-  if (previousCost === undefined) return { previousCost: null, difference: 0, percentage: null, direction: "initial" };
+  if (previousCost === undefined) return { previousCost: null, difference: 0, percentage: null, direction: "initial", isPriceSpike: false };
   const difference = unitCost - previousCost;
   if (previousCost === 0) {
-    if (unitCost === 0) return { previousCost, difference, percentage: 0, direction: "unchanged" };
-    return { previousCost, difference, percentage: null, direction: "from_zero" };
+    if (unitCost === 0) return { previousCost, difference, percentage: 0, direction: "unchanged", isPriceSpike: false };
+    return { previousCost, difference, percentage: null, direction: "from_zero", isPriceSpike: false };
   }
   const percentage = (difference / previousCost) * 100;
-  return { previousCost, difference, percentage, direction: difference > 0 ? "increase" : difference < 0 ? "decrease" : "unchanged" };
+  return { previousCost, difference, percentage, direction: difference > 0 ? "increase" : difference < 0 ? "decrease" : "unchanged", isPriceSpike: percentage > COST_SPIKE_THRESHOLD_PERCENT };
 }
 
 export function makeCostTrendGeometry(points: IngredientCostTrend["points"], width = 640, height = 224) {
