@@ -1,0 +1,1 @@
+ALTER TABLE `stockOpnameFollowUps` ADD `followUpNote` text;

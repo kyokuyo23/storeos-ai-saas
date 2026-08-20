@@ -4,7 +4,7 @@ import { nanoid } from "nanoid";
 import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, stockOpnameFollowUps, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import type { z } from "zod";
-import type { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput, stockOpnameFollowUpInput, stockOpnameHistoryInput } from "./foundationSchemas";
+import type { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput, stockOpnameFollowUpInput, stockOpnameFollowUpNoteInput, stockOpnameHistoryInput } from "./foundationSchemas";
 import { planStockOpname, resolveStockMovement } from "./inventory";
 import { planRecipeDeductions } from "./sales";
 import { summarizeFinancialSales, summarizeProductFinancialDetail, type FinancialSale } from "./financials";
@@ -73,7 +73,7 @@ export async function listStockOpnameSessions(input?: z.infer<typeof stockOpname
   const rows = await db.select({ id: stockMovements.id, ingredientId: stockMovements.ingredientId, ingredientName: ingredients.name, unit: ingredients.unit, quantityDelta: stockMovements.quantityDelta, balanceAfter: stockMovements.balanceAfter, note: stockMovements.note, occurredAt: stockMovements.occurredAt }).from(stockMovements).innerJoin(ingredients, eq(stockMovements.ingredientId, ingredients.id)).where(eq(stockMovements.type, "opname")).orderBy(desc(stockMovements.occurredAt), desc(stockMovements.id));
   const sessions = summarizeStockOpnameSessions(rows, input?.reference);
   if (!sessions.length) return sessions;
-  const followUps = await db.select({ auditReference: stockOpnameFollowUps.auditReference, status: stockOpnameFollowUps.status }).from(stockOpnameFollowUps).where(inArray(stockOpnameFollowUps.auditReference, sessions.map((session) => session.reference)));
+  const followUps = await db.select({ auditReference: stockOpnameFollowUps.auditReference, status: stockOpnameFollowUps.status, followUpNote: stockOpnameFollowUps.followUpNote }).from(stockOpnameFollowUps).where(inArray(stockOpnameFollowUps.auditReference, sessions.map((session) => session.reference)));
   return applyStockOpnameFollowUpStatuses(sessions, followUps);
 }
 
@@ -84,6 +84,16 @@ export async function updateStockOpnameFollowUp(input: z.infer<typeof stockOpnam
   const db = await requireDb();
   await db.insert(stockOpnameFollowUps).values({ auditReference: session.reference, status: input.status }).onDuplicateKeyUpdate({ set: { status: input.status } });
   return { reference: session.reference, status: input.status };
+}
+
+export async function updateStockOpnameFollowUpNote(input: z.infer<typeof stockOpnameFollowUpNoteInput>) {
+  const session = (await listStockOpnameSessions({ reference: input.reference })).find((item) => item.reference === input.reference);
+  if (!session) throw new Error("Sesi opname dengan referensi audit tersebut tidak ditemukan.");
+  if (session.differenceItems === 0) throw new Error("Catatan tindak lanjut hanya tersedia untuk sesi yang memiliki selisih stok.");
+  const db = await requireDb();
+  const followUpNote = input.note?.trim() || null;
+  await db.insert(stockOpnameFollowUps).values({ auditReference: session.reference, followUpNote }).onDuplicateKeyUpdate({ set: { followUpNote } });
+  return { reference: session.reference, followUpNote };
 }
 
 export async function getIngredientMovementDrillDown(input: z.infer<typeof inventoryMovementDrillDownInput>) {

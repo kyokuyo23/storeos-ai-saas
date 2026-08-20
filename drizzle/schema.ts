@@ -152,6 +152,7 @@ export const stockOpnameFollowUps = mysqlTable("stockOpnameFollowUps", {
   id: int("id").autoincrement().primaryKey(),
   auditReference: varchar("auditReference", { length: 80 }).notNull().unique(),
   status: mysqlEnum("status", ["needs_follow_up", "in_progress", "resolved"]).default("needs_follow_up").notNull(),
+  followUpNote: text("followUpNote"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

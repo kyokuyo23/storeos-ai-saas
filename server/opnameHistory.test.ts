@@ -24,4 +24,11 @@ describe("summarizeStockOpnameSessions", () => {
     expect(withStatuses.find((session) => session.reference === "OPN-100-AB12C")?.followUpStatus).toBe("in_progress");
     expect(withStatuses.find((session) => session.reference === "OPN-200-ZX90Q")?.followUpStatus).toBe("not_required");
   });
+
+  it("menyertakan catatan tindak lanjut tersimpan hanya pada sesi yang berselisih", () => {
+    const sessions = summarizeStockOpnameSessions([movement(1, "Biji Kopi", -2, "OPN-100-AB12C"), movement(2, "Susu", 0, "OPN-200-ZX90Q")]);
+    const withNotes = applyStockOpnameFollowUpStatuses(sessions, [{ auditReference: "OPN-100-AB12C", status: "resolved", followUpNote: "Selisih sudah diverifikasi pada catatan penerimaan." }]);
+    expect(withNotes.find((session) => session.reference === "OPN-100-AB12C")).toMatchObject({ followUpStatus: "resolved", followUpNote: "Selisih sudah diverifikasi pada catatan penerimaan." });
+    expect(withNotes.find((session) => session.reference === "OPN-200-ZX90Q")?.followUpNote).toBeNull();
+  });
 });

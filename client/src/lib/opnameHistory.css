@@ -26,6 +26,10 @@
 .opname-status.resolved, .opname-status.not-required { color: #1c7251; background: #e7f7ed; }
 .opname-status-control .form-input { min-width: 205px; height: 34px; padding-top: 4px; padding-bottom: 4px; }
 .opname-follow-up-error { margin: -5px 0 0; color: #b54742; font-size: 12px; }
+.opname-follow-up-note { display: grid; gap: 8px; padding: 11px 12px; border: 1px solid #e7eee9; border-radius: 10px; background: #fbfdfb; }
+.opname-follow-up-note textarea.form-input { min-height: 82px; resize: vertical; line-height: 1.45; }
+.opname-note-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.opname-note-actions small { color: #809087; font-size: 12px; }
 .opname-match { color: #16734f; }
 .opname-over { color: #1b6387; }
 .opname-under { color: #b54742; }
@@ -38,4 +42,6 @@
   .opname-history-metrics { grid-template-columns: 1fr; }
   .opname-follow-up { align-items: stretch; flex-direction: column; }
   .opname-status-control .form-input { width: 100%; min-width: 0; }
+  .opname-note-actions { align-items: stretch; flex-direction: column; }
+  .opname-note-actions .button { width: 100%; }
 }

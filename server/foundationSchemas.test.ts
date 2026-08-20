@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ingredientInput, productFinancialInput, productInput, recipeInput, settlementDateRangeInput, stockOpnameFollowUpInput } from "./foundationSchemas";
+import { ingredientInput, productFinancialInput, productInput, recipeInput, settlementDateRangeInput, stockOpnameFollowUpInput, stockOpnameFollowUpNoteInput } from "./foundationSchemas";
 
 describe("StoreOS Step 2 validation", () => {
   it("rejects an incomplete product", () => {
@@ -27,5 +27,9 @@ describe("StoreOS Step 2 validation", () => {
     expect(stockOpnameFollowUpInput.safeParse({ reference: "OPN-1724-ABCDE", status: "in_progress" }).success).toBe(true);
     expect(stockOpnameFollowUpInput.safeParse({ reference: "", status: "resolved" }).success).toBe(false);
     expect(stockOpnameFollowUpInput.safeParse({ reference: "OPN-1724-ABCDE", status: "closed" }).success).toBe(false);
+  });
+  it("accepts a bounded follow-up note and rejects notes that exceed the limit", () => {
+    expect(stockOpnameFollowUpNoteInput.safeParse({ reference: "OPN-1724-ABCDE", note: "Selisih telah diverifikasi." }).success).toBe(true);
+    expect(stockOpnameFollowUpNoteInput.safeParse({ reference: "OPN-1724-ABCDE", note: "x".repeat(1001) }).success).toBe(false);
   });
 });

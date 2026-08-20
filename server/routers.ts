@@ -5,7 +5,7 @@ import { mapFoundationError } from "./foundationErrors";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
-import { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput, stockOpnameFollowUpInput, stockOpnameHistoryInput } from "./foundationSchemas";
+import { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput, stockOpnameFollowUpInput, stockOpnameFollowUpNoteInput, stockOpnameHistoryInput } from "./foundationSchemas";
 
 const idInput = z.object({ id: z.number().int().positive() });
 const runMutation = async <T>(entity: string, operation: () => Promise<T>) => {
@@ -41,6 +41,7 @@ export const appRouter = router({
     recordOpnameBatch: publicProcedure.input(stockOpnameBatchInput).mutation(({ input }) => runMutation("Stock opname", () => db.recordStockOpnameBatch(input))),
     opnameSessions: publicProcedure.input(stockOpnameHistoryInput.optional()).query(({ input }) => db.listStockOpnameSessions(input)),
     updateOpnameFollowUp: publicProcedure.input(stockOpnameFollowUpInput).mutation(({ input }) => runMutation("Tindak lanjut opname", () => db.updateStockOpnameFollowUp(input))),
+    updateOpnameFollowUpNote: publicProcedure.input(stockOpnameFollowUpNoteInput).mutation(({ input }) => runMutation("Catatan tindak lanjut opname", () => db.updateStockOpnameFollowUpNote(input))),
   }),
   recipe: router({
     list: publicProcedure.query(() => db.listRecipes()),

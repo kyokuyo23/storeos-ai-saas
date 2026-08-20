@@ -155,3 +155,8 @@
 - [x] Tambahkan penyimpanan, query, dan mutasi publik status tindak lanjut tanpa mengubah ledger stok.
 - [x] Tambahkan kontrol status tindak lanjut responsif pada riwayat sesi opname yang memiliki selisih stok.
 - [x] Tambahkan pengujian status tindak lanjut, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
+- [x] Audit metadata status tindak lanjut dan antarmuka riwayat sesi opname untuk menyimpan catatan per referensi audit.
+- [x] Definisikan validasi catatan tindak lanjut dan kontrak persistensi berbasis referensi audit.
+- [x] Tambahkan penyimpanan, query, dan mutasi publik catatan tindak lanjut tanpa mengubah ledger stok.
+- [x] Tambahkan kontrol catatan tindak lanjut responsif pada sesi opname yang memiliki selisih stok.
+- [x] Tambahkan pengujian catatan tindak lanjut, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
