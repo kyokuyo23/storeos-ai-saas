@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildIngredientCostTrends, COST_SPIKE_THRESHOLD_PERCENT, getConsecutiveCostChange, getLargestCostIncrease, makeCostTrendGeometry } from "./productCostTrend";
+import { buildIngredientPeriodCostComparison, buildIngredientCostTrends, COST_SPIKE_THRESHOLD_PERCENT, getConsecutiveCostChange, getLargestCostIncrease, getPreviousEquivalentPeriod, makeCostTrendGeometry } from "./productCostTrend";
 
 describe("immutable ingredient cost trends", () => {
   it("groups and chronologically sorts immutable ingredient snapshots without using current ingredient cost", () => {
@@ -59,5 +59,24 @@ describe("immutable ingredient cost trends", () => {
       { id: "sale-2", occurredAt: "2026-08-19T03:00:00.000Z", ingredients: [{ ingredientId: 4, unitCost: 800, unitQuantity: 0.2, ingredient: { name: "Susu", unit: "ml" } }] },
     ]);
     expect(getLargestCostIncrease(trends)).toBeNull();
+  });
+
+  it("derives an immediately preceding equivalent calendar period across month boundaries", () => {
+    expect(getPreviousEquivalentPeriod({ startDate: "2026-08-01", endDate: "2026-08-20" })).toEqual({ startDate: "2026-07-12", endDate: "2026-07-31" });
+    expect(getPreviousEquivalentPeriod({ startDate: "2026-08-20", endDate: "2026-08-20" })).toEqual({ startDate: "2026-08-19", endDate: "2026-08-19" });
+  });
+
+  it("compares each ingredient's latest immutable cost in the selected period with the prior equivalent period", () => {
+    const previous = buildIngredientCostTrends([
+      { id: "previous-1", occurredAt: "2026-08-10T03:00:00.000Z", ingredients: [{ ingredientId: 4, unitCost: 1000, unitQuantity: 0.2, ingredient: { name: "Susu", unit: "ml" } }, { ingredientId: 7, unitCost: 800, unitQuantity: 12, ingredient: { name: "Kopi", unit: "g" } }] },
+    ]);
+    const current = buildIngredientCostTrends([
+      { id: "current-1", occurredAt: "2026-08-20T03:00:00.000Z", ingredients: [{ ingredientId: 4, unitCost: 1250, unitQuantity: 0.2, ingredient: { name: "Susu", unit: "ml" } }, { ingredientId: 9, unitCost: 500, unitQuantity: 1, ingredient: { name: "Gula", unit: "g" } }] },
+    ]);
+    expect(buildIngredientPeriodCostComparison(current, previous)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ ingredientId: 4, currentUnitCost: 1250, previousUnitCost: 1000, change: expect.objectContaining({ difference: 250, percentage: 25, direction: "increase" }) }),
+      expect.objectContaining({ ingredientId: 7, currentUnitCost: null, previousUnitCost: 800, change: null }),
+      expect.objectContaining({ ingredientId: 9, currentUnitCost: 500, previousUnitCost: null, change: null }),
+    ]));
   });
 });

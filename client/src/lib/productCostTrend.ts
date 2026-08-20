@@ -14,6 +14,7 @@ export type IngredientCostTrend = {
   name: string;
   unit: string;
   points: Array<{ id: string; occurredAt: Date; unitCost: number; unitQuantity: number }>;
+  comparison?: { previousTrend?: IngredientCostTrend; currentRange: DateRange; previousRange: DateRange };
 };
 
 export type CostChange = {
@@ -33,6 +34,17 @@ export type LargestCostIncrease = {
   unitCost: number;
   difference: number;
   percentage: number;
+};
+
+export type DateRange = { startDate: string; endDate: string };
+
+export type IngredientPeriodCostComparison = {
+  ingredientId: number;
+  name: string;
+  unit: string;
+  currentUnitCost: number | null;
+  previousUnitCost: number | null;
+  change: CostChange | null;
 };
 
 export const COST_SPIKE_THRESHOLD_PERCENT = 10;
@@ -83,6 +95,45 @@ export function getLargestCostIncrease(trends: IngredientCostTrend[]): LargestCo
     }];
   }));
   return candidates.sort((left, right) => right.difference - left.difference || right.percentage - left.percentage || right.occurredAt.getTime() - left.occurredAt.getTime())[0] ?? null;
+}
+
+function parseCalendarDate(date: string) {
+  return new Date(`${date}T00:00:00.000Z`);
+}
+
+function toCalendarDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+export function getPreviousEquivalentPeriod(range: DateRange): DateRange {
+  const start = parseCalendarDate(range.startDate);
+  const end = parseCalendarDate(range.endDate);
+  const durationDays = Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  const previousEnd = new Date(start);
+  previousEnd.setUTCDate(previousEnd.getUTCDate() - 1);
+  const previousStart = new Date(previousEnd);
+  previousStart.setUTCDate(previousStart.getUTCDate() - durationDays + 1);
+  return { startDate: toCalendarDate(previousStart), endDate: toCalendarDate(previousEnd) };
+}
+
+export function buildIngredientPeriodCostComparison(currentTrends: IngredientCostTrend[], previousTrends: IngredientCostTrend[]): IngredientPeriodCostComparison[] {
+  const currentByIngredient = new Map(currentTrends.map((trend) => [trend.ingredientId, trend]));
+  const previousByIngredient = new Map(previousTrends.map((trend) => [trend.ingredientId, trend]));
+  const ingredientIds = new Set(Array.from(currentByIngredient.keys()).concat(Array.from(previousByIngredient.keys())));
+  return Array.from(ingredientIds).map((ingredientId) => {
+    const current = currentByIngredient.get(ingredientId);
+    const previous = previousByIngredient.get(ingredientId);
+    const currentUnitCost = current?.points.at(-1)?.unitCost ?? null;
+    const previousUnitCost = previous?.points.at(-1)?.unitCost ?? null;
+    return {
+      ingredientId,
+      name: current?.name ?? previous?.name ?? "Bahan resep tersimpan",
+      unit: current?.unit ?? previous?.unit ?? "",
+      currentUnitCost,
+      previousUnitCost,
+      change: currentUnitCost === null || previousUnitCost === null ? null : getConsecutiveCostChange(previousUnitCost, currentUnitCost),
+    };
+  }).sort((left, right) => left.name.localeCompare(right.name, "id-ID"));
 }
 
 export function makeCostTrendGeometry(points: IngredientCostTrend["points"], width = 640, height = 224) {

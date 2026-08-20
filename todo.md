@@ -130,3 +130,8 @@
 - [x] Add a responsive largest-cost-increase card above the product ingredient trend chart.
 - [x] Add largest-increase tests, run the full suite, TypeScript check, production build, desktop/mobile validation, and save the delivery checkpoint.
 - [x] Save the delivery checkpoint for the validated largest-cost-increase summary card.
+- [x] Define selected and immediately preceding equivalent Jakarta/WIB periods for ingredient cost comparison.
+- [x] Add deterministic per-ingredient current-period, prior-period, absolute-change, and percentage-change comparison data.
+- [x] Add a responsive period-over-period ingredient cost summary table below the product trend chart.
+- [x] Add comparison tests, run the full suite, TypeScript check, production build, desktop/mobile validation, and save the delivery checkpoint.
+- [x] Save the delivery checkpoint for the validated period-over-period ingredient cost comparison.

@@ -3,7 +3,7 @@ import { CirclePlus, Coffee, Edit3, PackagePlus, Plus, Save, Settings2, Utensils
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { getSettlementDatePresets, jakartaDateValue } from "@/lib/settlementDateRanges";
-import { buildIngredientCostTrends, getLargestCostIncrease, makeCostTrendGeometry, type IngredientCostTrend } from "@/lib/productCostTrend";
+import { buildIngredientCostTrends, buildIngredientPeriodCostComparison, getLargestCostIncrease, getPreviousEquivalentPeriod, makeCostTrendGeometry, type IngredientCostTrend } from "@/lib/productCostTrend";
 import { AppShell, EmptyState, ErrorState, PageHeader, Panel, type FoundationPage } from "@/components/FoundationShell";
 import { InventoryManagement } from "@/components/InventoryManagement";
 import { SalePOS, SalesHistory } from "@/components/SalePOS";
@@ -48,7 +48,14 @@ function IngredientCostTrendChart({ trend }: { trend: IngredientCostTrend }) {
       {geometry.coordinates.map((point, index) => <g key={point.id}><circle cx={point.x} cy={point.y} r={point.change.isPriceSpike ? "5.5" : "4"} className={`cost-trend-point ${point.change.isPriceSpike ? "spike" : ""}`}><title>{`${dateFormatter.format(point.occurredAt)} · ${formatCurrency(point.unitCost)} · ${describeCostChange(point.change)}${point.change.isPriceSpike ? " · Lonjakan biaya di atas 10%" : ""}`}</title></circle>{point.change.direction !== "initial" && <text className={`cost-change-label ${point.change.direction} ${point.change.isPriceSpike ? "spike" : ""}`} x={point.x} y={point.y < 42 ? point.y + 18 : point.y - 11} textAnchor="middle">{point.change.isPriceSpike ? `⚠ ${formatCostChange(point.change)}` : formatCostChange(point.change)}</text>}<text x={point.x} y={geometry.height - 10} textAnchor={index === 0 ? "start" : index === geometry.coordinates.length - 1 ? "end" : "middle"}>{dateFormatter.format(point.occurredAt)}</text></g>)}
     </svg>
     <p>{trend.points.length} snapshot biaya tersimpan pada periode ini. Perubahan dibandingkan dengan snapshot sebelumnya; nilai berasal dari saat transaksi dibuat, bukan biaya bahan saat ini.</p>
+    {trend.comparison && <IngredientPeriodCostComparisonTable currentTrends={[trend]} previousTrends={trend.comparison.previousTrend ? [trend.comparison.previousTrend] : []} currentRange={trend.comparison.currentRange} previousRange={trend.comparison.previousRange} />}
   </div></div>;
+}
+
+function IngredientPeriodCostComparisonTable({ currentTrends, previousTrends, currentRange, previousRange }: { currentTrends: IngredientCostTrend[]; previousTrends: IngredientCostTrend[]; currentRange: { startDate: string; endDate: string }; previousRange: { startDate: string; endDate: string } }) {
+  const rows = useMemo(() => buildIngredientPeriodCostComparison(currentTrends, previousTrends), [currentTrends, previousTrends]);
+  if (!rows.length) return <EmptyState title="Belum ada biaya bahan untuk dibandingkan." description="Tabel akan muncul setelah snapshot biaya resep tercatat pada periode ini atau periode sebelumnya." />;
+  return <div className="period-cost-comparison"><div className="period-cost-comparison-heading"><div><span>Perbandingan biaya antarperiode</span><strong>Snapshot terakhir per bahan</strong><p>Biaya pada periode terpilih dibandingkan dengan periode sebelumnya yang berdurasi sama.</p></div><small>{formatSettlementRange(currentRange.startDate, currentRange.endDate)} vs {formatSettlementRange(previousRange.startDate, previousRange.endDate)}</small></div><div className="table-wrap"><table><thead><tr><th>Bahan</th><th>Periode ini</th><th>Periode sebelumnya</th><th>Selisih</th><th>Perubahan</th></tr></thead><tbody>{rows.map((row) => <tr key={row.ingredientId}><td><strong>{row.name}</strong>{row.unit ? <small>per {row.unit}</small> : null}</td><td>{row.currentUnitCost === null ? "—" : formatCurrency(row.currentUnitCost)}</td><td>{row.previousUnitCost === null ? "—" : formatCurrency(row.previousUnitCost)}</td><td>{row.change === null ? "—" : `${row.change.difference > 0 ? "+" : ""}${formatCurrency(row.change.difference)}`}</td><td>{row.change === null || row.change.percentage === null ? "—" : <span className={`period-cost-change ${row.change.direction} ${row.change.isPriceSpike ? "spike" : ""}`}>{row.change.percentage > 0 ? "+" : ""}{row.change.percentage.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%</span>}</td></tr>)}</tbody></table></div></div>;
 }
 
 function Dashboard() {
@@ -62,12 +69,19 @@ function Dashboard() {
   const [selectedIngredientId, setSelectedIngredientId] = useState<number | null>(null);
   const invalidRange = startDate > endDate;
   const settlementRange = useMemo(() => ({ startDate, endDate }), [startDate, endDate]);
+  const previousPeriod = useMemo(() => getPreviousEquivalentPeriod(settlementRange), [settlementRange]);
   const productDetailInput = useMemo(() => ({ productId: selectedProductId ?? 1, startDate, endDate }), [selectedProductId, startDate, endDate]);
+  const previousProductDetailInput = useMemo(() => ({ productId: selectedProductId ?? 1, ...previousPeriod }), [selectedProductId, previousPeriod]);
   const settlements = trpc.dashboard.dailySettlements.useQuery(settlementRange, { enabled: !invalidRange });
   const financials = trpc.dashboard.financials.useQuery(settlementRange, { enabled: !invalidRange });
   const productDetail = trpc.product.financialDetail.useQuery(productDetailInput, { enabled: selectedProductId !== null && !invalidRange });
+  const previousProductDetail = trpc.product.financialDetail.useQuery(previousProductDetailInput, { enabled: selectedProductId !== null && !invalidRange });
   const ingredientCostTrends = useMemo(() => buildIngredientCostTrends(productDetail.data?.history ?? []), [productDetail.data?.history]);
-  const selectedIngredientTrend = useMemo(() => ingredientCostTrends.find((trend) => trend.ingredientId === selectedIngredientId) ?? ingredientCostTrends[0] ?? null, [ingredientCostTrends, selectedIngredientId]);
+  const previousIngredientCostTrends = useMemo(() => buildIngredientCostTrends(previousProductDetail.data?.history ?? []), [previousProductDetail.data?.history]);
+  const selectedIngredientTrend = useMemo(() => {
+    const trend = ingredientCostTrends.find((item) => item.ingredientId === selectedIngredientId) ?? ingredientCostTrends[0] ?? null;
+    return trend ? { ...trend, comparison: { previousTrend: previousIngredientCostTrends.find((item) => item.ingredientId === trend.ingredientId), currentRange: settlementRange, previousRange: previousPeriod } } : null;
+  }, [ingredientCostTrends, previousIngredientCostTrends, selectedIngredientId, settlementRange, previousPeriod]);
   useEffect(() => { if (selectedIngredientTrend && selectedIngredientTrend.ingredientId !== selectedIngredientId) setSelectedIngredientId(selectedIngredientTrend.ingredientId); }, [selectedIngredientId, selectedIngredientTrend]);
   const today = new Intl.DateTimeFormat("id-ID", { dateStyle: "full", timeZone: "Asia/Jakarta" }).format(new Date());
   const business = settings.data?.businessName ?? "Kopi Nusantara";
