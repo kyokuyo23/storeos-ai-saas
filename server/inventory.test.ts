@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { mapFoundationError } from "./foundationErrors";
-import { stockMovementInput } from "./foundationSchemas";
-import { resolveStockMovement } from "./inventory";
+import { stockMovementInput, stockOpnameBatchInput } from "./foundationSchemas";
+import { planStockOpname, resolveStockMovement } from "./inventory";
 
 describe("stock movement calculation", () => {
   it("adds stock for a purchase and stores its resulting balance", () => expect(resolveStockMovement(4, { type: "purchase", quantity: 2.5 })).toEqual({ quantityDelta: 2.5, balanceAfter: 6.5 }));
@@ -14,6 +14,17 @@ describe("stock movement calculation", () => {
     expect(stockMovementInput.safeParse({ ingredientId: 1, type: "purchase", quantity: 0 }).success).toBe(false);
     expect(stockMovementInput.safeParse({ ingredientId: 1, type: "waste", quantity: -1 }).success).toBe(false);
     expect(stockMovementInput.safeParse({ ingredientId: 1, type: "opname", quantity: 0, note: "Penghitungan fisik" }).success).toBe(true);
+  });
+  it("merencanakan stock-opname batch, termasuk bahan yang cocok tanpa selisih", () => {
+    expect(planStockOpname([{ id: 1, name: "Biji Kopi", currentStock: 8 }, { id: 2, name: "Susu", currentStock: 5 }], [{ ingredientId: 1, physicalQuantity: 6.5 }, { ingredientId: 2, physicalQuantity: 5 }])).toEqual([
+      { ingredientId: 1, ingredientName: "Biji Kopi", beforeStock: 8, physicalQuantity: 6.5, quantityDelta: -1.5, balanceAfter: 6.5 },
+      { ingredientId: 2, ingredientName: "Susu", beforeStock: 5, physicalQuantity: 5, quantityDelta: 0, balanceAfter: 5 },
+    ]);
+  });
+  it("menolak duplikasi bahan dan jumlah fisik negatif pada stock-opname batch", () => {
+    expect(stockOpnameBatchInput.safeParse({ counts: [{ ingredientId: 1, physicalQuantity: 1 }, { ingredientId: 1, physicalQuantity: 2 }] }).success).toBe(false);
+    expect(stockOpnameBatchInput.safeParse({ counts: [{ ingredientId: 1, physicalQuantity: -1 }] }).success).toBe(false);
+    expect(() => planStockOpname([{ id: 1, name: "Biji Kopi", currentStock: 1 }], [{ ingredientId: 1, physicalQuantity: 1 }, { ingredientId: 1, physicalQuantity: 1 }])).toThrow("Bahan tidak boleh dihitung lebih dari satu kali.");
   });
   it("maps missing ingredients to an explicit invalid-reference error", () => {
     const error = mapFoundationError(new Error("Bahan tidak ditemukan."), "Pergerakan stok");

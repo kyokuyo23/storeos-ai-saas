@@ -38,6 +38,20 @@ export const stockMovementInput = z.object({
   if (input.type === "opname" && input.quantity < 0) context.addIssue({ code: "custom", path: ["quantity"], message: "Hasil stok opname tidak boleh negatif." });
 });
 
+export const stockOpnameBatchInput = z.object({
+  counts: z.array(z.object({
+    ingredientId: z.coerce.number().int().positive("Bahan wajib dipilih."),
+    physicalQuantity: z.coerce.number({ message: "Jumlah fisik harus berupa angka." }).finite("Jumlah fisik harus berupa angka.").min(0, "Jumlah fisik tidak boleh negatif."),
+  })).min(1, "Tambahkan setidaknya satu hasil hitung fisik."),
+  note: z.string().trim().max(1000).optional().nullable(),
+}).superRefine((input, context) => {
+  const used = new Set<number>();
+  input.counts.forEach((count, index) => {
+    if (used.has(count.ingredientId)) context.addIssue({ code: "custom", path: ["counts", index, "ingredientId"], message: "Bahan tidak boleh dihitung lebih dari satu kali." });
+    used.add(count.ingredientId);
+  });
+});
+
 export const recipeInput = z.object({
   productId: z.coerce.number().int().positive("Produk wajib dipilih."),
   name: requiredText("Nama resep wajib diisi."),

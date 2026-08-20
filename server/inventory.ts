@@ -13,6 +13,25 @@ export function resolveStockMovement(currentStock: number, input: Pick<StockMove
   return { quantityDelta: Number(delta.toFixed(3)), balanceAfter };
 }
 
+export type IngredientForOpname = { id: number; name: string; currentStock: number };
+export type OpnameCount = { ingredientId: number; physicalQuantity: number };
+
+/** Plans one physical-count session. Zero differences are retained for a complete audit trail. */
+export function planStockOpname(ingredients: IngredientForOpname[], counts: OpnameCount[]) {
+  const ingredientById = new Map(ingredients.map((ingredient) => [ingredient.id, ingredient]));
+  const used = new Set<number>();
+  return counts.map((count) => {
+    if (used.has(count.ingredientId)) throw new Error("Bahan tidak boleh dihitung lebih dari satu kali.");
+    used.add(count.ingredientId);
+    const ingredient = ingredientById.get(count.ingredientId);
+    if (!ingredient) throw new Error("Bahan tidak ditemukan.");
+    if (!Number.isFinite(count.physicalQuantity) || count.physicalQuantity < 0) throw new Error("Jumlah fisik tidak boleh negatif.");
+    const physicalQuantity = Number(count.physicalQuantity.toFixed(3));
+    const quantityDelta = Number((physicalQuantity - ingredient.currentStock).toFixed(3));
+    return { ingredientId: ingredient.id, ingredientName: ingredient.name, beforeStock: ingredient.currentStock, physicalQuantity, quantityDelta, balanceAfter: physicalQuantity };
+  });
+}
+
 export type RecipeForSale = { productId: number; items: Array<{ ingredientId: number; quantity: number }> };
 export type SaleLineForPlanning = { productId: number; quantity: number };
 export type IngredientForPlanning = { id: number; name: string; currentStock: number };

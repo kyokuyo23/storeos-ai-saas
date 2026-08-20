@@ -140,3 +140,8 @@
 - [x] Add Inventory Intelligence reporting and movement drill-down services that correctly account for sale deductions, reversals, exchanges, waste, adjustments, and stock opname.
 - [x] Add a responsive dashboard variance summary and Inventory variance drill-down interface with Jakarta/WIB date filtering.
 - [x] Add inventory intelligence acceptance tests, run the full suite, TypeScript check, production build, desktop/mobile validation, and save the delivery checkpoint.
+- [x] Audit catatan opname manual, saldo bahan, dan pergerakan stok yang tersedia untuk workflow hitung fisik.
+- [x] Definisikan workflow hitung fisik massal dengan validasi kuantitas, ringkasan selisih, dan pencatatan akun audit tanpa model inventory baru.
+- [x] Implementasikan pencatatan batch stock-opname atomik ke ledger pergerakan stok yang ada.
+- [x] Tambahkan antarmuka stock-opname responsif untuk input jumlah fisik, filter bahan, ringkasan selisih, dan hasil pencatatan.
+- [x] Tambahkan pengujian transaksi stock-opname, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.

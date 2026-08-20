@@ -4,8 +4,8 @@ import { nanoid } from "nanoid";
 import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import type { z } from "zod";
-import type { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput } from "./foundationSchemas";
-import { resolveStockMovement } from "./inventory";
+import type { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput } from "./foundationSchemas";
+import { planStockOpname, resolveStockMovement } from "./inventory";
 import { planRecipeDeductions } from "./sales";
 import { summarizeFinancialSales, summarizeProductFinancialDetail, type FinancialSale } from "./financials";
 import { summarizeInventoryIntelligence } from "./inventoryIntelligence";
@@ -84,6 +84,20 @@ export async function recordStockMovement(input: z.infer<typeof stockMovementInp
     await tx.update(ingredients).set({ currentStock: movement.balanceAfter }).where(eq(ingredients.id, ingredient.id));
     const result = await tx.insert(stockMovements).values({ ingredientId: ingredient.id, type: input.type, quantityDelta: movement.quantityDelta, balanceAfter: movement.balanceAfter, note: input.note || null });
     return { id: Number(result[0].insertId), ...movement };
+  });
+}
+
+export async function recordStockOpnameBatch(input: z.infer<typeof stockOpnameBatchInput>) {
+  const db = await requireDb();
+  return db.transaction(async (tx) => {
+    const ingredientIds = input.counts.map((count) => count.ingredientId);
+    const ingredientRows = await tx.select({ id: ingredients.id, name: ingredients.name, currentStock: ingredients.currentStock }).from(ingredients).where(inArray(ingredients.id, ingredientIds));
+    const planned = planStockOpname(ingredientRows, input.counts);
+    const reference = `OPN-${Date.now()}-${nanoid(5).toUpperCase()}`;
+    const note = ["Stock opname fisik", reference, input.note?.trim()].filter(Boolean).join(" · ");
+    for (const item of planned) await tx.update(ingredients).set({ currentStock: item.balanceAfter }).where(eq(ingredients.id, item.ingredientId));
+    await tx.insert(stockMovements).values(planned.map((item) => ({ ingredientId: item.ingredientId, type: "opname" as const, quantityDelta: item.quantityDelta, balanceAfter: item.balanceAfter, note })));
+    return { reference, totalItems: planned.length, differenceItems: planned.filter((item) => item.quantityDelta !== 0).length, totalAbsoluteDifference: Number(planned.reduce((total, item) => total + Math.abs(item.quantityDelta), 0).toFixed(3)), items: planned };
   });
 }
 export async function listRecipes() {
