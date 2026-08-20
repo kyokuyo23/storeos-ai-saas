@@ -117,3 +117,7 @@
 - [x] Add a responsive line chart and empty state for individual ingredient cost history.
 - [x] Add chart data tests, run the full suite, TypeScript check, production build, desktop/mobile validation, and save a delivery checkpoint.
 - [x] Save a delivery checkpoint for the validated ingredient cost-trend chart enhancement.
+- [x] Define percentage-change rules for consecutive immutable ingredient cost snapshots, including stable zero-cost handling.
+- [x] Add deterministic cost-change values, chart annotations, and an accessible selected-ingredient trend summary.
+- [x] Add percentage-indicator tests, run the full suite, TypeScript check, production build, desktop/mobile validation, and save the delivery checkpoint.
+- [x] Save the delivery checkpoint for the validated consecutive cost-change indicators.
