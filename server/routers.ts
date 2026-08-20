@@ -50,6 +50,7 @@ export const appRouter = router({
   dashboard: router({
     dailySettlements: publicProcedure.input(settlementDateRangeInput.optional()).query(({ input }) => db.getDailySettlementSummary(input)),
     financials: publicProcedure.input(settlementDateRangeInput.optional()).query(({ input }) => db.getFinancialDashboard(input)),
+    openOpnameSessions: publicProcedure.query(() => db.getOpenStockOpnameSummary()),
   }),
   sale: router({
     list: publicProcedure.query(() => db.listSales()),

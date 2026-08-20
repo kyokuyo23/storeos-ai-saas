@@ -52,3 +52,9 @@ export function applyStockOpnameFollowUpStatuses(sessions: StockOpnameSession[],
     return { ...session, followUpStatus: session.differenceItems > 0 ? (followUp?.status ?? "needs_follow_up") : "not_required", followUpNote: session.differenceItems > 0 ? (followUp?.followUpNote ?? null) : null };
   });
 }
+
+export function summarizeOpenStockOpnameSessions(sessions: StockOpnameSession[]) {
+  const needsFollowUpCount = sessions.filter((session) => session.followUpStatus === "needs_follow_up").length;
+  const inProgressCount = sessions.filter((session) => session.followUpStatus === "in_progress").length;
+  return { openSessionCount: needsFollowUpCount + inProgressCount, needsFollowUpCount, inProgressCount };
+}

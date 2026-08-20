@@ -9,7 +9,7 @@ import { planStockOpname, resolveStockMovement } from "./inventory";
 import { planRecipeDeductions } from "./sales";
 import { summarizeFinancialSales, summarizeProductFinancialDetail, type FinancialSale } from "./financials";
 import { summarizeInventoryIntelligence } from "./inventoryIntelligence";
-import { applyStockOpnameFollowUpStatuses, summarizeStockOpnameSessions } from "./opnameHistory";
+import { applyStockOpnameFollowUpStatuses, summarizeOpenStockOpnameSessions, summarizeStockOpnameSessions } from "./opnameHistory";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
@@ -75,6 +75,10 @@ export async function listStockOpnameSessions(input?: z.infer<typeof stockOpname
   if (!sessions.length) return sessions;
   const followUps = await db.select({ auditReference: stockOpnameFollowUps.auditReference, status: stockOpnameFollowUps.status, followUpNote: stockOpnameFollowUps.followUpNote }).from(stockOpnameFollowUps).where(inArray(stockOpnameFollowUps.auditReference, sessions.map((session) => session.reference)));
   return applyStockOpnameFollowUpStatuses(sessions, followUps);
+}
+
+export async function getOpenStockOpnameSummary() {
+  return summarizeOpenStockOpnameSessions(await listStockOpnameSessions());
 }
 
 export async function updateStockOpnameFollowUp(input: z.infer<typeof stockOpnameFollowUpInput>) {

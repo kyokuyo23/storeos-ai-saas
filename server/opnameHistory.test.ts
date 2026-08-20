@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyStockOpnameFollowUpStatuses, summarizeStockOpnameSessions, type StockOpnameHistoryMovement } from "./opnameHistory";
+import { applyStockOpnameFollowUpStatuses, summarizeOpenStockOpnameSessions, summarizeStockOpnameSessions, type StockOpnameHistoryMovement } from "./opnameHistory";
 
 const movement = (id: number, ingredientName: string, quantityDelta: number, reference: string | null, occurredAt = "2026-08-20T03:00:00.000Z"): StockOpnameHistoryMovement => ({ id, ingredientId: id, ingredientName, unit: "gram", quantityDelta, balanceAfter: 10 + quantityDelta, note: reference ? `Stock opname fisik · ${reference} · Shift pagi` : "Opname manual lama", occurredAt: new Date(occurredAt) });
 
@@ -30,5 +30,18 @@ describe("summarizeStockOpnameSessions", () => {
     const withNotes = applyStockOpnameFollowUpStatuses(sessions, [{ auditReference: "OPN-100-AB12C", status: "resolved", followUpNote: "Selisih sudah diverifikasi pada catatan penerimaan." }]);
     expect(withNotes.find((session) => session.reference === "OPN-100-AB12C")).toMatchObject({ followUpStatus: "resolved", followUpNote: "Selisih sudah diverifikasi pada catatan penerimaan." });
     expect(withNotes.find((session) => session.reference === "OPN-200-ZX90Q")?.followUpNote).toBeNull();
+  });
+
+  it("menghitung hanya sesi berselisih yang masih perlu atau sedang ditindaklanjuti sebagai sesi terbuka", () => {
+    const sessions = applyStockOpnameFollowUpStatuses(summarizeStockOpnameSessions([
+      movement(1, "Biji Kopi", -2, "OPN-100-AB12C"),
+      movement(2, "Susu", 1, "OPN-200-ZX90Q"),
+      movement(3, "Gula", -1, "OPN-300-TY12K"),
+      movement(4, "Es", 0, "OPN-400-LM33P"),
+    ]), [
+      { auditReference: "OPN-200-ZX90Q", status: "in_progress" },
+      { auditReference: "OPN-300-TY12K", status: "resolved" },
+    ]);
+    expect(summarizeOpenStockOpnameSessions(sessions)).toEqual({ openSessionCount: 2, needsFollowUpCount: 1, inProgressCount: 1 });
   });
 });

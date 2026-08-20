@@ -160,3 +160,8 @@
 - [x] Tambahkan penyimpanan, query, dan mutasi publik catatan tindak lanjut tanpa mengubah ledger stok.
 - [x] Tambahkan kontrol catatan tindak lanjut responsif pada sesi opname yang memiliki selisih stok.
 - [x] Tambahkan pengujian catatan tindak lanjut, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
+- [x] Audit komposisi dashboard dan data tindak lanjut sesi opname yang tersedia.
+- [x] Definisikan jumlah sesi opname terbuka yang mencakup status perlu tindak lanjut dan sedang ditindaklanjuti.
+- [x] Tambahkan query dan route publik untuk ringkasan sesi opname terbuka berbasis metadata audit yang ada.
+- [x] Tambahkan panel ringkasan sesi opname terbuka responsif pada dashboard utama.
+- [x] Tambahkan pengujian ringkasan sesi terbuka, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
