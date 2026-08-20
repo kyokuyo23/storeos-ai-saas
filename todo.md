@@ -212,3 +212,7 @@
 - [x] Definisikan state filter, empty state, dan label kontrol yang dapat diakses untuk item di luar toleransi.
 - [x] Implementasikan filter Inventory Analysis yang hanya menampilkan item dengan varians melebihi toleransi aktif.
 - [x] Tambahkan pengujian filter, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
+- [x] Audit pengurutan tabel varians, filter toleransi, dan perilaku drill-down yang ada.
+- [x] Definisikan urutan selisih varians terbesar yang deterministik serta kontrol sort yang dapat diakses.
+- [x] Implementasikan opsi pengurutan tabel Inventory Analysis berdasarkan selisih varians terbesar.
+- [x] Tambahkan pengujian pengurutan, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
