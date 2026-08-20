@@ -18,6 +18,10 @@ export function getOpnameHistorySessionReference(search: string) {
   return value || null;
 }
 
+export function getOpenOpnameSessionHistoryPath(reference: string) {
+  return `/inventory/opname-history?status=open&session=${encodeURIComponent(reference)}`;
+}
+
 export function filterOpnameSessionsByStatus<T extends { followUpStatus: string }>(sessions: T[], filter: OpnameHistoryStatusFilter): T[] {
   if (filter === "all") return sessions;
   if (filter === "open") return sessions.filter((session) => session.followUpStatus === "needs_follow_up" || session.followUpStatus === "in_progress");

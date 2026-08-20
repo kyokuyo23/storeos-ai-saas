@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterOpnameSessionsByPriority, filterOpnameSessionsByStatus, getOpnameHistoryPriorityFilter, getOpnameHistorySessionReference, getOpnameHistoryStatusFilter } from "./opnameHistoryFilters";
+import { filterOpnameSessionsByPriority, filterOpnameSessionsByStatus, getOpenOpnameSessionHistoryPath, getOpnameHistoryPriorityFilter, getOpnameHistorySessionReference, getOpnameHistoryStatusFilter } from "./opnameHistoryFilters";
 
 describe("opname history status filters", () => {
   it("reads only supported status filters from the history URL", () => {
@@ -12,6 +12,10 @@ describe("opname history status filters", () => {
     expect(getOpnameHistorySessionReference("?status=open&session=OPN-1724-ABCDE")).toBe("OPN-1724-ABCDE");
     expect(getOpnameHistorySessionReference("?session=%20OPN-1724-ABCDE%20")).toBe("OPN-1724-ABCDE");
     expect(getOpnameHistorySessionReference("?status=open")).toBeNull();
+  });
+
+  it("creates an open-session detail path with an encoded audit reference", () => {
+    expect(getOpenOpnameSessionHistoryPath("OPN-1724-A B")).toBe("/inventory/opname-history?status=open&session=OPN-1724-A%20B");
   });
 
   it("reads only supported priority filters from the history URL", () => {

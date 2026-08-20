@@ -199,3 +199,7 @@
 - [x] Definisikan urutan deterministik: prioritas tertinggi lebih dahulu, lalu usia sesi tertua.
 - [x] Implementasikan pengurutan sesi Riwayat Opname berbasis prioritas dan usia.
 - [x] Tambahkan pengujian urutan sesi, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
+- [x] Audit ringkasan tindak lanjut dashboard serta rute Riwayat Opname untuk sesi berprioritas tertinggi.
+- [x] Definisikan tujuan tautan sesi aktif dengan prioritas tertinggi dan empty state tanpa sesi terbuka.
+- [x] Tambahkan shortcut dashboard untuk membuka sesi opname berprioritas tertinggi secara langsung.
+- [x] Tambahkan pengujian navigasi, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
