@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { filterOpnameSessionsByStatus, getOpnameHistoryStatusFilter } from "./opnameHistoryFilters";
+import { filterOpnameSessionsByStatus, getOpnameHistorySessionReference, getOpnameHistoryStatusFilter } from "./opnameHistoryFilters";
 
 describe("opname history status filters", () => {
   it("reads only supported status filters from the history URL", () => {
     expect(getOpnameHistoryStatusFilter("?status=open")).toBe("open");
     expect(getOpnameHistoryStatusFilter("?status=resolved")).toBe("resolved");
     expect(getOpnameHistoryStatusFilter("?status=unknown")).toBe("all");
+  });
+
+  it("reads a trimmed audit-reference session target from the history URL", () => {
+    expect(getOpnameHistorySessionReference("?status=open&session=OPN-1724-ABCDE")).toBe("OPN-1724-ABCDE");
+    expect(getOpnameHistorySessionReference("?session=%20OPN-1724-ABCDE%20")).toBe("OPN-1724-ABCDE");
+    expect(getOpnameHistorySessionReference("?status=open")).toBeNull();
   });
 
   it("groups both unresolved follow-up states under the open filter", () => {

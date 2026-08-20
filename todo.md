@@ -174,3 +174,7 @@
 - [x] Tambahkan ringkasan usia sesi opname terbuka tertua dari metadata audit yang sudah ada.
 - [x] Tambahkan indikator usia sesi terbuka tertua responsif pada dashboard utama.
 - [x] Tambahkan pengujian usia sesi terbuka, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
+- [x] Audit filter URL dan perilaku pembukaan rincian sesi pada Riwayat Opname.
+- [x] Definisikan parameter URL sesi audit untuk membuka rincian sesi tertua secara langsung.
+- [x] Implementasikan tautan kartu usia sesi tertua serta perluasan rincian sesi otomatis di Riwayat Opname.
+- [x] Tambahkan pengujian navigasi langsung, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
