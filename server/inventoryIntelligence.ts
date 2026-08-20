@@ -15,6 +15,14 @@ export type InventoryIntelligenceMovement = {
 
 const round = (value: number) => Number(value.toFixed(3));
 export const INVENTORY_VARIANCE_TOLERANCE = 0.001;
+export type InventoryVarianceTolerance = {
+  absoluteQuantity: number;
+  percentage: number;
+};
+export const DEFAULT_INVENTORY_VARIANCE_TOLERANCE: InventoryVarianceTolerance = {
+  absoluteQuantity: INVENTORY_VARIANCE_TOLERANCE,
+  percentage: 0,
+};
 
 /**
  * Calculates expected stock strictly from the stock ledger. Manual waste, adjustments,
@@ -24,7 +32,12 @@ export function summarizeInventoryIntelligence(
   ingredientRows: InventoryIntelligenceIngredient[],
   movementRows: InventoryIntelligenceMovement[],
   range: { start: Date; end: Date },
+  tolerance: InventoryVarianceTolerance = DEFAULT_INVENTORY_VARIANCE_TOLERANCE,
 ) {
+  const normalizedTolerance: InventoryVarianceTolerance = {
+    absoluteQuantity: Math.max(INVENTORY_VARIANCE_TOLERANCE, Number.isFinite(tolerance.absoluteQuantity) ? tolerance.absoluteQuantity : INVENTORY_VARIANCE_TOLERANCE),
+    percentage: Math.max(0, Number.isFinite(tolerance.percentage) ? tolerance.percentage : 0),
+  };
   const theoreticalTypes = new Set<InventoryIntelligenceMovement["type"]>(["sale", "void", "refund", "partial_refund", "exchange_return", "exchange_sale"]);
   const rows = ingredientRows.map((ingredient) => {
     const historical = movementRows.filter((movement) => movement.ingredientId === ingredient.id && movement.occurredAt < range.start);
@@ -38,7 +51,12 @@ export function summarizeInventoryIntelligence(
     const actualClosingStock = round(latestBalance ?? openingStock);
     const variance = round(actualClosingStock - expectedClosingStock);
     const varianceValue = round(variance * ingredient.costPerUnit);
-    const status = Math.abs(variance) <= INVENTORY_VARIANCE_TOLERANCE ? "ok" as const : variance > 0 ? "over" as const : "under" as const;
+    const relativeToleranceQuantity = round(Math.abs(expectedClosingStock) * normalizedTolerance.percentage / 100);
+    const toleranceQuantity = round(Math.max(normalizedTolerance.absoluteQuantity, relativeToleranceQuantity));
+    const withinTolerance = Math.abs(variance) <= toleranceQuantity;
+    const varianceExcess = round(Math.max(0, Math.abs(variance) - toleranceQuantity));
+    const varianceExcessValue = round(varianceExcess * ingredient.costPerUnit);
+    const status = withinTolerance ? "ok" as const : variance > 0 ? "over" as const : "under" as const;
     return {
       ingredientId: ingredient.id,
       ingredientName: ingredient.name,
@@ -51,23 +69,31 @@ export function summarizeInventoryIntelligence(
       actualClosingStock,
       variance,
       varianceValue,
+      toleranceQuantity,
+      relativeToleranceQuantity,
+      varianceExcess,
+      varianceExcessValue,
+      withinTolerance,
       status,
       adjustmentQuantity: round(inPeriod.filter((movement) => movement.type === "adjustment").reduce((total, movement) => total + movement.quantityDelta, 0)),
       wasteQuantity: round(inPeriod.filter((movement) => movement.type === "waste").reduce((total, movement) => total + movement.quantityDelta, 0)),
       opnameQuantity: round(inPeriod.filter((movement) => movement.type === "opname").reduce((total, movement) => total + movement.quantityDelta, 0)),
       movementCount: inPeriod.length,
     };
-  }).sort((left, right) => Math.abs(right.varianceValue) - Math.abs(left.varianceValue) || left.ingredientName.localeCompare(right.ingredientName, "id"));
+  }).sort((left, right) => right.varianceExcessValue - left.varianceExcessValue || Math.abs(right.varianceValue) - Math.abs(left.varianceValue) || left.ingredientName.localeCompare(right.ingredientName, "id"));
 
   return {
     rows,
     summary: {
       ingredientCount: rows.length,
       okCount: rows.filter((row) => row.status === "ok").length,
+      withinToleranceCount: rows.filter((row) => row.withinTolerance).length,
       overCount: rows.filter((row) => row.status === "over").length,
       underCount: rows.filter((row) => row.status === "under").length,
       totalAbsoluteVarianceValue: round(rows.reduce((total, row) => total + Math.abs(row.varianceValue), 0)),
+      totalExcessVarianceValue: round(rows.reduce((total, row) => total + row.varianceExcessValue, 0)),
       topVariances: rows.slice(0, 5),
     },
+    tolerance: normalizedTolerance,
   };
 }

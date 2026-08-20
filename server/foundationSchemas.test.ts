@@ -33,9 +33,16 @@ describe("StoreOS Step 2 validation", () => {
     expect(stockOpnameFollowUpNoteInput.safeParse({ reference: "OPN-1724-ABCDE", note: "x".repeat(1001) }).success).toBe(false);
   });
   it("requires valid ascending age thresholds for opname priority", () => {
-    const base = { businessName: "Kopi Nusantara", storeLocation: "Cibitung Bekasi", currency: "IDR", timezone: "Asia/Jakarta" };
+    const base = { businessName: "Kopi Nusantara", storeLocation: "Cibitung Bekasi", currency: "IDR", timezone: "Asia/Jakarta", inventoryVarianceAbsoluteTolerance: 0.001, inventoryVariancePercentageTolerance: 1 };
     expect(settingsInput.safeParse({ ...base, opnameWarningAgeDays: 4, opnameCriticalAgeDays: 9 }).success).toBe(true);
     expect(settingsInput.safeParse({ ...base, opnameWarningAgeDays: 7, opnameCriticalAgeDays: 7 }).success).toBe(false);
     expect(settingsInput.safeParse({ ...base, opnameWarningAgeDays: 0, opnameCriticalAgeDays: 7 }).success).toBe(false);
+  });
+
+  it("accepts bounded inventory variance tolerances and rejects invalid values", () => {
+    const base = { businessName: "Kopi Nusantara", storeLocation: "Cibitung Bekasi", currency: "IDR", timezone: "Asia/Jakarta", opnameWarningAgeDays: 3, opnameCriticalAgeDays: 7 };
+    expect(settingsInput.safeParse({ ...base, inventoryVarianceAbsoluteTolerance: 0.25, inventoryVariancePercentageTolerance: 2.5 }).success).toBe(true);
+    expect(settingsInput.safeParse({ ...base, inventoryVarianceAbsoluteTolerance: -0.001, inventoryVariancePercentageTolerance: 2.5 }).success).toBe(false);
+    expect(settingsInput.safeParse({ ...base, inventoryVarianceAbsoluteTolerance: 0.25, inventoryVariancePercentageTolerance: 100.001 }).success).toBe(false);
   });
 });

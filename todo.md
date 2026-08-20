@@ -203,3 +203,8 @@
 - [x] Definisikan tujuan tautan sesi aktif dengan prioritas tertinggi dan empty state tanpa sesi terbuka.
 - [x] Tambahkan shortcut dashboard untuk membuka sesi opname berprioritas tertinggi secara langsung.
 - [x] Tambahkan pengujian navigasi, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
+- [x] Audit perhitungan varians inventory, status saat ini, dan pengaturan yang dapat dipakai kembali untuk Variance Tolerance Engine.
+- [x] Definisikan kebijakan toleransi varians, nilai bawaan, kontrak data, dan pesan validasi berbahasa Indonesia.
+- [x] Tambahkan penyimpanan pengaturan toleransi dan klasifikasi varians berbasis toleransi tanpa membuat model inventory baru.
+- [x] Tampilkan hasil varians sadar-toleransi pada Dashboard, Inventory Intelligence, dan Settings.
+- [x] Tambahkan pengujian toleransi, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.

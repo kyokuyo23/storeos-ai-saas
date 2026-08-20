@@ -1,0 +1,2 @@
+ALTER TABLE `businessSettings` ADD `inventoryVarianceAbsoluteTolerance` decimal(14,3) DEFAULT 0.001 NOT NULL;--> statement-breakpoint
+ALTER TABLE `businessSettings` ADD `inventoryVariancePercentageTolerance` decimal(6,3) DEFAULT 0 NOT NULL;

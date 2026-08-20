@@ -154,6 +154,8 @@ export const settingsInput = z.object({
   timezone: requiredText("Zona waktu wajib diisi."),
   opnameWarningAgeDays: z.coerce.number({ message: "Ambang peringatan harus berupa angka." }).int("Ambang peringatan harus berupa bilangan bulat.").min(1, "Ambang peringatan minimal 1 hari.").max(365, "Ambang peringatan maksimal 365 hari."),
   opnameCriticalAgeDays: z.coerce.number({ message: "Ambang mendesak harus berupa angka." }).int("Ambang mendesak harus berupa bilangan bulat.").min(2, "Ambang mendesak minimal 2 hari.").max(365, "Ambang mendesak maksimal 365 hari."),
+  inventoryVarianceAbsoluteTolerance: z.coerce.number({ message: "Toleransi absolut harus berupa angka." }).finite("Toleransi absolut harus berupa angka.").min(0, "Toleransi absolut tidak boleh negatif.").max(1000000, "Toleransi absolut terlalu besar."),
+  inventoryVariancePercentageTolerance: z.coerce.number({ message: "Toleransi persentase harus berupa angka." }).finite("Toleransi persentase harus berupa angka.").min(0, "Toleransi persentase tidak boleh negatif.").max(100, "Toleransi persentase maksimal 100%."),
 }).superRefine((input, context) => {
   if (input.opnameCriticalAgeDays <= input.opnameWarningAgeDays) context.addIssue({ code: "custom", path: ["opnameCriticalAgeDays"], message: "Ambang mendesak harus lebih besar dari ambang peringatan." });
 });

@@ -50,4 +50,26 @@ describe("summarizeInventoryIntelligence", () => {
 
     expect(report.rows[0]).toMatchObject({ expectedClosingStock: 8, actualClosingStock: 7, variance: -1, varianceValue: -3, opnameQuantity: -1, status: "under" });
   });
+
+  it("menerapkan nilai toleransi terbesar dari batas absolut atau persentase stok ekspektasi", () => {
+    const report = summarizeInventoryIntelligence([ingredient], [
+      movement("purchase", 100, 100, "2026-08-09T09:00:00.000Z"),
+      movement("sale", -20, 80, "2026-08-10T09:00:00.000Z"),
+      movement("adjustment", 0.6, 80.6, "2026-08-10T10:00:00.000Z"),
+    ], range, { absoluteQuantity: 0.25, percentage: 1 });
+
+    expect(report.rows[0]).toMatchObject({ expectedClosingStock: 80, actualClosingStock: 80.6, variance: 0.6, relativeToleranceQuantity: 0.8, toleranceQuantity: 0.8, varianceExcess: 0, withinTolerance: true, status: "ok" });
+    expect(report.summary).toMatchObject({ withinToleranceCount: 1, overCount: 0, underCount: 0, totalExcessVarianceValue: 0 });
+  });
+
+  it("menandai hanya varians yang melebihi toleransi serta menghitung nilai kelebihannya", () => {
+    const report = summarizeInventoryIntelligence([ingredient], [
+      movement("purchase", 10, 10, "2026-08-09T09:00:00.000Z"),
+      movement("sale", -2, 8, "2026-08-10T09:00:00.000Z"),
+      movement("opname", -1, 7, "2026-08-10T10:00:00.000Z"),
+    ], range, { absoluteQuantity: 0.25, percentage: 0 });
+
+    expect(report.rows[0]).toMatchObject({ variance: -1, toleranceQuantity: 0.25, varianceExcess: 0.75, varianceExcessValue: 2.25, withinTolerance: false, status: "under" });
+    expect(report.summary).toMatchObject({ withinToleranceCount: 0, underCount: 1, totalExcessVarianceValue: 2.25 });
+  });
 });

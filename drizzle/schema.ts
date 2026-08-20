@@ -182,6 +182,8 @@ export const businessSettings = mysqlTable("businessSettings", {
   timezone: varchar("timezone", { length: 80 }).notNull(),
   opnameWarningAgeDays: int("opnameWarningAgeDays").default(3).notNull(),
   opnameCriticalAgeDays: int("opnameCriticalAgeDays").default(7).notNull(),
+  inventoryVarianceAbsoluteTolerance: decimal("inventoryVarianceAbsoluteTolerance", { precision: 14, scale: 3, mode: "number" }).default(0.001).notNull(),
+  inventoryVariancePercentageTolerance: decimal("inventoryVariancePercentageTolerance", { precision: 6, scale: 3, mode: "number" }).default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

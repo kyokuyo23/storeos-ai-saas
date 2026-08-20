@@ -376,9 +376,12 @@ export function resolveSettlementDateRange(input?: z.infer<typeof settlementDate
 export async function getInventoryIntelligence(input?: z.infer<typeof inventoryIntelligenceInput>) {
   const db = await requireDb();
   const { start, end, startDate, endDate } = resolveSettlementDateRange(input);
-  const ingredientRows = await db.select({ id: ingredients.id, name: ingredients.name, unit: ingredients.unit, costPerUnit: ingredients.costPerUnit }).from(ingredients).orderBy(ingredients.name);
-  const movementRows = await db.select({ ingredientId: stockMovements.ingredientId, type: stockMovements.type, quantityDelta: stockMovements.quantityDelta, balanceAfter: stockMovements.balanceAfter, occurredAt: stockMovements.occurredAt }).from(stockMovements).where(lt(stockMovements.occurredAt, end)).orderBy(stockMovements.occurredAt, stockMovements.id);
-  return { ...summarizeInventoryIntelligence(ingredientRows, movementRows, { start, end }), dateStart: start, dateEnd: end, startDate, endDate };
+  const [ingredientRows, movementRows, settings] = await Promise.all([
+    db.select({ id: ingredients.id, name: ingredients.name, unit: ingredients.unit, costPerUnit: ingredients.costPerUnit }).from(ingredients).orderBy(ingredients.name),
+    db.select({ ingredientId: stockMovements.ingredientId, type: stockMovements.type, quantityDelta: stockMovements.quantityDelta, balanceAfter: stockMovements.balanceAfter, occurredAt: stockMovements.occurredAt }).from(stockMovements).where(lt(stockMovements.occurredAt, end)).orderBy(stockMovements.occurredAt, stockMovements.id),
+    getSettings(),
+  ]);
+  return { ...summarizeInventoryIntelligence(ingredientRows, movementRows, { start, end }, { absoluteQuantity: settings.inventoryVarianceAbsoluteTolerance, percentage: settings.inventoryVariancePercentageTolerance }), dateStart: start, dateEnd: end, startDate, endDate };
 }
 
 export async function getDailySettlementSummary(input?: z.infer<typeof settlementDateRangeInput>) {
@@ -439,7 +442,7 @@ export async function listSales() {
   return records.map((sale) => ({ ...sale, financial: financialBySaleId.get(sale.id) ?? { saleId: sale.id, revenue: 0, cogs: 0, grossProfit: 0, grossMargin: 0, unitsSold: 0 } }));
 }
 
-const defaults = { businessName: "Kopi Nusantara", storeLocation: "Cibitung Bekasi", currency: "IDR", timezone: "Asia/Jakarta", opnameWarningAgeDays: 3, opnameCriticalAgeDays: 7 };
+const defaults = { businessName: "Kopi Nusantara", storeLocation: "Cibitung Bekasi", currency: "IDR", timezone: "Asia/Jakarta", opnameWarningAgeDays: 3, opnameCriticalAgeDays: 7, inventoryVarianceAbsoluteTolerance: 0.001, inventoryVariancePercentageTolerance: 0 };
 export async function getSettings() {
   const db = await requireDb(); const existing = await db.select().from(businessSettings).limit(1);
   if (existing[0]) return existing[0];
