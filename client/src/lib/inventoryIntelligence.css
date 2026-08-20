@@ -1,0 +1,31 @@
+.variance-summary { display: grid; gap: 14px; }
+.variance-summary-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.variance-summary-metrics > div { display: grid; gap: 5px; padding: 12px; border: 1px solid #e3ede7; border-radius: 11px; background: #f9fcfa; }
+.variance-summary-metrics span, .variance-summary-metrics small { color: #84918a; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.variance-summary-metrics strong { color: #154f3c; font-size: 18px; letter-spacing: -.03em; }
+.variance-summary-metrics small { font-size: 9px; letter-spacing: 0; text-transform: none; }
+.variance-summary-list { display: grid; gap: 7px; }
+.variance-summary-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid #edf1ee; }
+.variance-summary-row:last-child { border-bottom: 0; }
+.variance-summary-row strong, .variance-summary-row small { display: block; }
+.variance-summary-row strong { color: #263630; font-size: 12px; }
+.variance-summary-row small { margin-top: 3px; color: #8c9993; font-size: 11px; }
+.variance-badge { display: inline-flex; align-items: center; justify-content: center; width: fit-content; padding: 4px 8px; border-radius: 99px; font-size: 10px; font-weight: 800; white-space: nowrap; }
+.variance-badge.ok { color: #16734f; background: #e7f7ee; }
+.variance-badge.over { color: #1b6387; background: #e9f6fc; }
+.variance-badge.under { color: #b54742; background: #fff0ef; }
+.inventory-variance-metrics { margin: 0 0 14px; }
+.variance-selected { background: #f2faf5; }
+.variance-drill-down { display: grid; gap: 13px; margin-top: 15px; padding: 15px; border: 1px solid #dcece2; border-radius: 12px; background: #fbfefc; }
+.variance-drill-down-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.variance-drill-down-heading > div { display: grid; gap: 4px; }
+.variance-drill-down-heading span { color: #168460; font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.variance-drill-down-heading strong { color: #263630; font-size: 15px; }
+.variance-drill-down-heading small { color: #829089; font-size: 11px; }
+
+@media (max-width: 560px) {
+  .variance-summary-metrics { grid-template-columns: 1fr; }
+  .variance-drill-down { padding: 12px; }
+  .variance-drill-down-heading { flex-direction: column; }
+  .variance-drill-down-heading .button { width: 100%; }
+}

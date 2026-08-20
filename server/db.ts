@@ -4,10 +4,11 @@ import { nanoid } from "nanoid";
 import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import type { z } from "zod";
-import type { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput } from "./foundationSchemas";
+import type { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput } from "./foundationSchemas";
 import { resolveStockMovement } from "./inventory";
 import { planRecipeDeductions } from "./sales";
 import { summarizeFinancialSales, summarizeProductFinancialDetail, type FinancialSale } from "./financials";
+import { summarizeInventoryIntelligence } from "./inventoryIntelligence";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
@@ -64,6 +65,15 @@ export async function updateIngredient(id: number, input: z.infer<typeof ingredi
 export async function listStockMovements() {
   const db = await requireDb();
   return db.select({ id: stockMovements.id, ingredientId: stockMovements.ingredientId, ingredientName: ingredients.name, unit: ingredients.unit, saleId: stockMovements.saleId, saleItemId: stockMovements.saleItemId, partialRefundId: stockMovements.partialRefundId, exchangeId: stockMovements.exchangeId, saleReceiptNumber: sales.receiptNumber, saleItemProductName: products.name, type: stockMovements.type, quantityDelta: stockMovements.quantityDelta, balanceAfter: stockMovements.balanceAfter, note: stockMovements.note, occurredAt: stockMovements.occurredAt }).from(stockMovements).innerJoin(ingredients, eq(stockMovements.ingredientId, ingredients.id)).leftJoin(sales, eq(stockMovements.saleId, sales.id)).leftJoin(saleItems, eq(stockMovements.saleItemId, saleItems.id)).leftJoin(products, eq(saleItems.productId, products.id)).orderBy(desc(stockMovements.occurredAt), desc(stockMovements.id));
+}
+
+export async function getIngredientMovementDrillDown(input: z.infer<typeof inventoryMovementDrillDownInput>) {
+  const db = await requireDb();
+  const ingredient = (await db.select({ id: ingredients.id, name: ingredients.name, unit: ingredients.unit }).from(ingredients).where(eq(ingredients.id, input.ingredientId)).limit(1))[0];
+  if (!ingredient) throw new Error("Bahan tidak ditemukan.");
+  const { start, end, startDate, endDate } = resolveSettlementDateRange(input);
+  const movements = await db.select({ id: stockMovements.id, ingredientId: stockMovements.ingredientId, ingredientName: ingredients.name, unit: ingredients.unit, saleId: stockMovements.saleId, saleItemId: stockMovements.saleItemId, partialRefundId: stockMovements.partialRefundId, exchangeId: stockMovements.exchangeId, saleReceiptNumber: sales.receiptNumber, saleItemProductName: products.name, type: stockMovements.type, quantityDelta: stockMovements.quantityDelta, balanceAfter: stockMovements.balanceAfter, note: stockMovements.note, occurredAt: stockMovements.occurredAt }).from(stockMovements).innerJoin(ingredients, eq(stockMovements.ingredientId, ingredients.id)).leftJoin(sales, eq(stockMovements.saleId, sales.id)).leftJoin(saleItems, eq(stockMovements.saleItemId, saleItems.id)).leftJoin(products, eq(saleItems.productId, products.id)).where(and(eq(stockMovements.ingredientId, input.ingredientId), gte(stockMovements.occurredAt, start), lt(stockMovements.occurredAt, end))).orderBy(desc(stockMovements.occurredAt), desc(stockMovements.id));
+  return { ingredient, movements, dateStart: start, dateEnd: end, startDate, endDate };
 }
 export async function recordStockMovement(input: z.infer<typeof stockMovementInput>) {
   const db = await requireDb();
@@ -314,6 +324,14 @@ export function resolveSettlementDateRange(input?: z.infer<typeof settlementDate
   const start = new Date(`${input.startDate}T00:00:00+07:00`);
   const endStart = new Date(`${input.endDate}T00:00:00+07:00`);
   return { start, end: new Date(endStart.getTime() + 24 * 60 * 60 * 1000), startDate: input.startDate, endDate: input.endDate };
+}
+
+export async function getInventoryIntelligence(input?: z.infer<typeof inventoryIntelligenceInput>) {
+  const db = await requireDb();
+  const { start, end, startDate, endDate } = resolveSettlementDateRange(input);
+  const ingredientRows = await db.select({ id: ingredients.id, name: ingredients.name, unit: ingredients.unit, costPerUnit: ingredients.costPerUnit }).from(ingredients).orderBy(ingredients.name);
+  const movementRows = await db.select({ ingredientId: stockMovements.ingredientId, type: stockMovements.type, quantityDelta: stockMovements.quantityDelta, balanceAfter: stockMovements.balanceAfter, occurredAt: stockMovements.occurredAt }).from(stockMovements).where(lt(stockMovements.occurredAt, end)).orderBy(stockMovements.occurredAt, stockMovements.id);
+  return { ...summarizeInventoryIntelligence(ingredientRows, movementRows, { start, end }), dateStart: start, dateEnd: end, startDate, endDate };
 }
 
 export async function getDailySettlementSummary(input?: z.infer<typeof settlementDateRangeInput>) {

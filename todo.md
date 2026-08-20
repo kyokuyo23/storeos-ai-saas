@@ -135,3 +135,8 @@
 - [x] Add a responsive period-over-period ingredient cost summary table below the product trend chart.
 - [x] Add comparison tests, run the full suite, TypeScript check, production build, desktop/mobile validation, and save the delivery checkpoint.
 - [x] Save the delivery checkpoint for the validated period-over-period ingredient cost comparison.
+- [x] Audit existing persisted inventory balances, stock movements, recipes, completed sales, refunds, voids, exchanges, waste, adjustments, and opname handling for Inventory Intelligence reuse.
+- [x] Define Jakarta/WIB theoretical consumption, expected and actual closing stock, variance quantity, variance value, and status rules without duplicate inventory models.
+- [x] Add Inventory Intelligence reporting and movement drill-down services that correctly account for sale deductions, reversals, exchanges, waste, adjustments, and stock opname.
+- [x] Add a responsive dashboard variance summary and Inventory variance drill-down interface with Jakarta/WIB date filtering.
+- [x] Add inventory intelligence acceptance tests, run the full suite, TypeScript check, production build, desktop/mobile validation, and save the delivery checkpoint.

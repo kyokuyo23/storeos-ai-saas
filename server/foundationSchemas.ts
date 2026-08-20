@@ -90,26 +90,34 @@ const isValidCalendarDate = (value: string) => {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 };
 
-export const settlementDateRangeInput = z.object({
-  startDate: jakartaDateInput.optional(),
-  endDate: jakartaDateInput.optional(),
-}).superRefine((input, context) => {
+const validateJakartaDateRange = (input: { startDate?: string; endDate?: string }, context: z.RefinementCtx) => {
   if (Boolean(input.startDate) !== Boolean(input.endDate)) context.addIssue({ code: "custom", path: [input.startDate ? "endDate" : "startDate"], message: "Tanggal mulai dan akhir harus diisi bersama." });
   if (input.startDate && !isValidCalendarDate(input.startDate)) context.addIssue({ code: "custom", path: ["startDate"], message: "Tanggal mulai tidak valid." });
   if (input.endDate && !isValidCalendarDate(input.endDate)) context.addIssue({ code: "custom", path: ["endDate"], message: "Tanggal akhir tidak valid." });
   if (input.startDate && input.endDate && input.startDate > input.endDate) context.addIssue({ code: "custom", path: ["endDate"], message: "Tanggal akhir tidak boleh lebih awal dari tanggal mulai." });
-});
+};
+
+export const settlementDateRangeInput = z.object({
+  startDate: jakartaDateInput.optional(),
+  endDate: jakartaDateInput.optional(),
+}).superRefine(validateJakartaDateRange);
+
+export const inventoryIntelligenceInput = z.object({
+  startDate: jakartaDateInput.optional(),
+  endDate: jakartaDateInput.optional(),
+}).superRefine(validateJakartaDateRange);
+
+export const inventoryMovementDrillDownInput = z.object({
+  ingredientId: z.coerce.number().int().positive("Bahan wajib dipilih."),
+  startDate: jakartaDateInput.optional(),
+  endDate: jakartaDateInput.optional(),
+}).superRefine(validateJakartaDateRange);
 
 export const productFinancialInput = z.object({
   productId: z.coerce.number().int().positive("Produk wajib dipilih."),
   startDate: jakartaDateInput.optional(),
   endDate: jakartaDateInput.optional(),
-}).superRefine((input, context) => {
-  if (Boolean(input.startDate) !== Boolean(input.endDate)) context.addIssue({ code: "custom", path: [input.startDate ? "endDate" : "startDate"], message: "Tanggal mulai dan akhir harus diisi bersama." });
-  if (input.startDate && !isValidCalendarDate(input.startDate)) context.addIssue({ code: "custom", path: ["startDate"], message: "Tanggal mulai tidak valid." });
-  if (input.endDate && !isValidCalendarDate(input.endDate)) context.addIssue({ code: "custom", path: ["endDate"], message: "Tanggal akhir tidak valid." });
-  if (input.startDate && input.endDate && input.startDate > input.endDate) context.addIssue({ code: "custom", path: ["endDate"], message: "Tanggal akhir tidak boleh lebih awal dari tanggal mulai." });
-});
+}).superRefine(validateJakartaDateRange);
 
 export const settingsInput = z.object({
   businessName: requiredText("Nama bisnis wajib diisi."),

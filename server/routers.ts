@@ -5,7 +5,7 @@ import { mapFoundationError } from "./foundationErrors";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
-import { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput } from "./foundationSchemas";
+import { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput } from "./foundationSchemas";
 
 const idInput = z.object({ id: z.number().int().positive() });
 const runMutation = async <T>(entity: string, operation: () => Promise<T>) => {
@@ -35,6 +35,8 @@ export const appRouter = router({
   }),
   stockMovement: router({
     list: publicProcedure.query(() => db.listStockMovements()),
+    intelligence: publicProcedure.input(inventoryIntelligenceInput.optional()).query(({ input }) => db.getInventoryIntelligence(input)),
+    drillDown: publicProcedure.input(inventoryMovementDrillDownInput).query(({ input }) => runMutation("Bahan", () => db.getIngredientMovementDrillDown(input))),
     record: publicProcedure.input(stockMovementInput).mutation(({ input }) => runMutation("Pergerakan stok", () => db.recordStockMovement(input))),
   }),
   recipe: router({
