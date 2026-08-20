@@ -28,3 +28,59 @@
   font-size: 0.72rem;
   font-weight: 600;
 }
+
+.opname-dashboard-summary .opname-oldest-session-link {
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-left-width: 4px;
+  border-radius: 0.75rem;
+  min-width: 0;
+  padding: 0.72rem;
+}
+
+.opname-dashboard-summary .opname-oldest-session-link em {
+  align-self: flex-start;
+  border-radius: 999px;
+  font-size: 0.67rem;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0.34rem 0.48rem;
+}
+
+.opname-dashboard-summary .opname-oldest-session-link.age-priority-normal {
+  background: color-mix(in srgb, #ecfdf5 76%, var(--card));
+  border-color: color-mix(in srgb, #10b981 46%, var(--border));
+}
+
+.opname-dashboard-summary .opname-oldest-session-link.age-priority-normal em {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.opname-dashboard-summary .opname-oldest-session-link.age-priority-warning {
+  background: color-mix(in srgb, #fffbeb 78%, var(--card));
+  border-color: color-mix(in srgb, #f59e0b 56%, var(--border));
+}
+
+.opname-dashboard-summary .opname-oldest-session-link.age-priority-warning em {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.opname-dashboard-summary .opname-oldest-session-link.age-priority-critical {
+  background: color-mix(in srgb, #fef2f2 78%, var(--card));
+  border-color: color-mix(in srgb, #ef4444 58%, var(--border));
+}
+
+.opname-dashboard-summary .opname-oldest-session-link.age-priority-critical em {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.opname-dashboard-summary .opname-oldest-session-empty {
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-left: 4px solid color-mix(in srgb, var(--muted-foreground) 34%, var(--border));
+  border-radius: 0.75rem;
+  min-width: 0;
+  padding: 0.72rem;
+}

@@ -178,3 +178,7 @@
 - [x] Definisikan parameter URL sesi audit untuk membuka rincian sesi tertua secara langsung.
 - [x] Implementasikan tautan kartu usia sesi tertua serta perluasan rincian sesi otomatis di Riwayat Opname.
 - [x] Tambahkan pengujian navigasi langsung, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
+- [x] Audit data usia sesi opname tertua serta gaya kartu dashboard yang tersedia.
+- [x] Definisikan ambang usia dan aturan indikator prioritas yang dapat diakses.
+- [x] Implementasikan klasifikasi ambang usia dan penanda warna pada kartu dashboard.
+- [x] Tambahkan pengujian indikator usia, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
