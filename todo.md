@@ -208,3 +208,7 @@
 - [x] Tambahkan penyimpanan pengaturan toleransi dan klasifikasi varians berbasis toleransi tanpa membuat model inventory baru.
 - [x] Tampilkan hasil varians sadar-toleransi pada Dashboard, Inventory Intelligence, dan Settings.
 - [x] Tambahkan pengujian toleransi, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
+- [x] Audit data varians Inventory Intelligence, filter yang tersedia, dan perilaku drill-down untuk filter di luar toleransi.
+- [x] Definisikan state filter, empty state, dan label kontrol yang dapat diakses untuk item di luar toleransi.
+- [x] Implementasikan filter Inventory Analysis yang hanya menampilkan item dengan varians melebihi toleransi aktif.
+- [x] Tambahkan pengujian filter, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
