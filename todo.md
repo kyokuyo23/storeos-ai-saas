@@ -187,3 +187,7 @@
 - [x] Implementasikan penyimpanan ambang usia dan gunakan nilai tersebut pada klasifikasi kartu dashboard.
 - [x] Tambahkan kontrol ambang usia responsif pada halaman Settings dengan umpan balik penerapan di dashboard.
 - [x] Tambahkan pengujian pengaturan ambang, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
+- [x] Audit render sesi Riwayat Opname dan akses pengaturan ambang usia yang tersimpan.
+- [x] Definisikan klasifikasi prioritas serta ikon dan label yang dapat diakses untuk setiap sesi.
+- [x] Implementasikan ikon prioritas berbasis ambang usia yang tersimpan pada Riwayat Opname.
+- [x] Tambahkan pengujian indikator sesi, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.

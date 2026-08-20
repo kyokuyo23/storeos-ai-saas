@@ -11,6 +11,13 @@
 .opname-history-card-top span, .opname-history-metrics span { color: #809087; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .opname-history-card-top strong { color: #154f3c; font-size: 15px; letter-spacing: -.02em; }
 .opname-history-card-top small { color: #829089; font-size: 11px; }
+.opname-session-priority { display: inline-flex !important; width: fit-content; align-items: center; gap: 5px; margin-top: 3px; padding: 4px 8px; border-radius: 99px; font-size: 11px !important; font-weight: 800; letter-spacing: 0 !important; text-transform: none !important; }
+.opname-session-priority b { font-size: 11px; }
+.opname-session-priority small { color: currentColor !important; font-size: 11px !important; }
+.opname-session-priority.normal { color: #1c7251; background: #e7f7ed; }
+.opname-session-priority.warning { color: #a84d1d; background: #fff0e5; }
+.opname-session-priority.critical { color: #b54742; background: #feeceb; }
+.opname-session-priority.resolved, .opname-session-priority.not_required { color: #1d5d88; background: #e8f4fd; }
 .opname-history-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .opname-history-metrics > div { display: grid; gap: 4px; padding: 10px; border-radius: 9px; background: #f7fbf8; }
 .opname-history-metrics strong { color: #263630; font-size: 14px; }
