@@ -145,3 +145,8 @@
 - [x] Implementasikan pencatatan batch stock-opname atomik ke ledger pergerakan stok yang ada.
 - [x] Tambahkan antarmuka stock-opname responsif untuk input jumlah fisik, filter bahan, ringkasan selisih, dan hasil pencatatan.
 - [x] Tambahkan pengujian transaksi stock-opname, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
+- [x] Audit struktur referensi audit opname, data pergerakan stok, dan pola navigasi Inventory yang tersedia.
+- [x] Definisikan pengelompokan sesi opname serta filter nomor referensi dari catatan ledger yang sudah ada.
+- [x] Tambahkan query riwayat sesi opname dan route publik tanpa tabel atau model inventory baru.
+- [x] Buat halaman riwayat sesi opname responsif dengan filter nomor referensi, ringkasan sesi, dan rincian bahan.
+- [x] Tambahkan pengujian riwayat opname, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.

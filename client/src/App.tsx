@@ -3,6 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Foundation from "./pages/Foundation";
+import { StockOpnameHistory } from "./components/StockOpnameHistory";
 import { Route, Switch } from "wouter";
 
 function Router() {
@@ -10,6 +11,7 @@ function Router() {
     <Route path="/" component={() => <Foundation page="dashboard" />} />
     <Route path="/products" component={() => <Foundation page="products" />} />
     <Route path="/inventory" component={() => <Foundation page="inventory" />} />
+    <Route path="/inventory/opname-history" component={StockOpnameHistory} />
     <Route path="/settings" component={() => <Foundation page="settings" />} />
     <Route path="/pos" component={() => <Foundation page="pos" />} />
     <Route path="/sales" component={() => <Foundation page="sales" />} />

@@ -52,6 +52,10 @@ export const stockOpnameBatchInput = z.object({
   });
 });
 
+export const stockOpnameHistoryInput = z.object({
+  reference: z.string().trim().max(100, "Nomor referensi audit terlalu panjang.").optional(),
+});
+
 export const recipeInput = z.object({
   productId: z.coerce.number().int().positive("Produk wajib dipilih."),
   name: requiredText("Nama resep wajib diisi."),

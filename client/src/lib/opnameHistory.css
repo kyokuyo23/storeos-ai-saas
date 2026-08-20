@@ -1,0 +1,29 @@
+.opname-history-filter { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; }
+.opname-history-filter .field, .opname-history-filter .form-actions { margin: 0; }
+.opname-filter-input { position: relative; }
+.opname-filter-input svg { position: absolute; z-index: 1; top: 50%; left: 12px; color: #779086; transform: translateY(-50%); pointer-events: none; }
+.opname-filter-input .form-input { padding-left: 38px; }
+.opname-history-list { display: grid; gap: 11px; }
+.opname-history-card { display: grid; gap: 13px; padding: 15px; border: 1px solid #e0ebe4; border-radius: 13px; background: #fff; transition: border-color 160ms ease-out, box-shadow 160ms ease-out; }
+.opname-history-card.open { border-color: #a9d9c2; box-shadow: 0 9px 24px rgba(23, 96, 67, .07); }
+.opname-history-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.opname-history-card-top > div { display: grid; gap: 4px; }
+.opname-history-card-top span, .opname-history-metrics span { color: #809087; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.opname-history-card-top strong { color: #154f3c; font-size: 15px; letter-spacing: -.02em; }
+.opname-history-card-top small { color: #829089; font-size: 11px; }
+.opname-history-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.opname-history-metrics > div { display: grid; gap: 4px; padding: 10px; border-radius: 9px; background: #f7fbf8; }
+.opname-history-metrics strong { color: #263630; font-size: 14px; }
+.opname-history-detail { padding-top: 2px; border-top: 1px solid #edf2ee; }
+.opname-history-detail .table-wrap { margin-top: 12px; }
+.opname-match { color: #16734f; }
+.opname-over { color: #1b6387; }
+.opname-under { color: #b54742; }
+@media (max-width: 560px) {
+  .opname-history-filter { grid-template-columns: 1fr; }
+  .opname-history-filter .form-actions { width: 100%; }
+  .opname-history-filter .form-actions .button { flex: 1; }
+  .opname-history-card-top { flex-direction: column; }
+  .opname-history-card-top .button { width: 100%; }
+  .opname-history-metrics { grid-template-columns: 1fr; }
+}
