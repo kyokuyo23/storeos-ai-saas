@@ -152,4 +152,8 @@ export const settingsInput = z.object({
   storeLocation: requiredText("Lokasi toko wajib diisi."),
   currency: requiredText("Mata uang wajib diisi."),
   timezone: requiredText("Zona waktu wajib diisi."),
+  opnameWarningAgeDays: z.coerce.number({ message: "Ambang peringatan harus berupa angka." }).int("Ambang peringatan harus berupa bilangan bulat.").min(1, "Ambang peringatan minimal 1 hari.").max(365, "Ambang peringatan maksimal 365 hari."),
+  opnameCriticalAgeDays: z.coerce.number({ message: "Ambang mendesak harus berupa angka." }).int("Ambang mendesak harus berupa bilangan bulat.").min(2, "Ambang mendesak minimal 2 hari.").max(365, "Ambang mendesak maksimal 365 hari."),
+}).superRefine((input, context) => {
+  if (input.opnameCriticalAgeDays <= input.opnameWarningAgeDays) context.addIssue({ code: "custom", path: ["opnameCriticalAgeDays"], message: "Ambang mendesak harus lebih besar dari ambang peringatan." });
 });

@@ -439,7 +439,7 @@ export async function listSales() {
   return records.map((sale) => ({ ...sale, financial: financialBySaleId.get(sale.id) ?? { saleId: sale.id, revenue: 0, cogs: 0, grossProfit: 0, grossMargin: 0, unitsSold: 0 } }));
 }
 
-const defaults = { businessName: "Kopi Nusantara", storeLocation: "Cibitung Bekasi", currency: "IDR", timezone: "Asia/Jakarta" };
+const defaults = { businessName: "Kopi Nusantara", storeLocation: "Cibitung Bekasi", currency: "IDR", timezone: "Asia/Jakarta", opnameWarningAgeDays: 3, opnameCriticalAgeDays: 7 };
 export async function getSettings() {
   const db = await requireDb(); const existing = await db.select().from(businessSettings).limit(1);
   if (existing[0]) return existing[0];

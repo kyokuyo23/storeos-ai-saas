@@ -182,3 +182,8 @@
 - [x] Definisikan ambang usia dan aturan indikator prioritas yang dapat diakses.
 - [x] Implementasikan klasifikasi ambang usia dan penanda warna pada kartu dashboard.
 - [x] Tambahkan pengujian indikator usia, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
+- [x] Audit penyimpanan Settings dan klasifikasi prioritas usia sesi opname yang tersedia.
+- [x] Definisikan nilai bawaan serta validasi ambang peringatan dan mendesak pada Settings.
+- [x] Implementasikan penyimpanan ambang usia dan gunakan nilai tersebut pada klasifikasi kartu dashboard.
+- [x] Tambahkan kontrol ambang usia responsif pada halaman Settings dengan umpan balik penerapan di dashboard.
+- [x] Tambahkan pengujian pengaturan ambang, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.

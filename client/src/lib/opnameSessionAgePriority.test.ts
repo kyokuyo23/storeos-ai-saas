@@ -16,4 +16,9 @@ describe("getOpenOpnameAgePriority", () => {
     expect(getOpenOpnameAgePriority(6).tone).toBe("warning");
     expect(getOpenOpnameAgePriority(7)).toMatchObject({ tone: "critical", label: "Mendesak" });
   });
+
+  it("uses the configured warning and critical thresholds", () => {
+    expect(getOpenOpnameAgePriority(4, { warningAgeDays: 4, criticalAgeDays: 9 })).toMatchObject({ tone: "warning", label: "Perlu perhatian" });
+    expect(getOpenOpnameAgePriority(9, { warningAgeDays: 4, criticalAgeDays: 9 })).toMatchObject({ tone: "critical", label: "Mendesak" });
+  });
 });

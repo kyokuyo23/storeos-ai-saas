@@ -180,6 +180,8 @@ export const businessSettings = mysqlTable("businessSettings", {
   storeLocation: varchar("storeLocation", { length: 200 }).notNull(),
   currency: varchar("currency", { length: 12 }).notNull(),
   timezone: varchar("timezone", { length: 80 }).notNull(),
+  opnameWarningAgeDays: int("opnameWarningAgeDays").default(3).notNull(),
+  opnameCriticalAgeDays: int("opnameCriticalAgeDays").default(7).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
