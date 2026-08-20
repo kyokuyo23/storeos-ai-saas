@@ -36,3 +36,26 @@ export function getOpnameHistorySessionPriority(input: { ageDays: number; requir
   const priority = getOpenOpnameAgePriority(input.ageDays, input.thresholds);
   return { tone: priority.tone === "empty" ? "normal" : priority.tone, label: priority.label, description: priority.description, ageDays: input.ageDays };
 }
+
+const priorityRank: Record<OpnameHistorySessionPriority["tone"], number> = {
+  critical: 5,
+  warning: 4,
+  normal: 3,
+  resolved: 2,
+  not_required: 1,
+};
+
+export function sortOpnameHistorySessionsByPriority<T>(
+  sessions: readonly T[],
+  getPriority: (session: T) => OpnameHistorySessionPriority,
+  getOccurredAt: (session: T) => Date,
+  getReference: (session: T) => string,
+) {
+  return [...sessions].sort((left, right) => {
+    const rankDelta = priorityRank[getPriority(right).tone] - priorityRank[getPriority(left).tone];
+    if (rankDelta !== 0) return rankDelta;
+    const timeDelta = getOccurredAt(left).getTime() - getOccurredAt(right).getTime();
+    if (timeDelta !== 0) return timeDelta;
+    return getReference(left).localeCompare(getReference(right), "id");
+  });
+}

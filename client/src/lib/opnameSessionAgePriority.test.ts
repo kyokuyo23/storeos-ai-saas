@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getJakartaCalendarDayAge, getOpnameHistorySessionPriority, getOpenOpnameAgePriority } from "./opnameSessionAgePriority";
+import { getJakartaCalendarDayAge, getOpnameHistorySessionPriority, getOpenOpnameAgePriority, sortOpnameHistorySessionsByPriority } from "./opnameSessionAgePriority";
 
 describe("getOpenOpnameAgePriority", () => {
   it("marks the absence of unresolved sessions distinctly", () => {
@@ -30,5 +30,23 @@ describe("getOpenOpnameAgePriority", () => {
     expect(getOpnameHistorySessionPriority({ ageDays: 8, requiresFollowUp: false, isResolved: false })).toMatchObject({ tone: "not_required", label: "Sesuai", ageDays: null });
     expect(getOpnameHistorySessionPriority({ ageDays: 8, requiresFollowUp: true, isResolved: true })).toMatchObject({ tone: "resolved", label: "Tuntas" });
     expect(getOpnameHistorySessionPriority({ ageDays: 5, requiresFollowUp: true, isResolved: false, thresholds: { warningAgeDays: 4, criticalAgeDays: 8 } })).toMatchObject({ tone: "warning", label: "Perlu perhatian", ageDays: 5 });
+  });
+
+  it("orders critical sessions first, then follows age and audit reference deterministically within a priority", () => {
+    const sessions = [
+      { reference: "OPN-NORMAL", occurredAt: new Date("2026-08-19T09:00:00.000Z"), tone: "normal" as const },
+      { reference: "OPN-CRITICAL-B", occurredAt: new Date("2026-08-18T10:00:00.000Z"), tone: "critical" as const },
+      { reference: "OPN-RESOLVED", occurredAt: new Date("2026-08-15T10:00:00.000Z"), tone: "resolved" as const },
+      { reference: "OPN-CRITICAL-A", occurredAt: new Date("2026-08-18T10:00:00.000Z"), tone: "critical" as const },
+      { reference: "OPN-WARNING", occurredAt: new Date("2026-08-17T10:00:00.000Z"), tone: "warning" as const },
+    ];
+    const ordered = sortOpnameHistorySessionsByPriority(
+      sessions,
+      (session) => ({ tone: session.tone, label: session.tone, description: session.tone, ageDays: 0 }),
+      (session) => session.occurredAt,
+      (session) => session.reference,
+    );
+
+    expect(ordered.map((session) => session.reference)).toEqual(["OPN-CRITICAL-A", "OPN-CRITICAL-B", "OPN-WARNING", "OPN-NORMAL", "OPN-RESOLVED"]);
   });
 });

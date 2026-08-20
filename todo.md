@@ -195,3 +195,7 @@
 - [x] Definisikan opsi filter prioritas dan parameter URL yang dapat dibagikan.
 - [x] Implementasikan penyaringan sesi berbasis ambang usia tersimpan dan kontrol filter pada Riwayat Opname.
 - [x] Tambahkan pengujian filter prioritas, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
+- [x] Audit penyaringan, klasifikasi prioritas, dan urutan sesi Riwayat Opname yang berlaku.
+- [x] Definisikan urutan deterministik: prioritas tertinggi lebih dahulu, lalu usia sesi tertua.
+- [x] Implementasikan pengurutan sesi Riwayat Opname berbasis prioritas dan usia.
+- [x] Tambahkan pengujian urutan sesi, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
