@@ -1,0 +1,24 @@
+.opname-dashboard-summary a {
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 0.24rem;
+  text-decoration: none;
+  transition: transform 160ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)), box-shadow 160ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+
+.opname-dashboard-summary a:hover,
+.opname-dashboard-summary a:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 34%, transparent);
+  transform: translateY(-1px);
+}
+
+.opname-dashboard-summary a:focus-visible {
+  outline: none;
+}
+
+.opname-dashboard-summary a small {
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  font-weight: 600;
+}

@@ -165,3 +165,7 @@
 - [x] Tambahkan query dan route publik untuk ringkasan sesi opname terbuka berbasis metadata audit yang ada.
 - [x] Tambahkan panel ringkasan sesi opname terbuka responsif pada dashboard utama.
 - [x] Tambahkan pengujian ringkasan sesi terbuka, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
+- [x] Audit kartu ringkasan dashboard dan pola filter halaman Riwayat Opname.
+- [x] Definisikan parameter URL filter status serta perilaku navigasi dari kartu sesi terbuka.
+- [x] Implementasikan filter status pada Riwayat Opname dan tautan langsung dari ringkasan dashboard.
+- [x] Tambahkan pengujian navigasi, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
