@@ -169,3 +169,8 @@
 - [x] Definisikan parameter URL filter status serta perilaku navigasi dari kartu sesi terbuka.
 - [x] Implementasikan filter status pada Riwayat Opname dan tautan langsung dari ringkasan dashboard.
 - [x] Tambahkan pengujian navigasi, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
+- [x] Audit data sesi opname terbuka dan struktur panel dashboard yang tersedia.
+- [x] Definisikan perhitungan usia sesi terbuka tertua berbasis waktu sesi dan status tindak lanjut.
+- [x] Tambahkan ringkasan usia sesi opname terbuka tertua dari metadata audit yang sudah ada.
+- [x] Tambahkan indikator usia sesi terbuka tertua responsif pada dashboard utama.
+- [x] Tambahkan pengujian usia sesi terbuka, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.

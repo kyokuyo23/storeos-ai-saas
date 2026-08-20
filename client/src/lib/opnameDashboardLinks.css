@@ -22,3 +22,9 @@
   font-size: 0.72rem;
   font-weight: 600;
 }
+
+.opname-dashboard-summary > div small {
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  font-weight: 600;
+}

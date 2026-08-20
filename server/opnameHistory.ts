@@ -53,8 +53,11 @@ export function applyStockOpnameFollowUpStatuses(sessions: StockOpnameSession[],
   });
 }
 
-export function summarizeOpenStockOpnameSessions(sessions: StockOpnameSession[]) {
-  const needsFollowUpCount = sessions.filter((session) => session.followUpStatus === "needs_follow_up").length;
-  const inProgressCount = sessions.filter((session) => session.followUpStatus === "in_progress").length;
-  return { openSessionCount: needsFollowUpCount + inProgressCount, needsFollowUpCount, inProgressCount };
+export function summarizeOpenStockOpnameSessions(sessions: StockOpnameSession[], now = new Date()) {
+  const openSessions = sessions.filter((session) => session.followUpStatus === "needs_follow_up" || session.followUpStatus === "in_progress");
+  const needsFollowUpCount = openSessions.filter((session) => session.followUpStatus === "needs_follow_up").length;
+  const inProgressCount = openSessions.filter((session) => session.followUpStatus === "in_progress").length;
+  const oldestOpenSession = openSessions.reduce<StockOpnameSession | null>((oldest, session) => !oldest || session.occurredAt < oldest.occurredAt ? session : oldest, null);
+  const oldestOpenSessionAgeDays = oldestOpenSession ? Math.max(0, Math.floor((now.getTime() - oldestOpenSession.occurredAt.getTime()) / (24 * 60 * 60 * 1000))) : null;
+  return { openSessionCount: openSessions.length, needsFollowUpCount, inProgressCount, oldestOpenSessionReference: oldestOpenSession?.reference ?? null, oldestOpenSessionOccurredAt: oldestOpenSession?.occurredAt ?? null, oldestOpenSessionAgeDays };
 }

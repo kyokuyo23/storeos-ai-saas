@@ -42,6 +42,6 @@ describe("summarizeStockOpnameSessions", () => {
       { auditReference: "OPN-200-ZX90Q", status: "in_progress" },
       { auditReference: "OPN-300-TY12K", status: "resolved" },
     ]);
-    expect(summarizeOpenStockOpnameSessions(sessions)).toEqual({ openSessionCount: 2, needsFollowUpCount: 1, inProgressCount: 1 });
+    expect(summarizeOpenStockOpnameSessions(sessions, new Date("2026-08-23T03:00:00.000Z"))).toEqual({ openSessionCount: 2, needsFollowUpCount: 1, inProgressCount: 1, oldestOpenSessionReference: "OPN-100-AB12C", oldestOpenSessionOccurredAt: new Date("2026-08-20T03:00:00.000Z"), oldestOpenSessionAgeDays: 3 });
   });
 });
