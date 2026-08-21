@@ -237,6 +237,11 @@
 - [x] Uji agregasi, jalankan tes penuh, periksa TypeScript, buat build produksi, dan validasi tampilan responsif.
 - [x] Audit helper ekspor CSV/PDF dan kontrol Inventory export saat ini.
 - [x] Definisikan cakupan catatan audit kustom, validasi, dan format rendering ekspor.
-- [ ] Implementasikan input catatan audit kustom dan dukung ekspor CSV/PDF dengan catatan tersebut.
-- [ ] Uji validasi catatan serta verifikasi alur ekspor desktop dan mobile.
-- [ ] Simpan checkpoint dan serahkan hasil ekspor varians beresolusi catatan audit kustom.
+- [x] Implementasikan input catatan audit kustom dan dukung ekspor CSV/PDF dengan catatan tersebut.
+- [x] Uji validasi catatan serta verifikasi alur ekspor desktop dan mobile.
+- [x] Simpan checkpoint dan serahkan hasil ekspor varians beresolusi catatan audit kustom.
+- [ ] Audit riwayat varians, agregasi tren, dan penanda nilai tinggi saat ini.
+- [ ] Definisikan jendela periode, ambang batas, dan semantik penanda varians tinggi berulang.
+- [ ] Implementasikan deteksi varians berulang berbasis ledger dan riwayat periode.
+- [ ] Render penanda otomatis varians berulang pada panel Analisis Varians dan grafik tren.
+- [ ] Tambahkan pengujian unit deteksi varians berulang, jalankan suite penuh, periksa TypeScript, buat build produksi, dan validasi responsif.

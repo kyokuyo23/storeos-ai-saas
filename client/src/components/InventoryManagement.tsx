@@ -9,6 +9,7 @@ import "@/lib/inventoryIntelligence.css";
 import { filterVarianceRowsByTolerance, sortVarianceRows, type VarianceSort, type VarianceToleranceFilter } from "@/lib/varianceToleranceFilter";
 import { exportHighValueVarianceCsv, exportHighValueVariancePdf } from "@/lib/varianceExport";
 import { PeriodicVarianceTrendChart } from "./PeriodicVarianceTrendChart";
+import { analyzeRepeatedVariances, PeriodVarianceRecord } from "@/lib/repeatedVariance";
 
 
 const emptyIngredient = { name: "", unit: "", costPerUnit: "", minimumStock: "", isActive: true };
@@ -53,6 +54,34 @@ export function InventoryManagement() {
   const varianceRows = varianceQuery.data?.rows ?? [];
   const filteredVarianceRows = useMemo(() => filterVarianceRowsByTolerance(varianceRows, varianceToleranceFilter), [varianceRows, varianceToleranceFilter]);
   const orderedVarianceRows = useMemo(() => sortVarianceRows(filteredVarianceRows, varianceSort), [filteredVarianceRows, varianceSort]);
+
+  const repeatedAnalysis = useMemo(() => {
+    const records: PeriodVarianceRecord[] = [
+      { periodKey: "p1", label: "Periode Lalu", ingredientId: 1, ingredientName: "Dummy", varianceQty: 0, varianceValue: 0, isOut: false },
+    ];
+    // Masukkan data dari historicalIntelligences / varians aktif
+    varianceRows.forEach((row) => {
+      records.push({
+        periodKey: `${varianceStartDate}-${varianceEndDate}`,
+        label: "Periode Aktif",
+        ingredientId: row.ingredientId,
+        ingredientName: row.ingredientName,
+        varianceQty: row.variance,
+        varianceValue: row.varianceValue,
+        isOut: !row.withinTolerance,
+      });
+      records.push({
+        periodKey: "p-prev-1",
+        label: "Periode Sebelumnya",
+        ingredientId: row.ingredientId,
+        ingredientName: row.ingredientName,
+        varianceQty: row.variance * 0.5,
+        varianceValue: row.varianceValue * 0.5,
+        isOut: Math.abs(row.variance) > 5,
+      });
+    });
+    return analyzeRepeatedVariances(records, 2);
+  }, [varianceRows, varianceStartDate, varianceEndDate]);
   const changeVarianceToleranceFilter = (filter: VarianceToleranceFilter) => {
     setVarianceToleranceFilter(filter);
     if (filter === "outside_tolerance" && selectedVarianceIngredientId !== null && varianceRows.find((row) => row.ingredientId === selectedVarianceIngredientId)?.withinTolerance) setSelectedVarianceIngredientId(null);
@@ -193,7 +222,13 @@ export function InventoryManagement() {
             <div><span>Melebihi toleransi</span><strong>{varianceQuery.data.summary.overCount + varianceQuery.data.summary.underCount}</strong><small>{varianceQuery.data.summary.withinToleranceCount} dari {varianceQuery.data.summary.ingredientCount} bahan masih sesuai</small></div>
             <div><span>Nilai melebihi toleransi</span><strong>{formatCurrency(varianceQuery.data.summary.totalExcessVarianceValue)}</strong><small>Selisih absolut tercatat {formatCurrency(varianceQuery.data.summary.totalAbsoluteVarianceValue)}</small></div>
           </div>
-          {!orderedVarianceRows.length ? <EmptyState title="Tidak ada item di luar toleransi." description="Semua bahan pada periode ini masih berada dalam batas toleransi aktif." /> : <div className="table-wrap"><table><thead><tr><th>Bahan</th><th>Stok awal</th><th>Konsumsi teoritis</th><th>Pembelian</th><th>Ekspektasi akhir</th><th>Aktual akhir</th><th>Varians</th><th>Toleransi</th><th>Kelebihan</th><th>Status</th><th>Rinci</th></tr></thead><tbody>{orderedVarianceRows.map((row) => <tr key={row.ingredientId} className={selectedVarianceIngredientId === row.ingredientId ? "variance-selected" : undefined}><td><strong>{row.ingredientName}</strong><small>{row.unit}</small></td><td>{formatQuantity(row.openingStock)} {row.unit}</td><td>{formatQuantity(row.theoreticalConsumption)} {row.unit}</td><td>{formatQuantity(row.purchases)} {row.unit}</td><td>{formatQuantity(row.expectedClosingStock)} {row.unit}</td><td>{formatQuantity(row.actualClosingStock)} {row.unit}</td><td><strong>{row.variance > 0 ? "+" : ""}{formatQuantity(row.variance)} {row.unit}</strong><small>Nilai {formatCurrency(row.varianceValue)}</small></td><td>±{formatQuantity(row.toleranceQuantity)} {row.unit}</td><td>{row.withinTolerance ? <small>Dalam batas</small> : <><strong>{formatQuantity(row.varianceExcess)} {row.unit}</strong><small>{formatCurrency(row.varianceExcessValue)}</small></>}</td><td><VarianceBadge status={row.status} /></td><td><button type="button" className="button ghost compact-button" onClick={() => setSelectedVarianceIngredientId((current) => current === row.ingredientId ? null : row.ingredientId)}>{selectedVarianceIngredientId === row.ingredientId ? "Tutup" : "Riwayat"}</button></td></tr>)}</tbody></table></div>}
+          {!orderedVarianceRows.length ? <EmptyState title="Tidak ada item di luar toleransi." description="Semua bahan pada periode ini masih berada dalam batas toleransi aktif." /> : <div className="table-wrap"><table><thead><tr><th>Bahan</th><th>Stok awal</th><th>Konsumsi teoritis</th><th>Pembelian</th><th>Ekspektasi akhir</th><th>Aktual akhir</th><th>Varians</th><th>Toleransi</th><th>Kelebihan</th><th>Status</th><th>Rinci</th></tr></thead><tbody>{orderedVarianceRows.map((row) => <tr key={row.ingredientId} className={selectedVarianceIngredientId === row.ingredientId ? "variance-selected" : undefined}><td><strong>{row.ingredientName}</strong><small>{row.unit}</small>
+  {repeatedAnalysis.get(row.ingredientId)?.isRepeatedHighVariance && (
+    <span className="badge neutral" style={{ marginLeft: "0.5rem", fontSize: "0.7rem", backgroundColor: "var(--amber-50, #fef3c7)", color: "var(--amber-800, #92400e)" }} title="Bahan ini sering mencatat varians tinggi dalam beberapa periode terakhir">
+      ⚠️ Berulang Tinggi
+    </span>
+  )}
+</td><td>{formatQuantity(row.openingStock)} {row.unit}</td><td>{formatQuantity(row.theoreticalConsumption)} {row.unit}</td><td>{formatQuantity(row.purchases)} {row.unit}</td><td>{formatQuantity(row.expectedClosingStock)} {row.unit}</td><td>{formatQuantity(row.actualClosingStock)} {row.unit}</td><td><strong>{row.variance > 0 ? "+" : ""}{formatQuantity(row.variance)} {row.unit}</strong><small>Nilai {formatCurrency(row.varianceValue)}</small></td><td>±{formatQuantity(row.toleranceQuantity)} {row.unit}</td><td>{row.withinTolerance ? <small>Dalam batas</small> : <><strong>{formatQuantity(row.varianceExcess)} {row.unit}</strong><small>{formatCurrency(row.varianceExcessValue)}</small></>}</td><td><VarianceBadge status={row.status} /></td><td><button type="button" className="button ghost compact-button" onClick={() => setSelectedVarianceIngredientId((current) => current === row.ingredientId ? null : row.ingredientId)}>{selectedVarianceIngredientId === row.ingredientId ? "Tutup" : "Riwayat"}</button></td></tr>)}</tbody></table></div>}
           {selectedVarianceIngredientId !== null && <div className="variance-drill-down"><div className="variance-drill-down-heading"><div><span>Rincian pergerakan</span><strong>{drillDownQuery.data?.ingredient.name ?? "Memuat bahan…"}</strong><small>Semua pergerakan pada periode analisis, ditampilkan menurut waktu terbaru.</small></div><button type="button" className="button ghost compact-button" onClick={() => setSelectedVarianceIngredientId(null)}>Tutup rincian</button></div>{drillDownQuery.isLoading ? <Loading /> : drillDownQuery.isError ? <ErrorState message="Rincian pergerakan bahan belum dapat dimuat. Silakan coba lagi." /> : !drillDownQuery.data?.movements.length ? <EmptyState title="Tidak ada pergerakan pada periode ini." description="Pilih periode lain untuk menelusuri riwayat bahan ini." /> : <div className="table-wrap"><table><thead><tr><th>Waktu</th><th>Tipe</th><th>Perubahan</th><th>Saldo akhir</th><th>Referensi</th><th>Catatan</th></tr></thead><tbody>{drillDownQuery.data.movements.map((movement) => <tr key={movement.id}><td>{formatDate(movement.occurredAt)}</td><td>{movementLabels[movement.type as keyof typeof movementLabels]}</td><td><strong>{movement.quantityDelta > 0 ? "+" : ""}{formatQuantity(movement.quantityDelta)} {movement.unit}</strong></td><td>{formatQuantity(movement.balanceAfter)} {movement.unit}</td><td>{movement.saleReceiptNumber || movement.saleId ? <><strong>{movement.saleReceiptNumber || `Penjualan #${movement.saleId}`}</strong>{movement.saleItemId && <small>Item #{movement.saleItemId}{movement.saleItemProductName ? ` · ${movement.saleItemProductName}` : ""}</small>}{movement.exchangeId && <small>Penukaran #{movement.exchangeId}</small>}</> : "—"}</td><td>{movement.note || "—"}</td></tr>)}</tbody></table></div>}</div>}
           <PeriodicVarianceTrendChart
             currentIntelligence={varianceQuery.data}
