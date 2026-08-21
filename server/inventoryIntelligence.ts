@@ -3,6 +3,8 @@ export type InventoryIntelligenceIngredient = {
   name: string;
   unit: string;
   costPerUnit: number;
+  overrideAbsoluteTolerance?: number | null;
+  overridePercentageTolerance?: number | null;
 };
 
 export type InventoryIntelligenceMovement = {
@@ -51,8 +53,10 @@ export function summarizeInventoryIntelligence(
     const actualClosingStock = round(latestBalance ?? openingStock);
     const variance = round(actualClosingStock - expectedClosingStock);
     const varianceValue = round(variance * ingredient.costPerUnit);
-    const relativeToleranceQuantity = round(Math.abs(expectedClosingStock) * normalizedTolerance.percentage / 100);
-    const toleranceQuantity = round(Math.max(normalizedTolerance.absoluteQuantity, relativeToleranceQuantity));
+    const itemAbsolute = Number.isFinite(ingredient.overrideAbsoluteTolerance) && (ingredient.overrideAbsoluteTolerance ?? -1) >= 0 ? Number(ingredient.overrideAbsoluteTolerance) : normalizedTolerance.absoluteQuantity;
+    const itemPercentage = Number.isFinite(ingredient.overridePercentageTolerance) && (ingredient.overridePercentageTolerance ?? -1) >= 0 ? Number(ingredient.overridePercentageTolerance) : normalizedTolerance.percentage;
+    const relativeToleranceQuantity = round(Math.abs(expectedClosingStock) * itemPercentage / 100);
+    const toleranceQuantity = round(Math.max(itemAbsolute, relativeToleranceQuantity));
     const withinTolerance = Math.abs(variance) <= toleranceQuantity;
     const varianceExcess = round(Math.max(0, Math.abs(variance) - toleranceQuantity));
     const varianceExcessValue = round(varianceExcess * ingredient.costPerUnit);

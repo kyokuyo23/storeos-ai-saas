@@ -220,3 +220,8 @@
 - [x] Definisikan aturan pengecualian varians bernilai tinggi serta tombol aksi cepat untuk menyaring dan mengurutkannya secara instan.
 - [x] Implementasikan tombol akses cepat high-value variance exception pada panel Analisis Varians di halaman Inventory.
 - [x] Tambahkan pengujian, jalankan suite penuh, periksa TypeScript, buat build produksi, validasi tampilan desktop/mobile, dan simpan checkpoint.
+- [x] Audit skema database bahan, rute API, dan perhitungan toleransi Inventory Intelligence untuk mendukung override per bahan.
+- [x] Definisikan aturan fallback ke pengaturan global dan batasan validasi angka untuk override toleransi bahan.
+- [x] Implementasikan kolom override toleransi di database (drizzle/schema.ts), migrasi, mutasi API, dan perhitungan intelligence.
+- [x] Tambahkan input toleransi khusus (absolut dan persentase) pada form editor bahan di halaman Inventory.
+- [x] Tambahkan pengujian unit, jalankan suite penuh, periksa TypeScript, buat build produksi, validasi desktop/mobile, dan simpan checkpoint.

@@ -72,4 +72,16 @@ describe("summarizeInventoryIntelligence", () => {
     expect(report.rows[0]).toMatchObject({ variance: -1, toleranceQuantity: 0.25, varianceExcess: 0.75, varianceExcessValue: 2.25, withinTolerance: false, status: "under" });
     expect(report.summary).toMatchObject({ withinToleranceCount: 0, underCount: 1, totalExcessVarianceValue: 2.25 });
   });
+
+  it("menerapkan override toleransi khusus bahan jika tersedia dan fallback ke global jika kosong", () => {
+    const customIngredient = { ...ingredient, id: 99, name: "Bahan Khusus", overrideAbsoluteTolerance: 2, overridePercentageTolerance: null };
+    const customMovement = (type: InventoryIntelligenceMovement["type"], quantityDelta: number, balanceAfter: number, occurredAt: string): InventoryIntelligenceMovement => ({ ingredientId: 99, type, quantityDelta, balanceAfter, occurredAt: new Date(occurredAt) });
+    const report = summarizeInventoryIntelligence([customIngredient], [
+      customMovement("purchase", 10, 10, "2026-08-09T09:00:00.000Z"),
+      customMovement("sale", -2, 8, "2026-08-10T09:00:00.000Z"),
+      customMovement("opname", -1.5, 6.5, "2026-08-10T10:00:00.000Z"),
+    ], range, { absoluteQuantity: 0.25, percentage: 0 });
+
+    expect(report.rows[0]).toMatchObject({ variance: -1.5, toleranceQuantity: 2, varianceExcess: 0, withinTolerance: true, status: "ok" });
+  });
 });
