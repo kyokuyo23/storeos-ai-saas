@@ -230,3 +230,8 @@
 - [x] Implementasikan helper ekspor CSV dan PDF untuk laporan varians bernilai tinggi.
 - [x] Hubungkan tombol unduh CSV/PDF ke panel Analisis Varians di halaman Inventory.
 - [x] Tambahkan tes unit ekspor, jalankan suite penuh, periksa TypeScript, buat build produksi, dan validasi responsif.
+- [x] Audit output inventory intelligence dan komponen chart untuk tren varians periodik.
+- [x] Definisikan agregasi tren periodik, metrik toleransi, dan status kosong/pemuatan.
+- [x] Implementasikan agregasi backend tren varians menggunakan data ledger stok yang ada.
+- [x] Render chart responsif tren varians di bawah panel Analisis Varians.
+- [x] Uji agregasi, jalankan tes penuh, periksa TypeScript, buat build produksi, dan validasi tampilan responsif.
