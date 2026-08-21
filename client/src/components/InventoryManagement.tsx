@@ -80,7 +80,7 @@ export function InventoryManagement() {
         isOut: Math.abs(row.variance) > 5,
       });
     });
-    return analyzeRepeatedVariances(records, 2);
+    return analyzeRepeatedVariances(records);
   }, [varianceRows, varianceStartDate, varianceEndDate]);
   const changeVarianceToleranceFilter = (filter: VarianceToleranceFilter) => {
     setVarianceToleranceFilter(filter);
