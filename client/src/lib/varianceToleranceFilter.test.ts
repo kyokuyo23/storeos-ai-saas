@@ -38,4 +38,17 @@ describe("filterVarianceRowsByTolerance", () => {
 
     expect(sortVarianceRows(source, "default").map((row) => row.ingredientId)).toEqual([2, 1]);
   });
+
+  it("supports quick access combination of outside tolerance filter and largest difference sort", () => {
+    const rows = [
+      { ingredientId: 1, ingredientName: "A", withinTolerance: true, variance: 1, varianceExcess: 0 },
+      { ingredientId: 2, ingredientName: "B", withinTolerance: false, variance: -12, varianceExcess: 5 },
+      { ingredientId: 3, ingredientName: "C", withinTolerance: false, variance: 5, varianceExcess: 2 },
+    ];
+
+    const filtered = filterVarianceRowsByTolerance(rows, "outside_tolerance");
+    const sorted = sortVarianceRows(filtered, "largest_difference");
+
+    expect(sorted.map((row) => row.ingredientId)).toEqual([2, 3]);
+  });
 });

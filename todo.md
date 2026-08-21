@@ -216,3 +216,7 @@
 - [x] Definisikan urutan selisih varians terbesar yang deterministik serta kontrol sort yang dapat diakses.
 - [x] Implementasikan opsi pengurutan tabel Inventory Analysis berdasarkan selisih varians terbesar.
 - [x] Tambahkan pengujian pengurutan, jalankan suite penuh, cek TypeScript, build produksi, validasi desktop/mobile, dan simpan checkpoint.
+- [x] Audit filter toleransi varians, pengurutan selisih terbesar, dan data ringkasan nilai varians untuk akses cepat pengecualian bernilai tinggi.
+- [x] Definisikan aturan pengecualian varians bernilai tinggi serta tombol aksi cepat untuk menyaring dan mengurutkannya secara instan.
+- [x] Implementasikan tombol akses cepat high-value variance exception pada panel Analisis Varians di halaman Inventory.
+- [x] Tambahkan pengujian, jalankan suite penuh, periksa TypeScript, buat build produksi, validasi tampilan desktop/mobile, dan simpan checkpoint.

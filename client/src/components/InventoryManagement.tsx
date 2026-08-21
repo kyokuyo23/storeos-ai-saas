@@ -130,6 +130,19 @@ export function InventoryManagement() {
             <button type="button" className="button ghost settlement-reset" onClick={() => setVarianceSort("default")} aria-pressed={varianceSort === "default"}>Urutan standar</button>
             <button type="button" className="button ghost settlement-reset" onClick={() => setVarianceSort("largest_difference")} aria-pressed={varianceSort === "largest_difference"}>Selisih terbesar</button>
           </div>
+          <div className="settlement-preset-actions" role="group" aria-label="Akses cepat pengecualian">
+            <button
+              type="button"
+              className="button ghost settlement-reset"
+              onClick={() => {
+                changeVarianceToleranceFilter("outside_tolerance");
+                setVarianceSort("largest_difference");
+              }}
+              aria-pressed={varianceToleranceFilter === "outside_tolerance" && varianceSort === "largest_difference"}
+            >
+              Pengecualian bernilai tinggi
+            </button>
+          </div>
         </div>
         {invalidVarianceRange ? <ErrorState message="Tanggal akhir tidak boleh lebih awal dari tanggal mulai." /> : varianceQuery.isLoading ? <Loading /> : varianceQuery.isError ? <ErrorState message="Analisis varians belum dapat dimuat. Silakan coba lagi." /> : !varianceRows.length ? <EmptyState title="Belum ada bahan untuk dianalisis." description="Tambahkan bahan dan catat pergerakan stok untuk memulai analisis varians." /> : <>
           <p className="settings-help">Toleransi aktif: maksimal ±{formatQuantity(varianceQuery.data.tolerance.absoluteQuantity)} unit atau {formatQuantity(varianceQuery.data.tolerance.percentage)}% dari stok ekspektasi, menggunakan nilai yang lebih besar untuk tiap bahan.</p>
