@@ -225,3 +225,8 @@
 - [x] Implementasikan kolom override toleransi di database (drizzle/schema.ts), migrasi, mutasi API, dan perhitungan intelligence.
 - [x] Tambahkan input toleransi khusus (absolut dan persentase) pada form editor bahan di halaman Inventory.
 - [x] Tambahkan pengujian unit, jalankan suite penuh, periksa TypeScript, buat build produksi, validasi desktop/mobile, dan simpan checkpoint.
+- [x] Audit data varians bernilai tinggi dan utilitas ekspor laporan yang ada di StoreOS.
+- [x] Definisikan kolom CSV/PDF, format nama file, dan aturan kosong saat tidak ada pengecualian varians.
+- [x] Implementasikan helper ekspor CSV dan PDF untuk laporan varians bernilai tinggi.
+- [x] Hubungkan tombol unduh CSV/PDF ke panel Analisis Varians di halaman Inventory.
+- [x] Tambahkan tes unit ekspor, jalankan suite penuh, periksa TypeScript, buat build produksi, dan validasi responsif.

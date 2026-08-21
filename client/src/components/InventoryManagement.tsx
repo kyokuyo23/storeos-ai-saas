@@ -7,6 +7,7 @@ import { inventoryEmptyStates } from "@/lib/emptyStates";
 import { getSettlementDatePresets, jakartaDateValue } from "@/lib/settlementDateRanges";
 import "@/lib/inventoryIntelligence.css";
 import { filterVarianceRowsByTolerance, sortVarianceRows, type VarianceSort, type VarianceToleranceFilter } from "@/lib/varianceToleranceFilter";
+import { exportHighValueVarianceCsv, exportHighValueVariancePdf } from "@/lib/varianceExport";
 
 const emptyIngredient = { name: "", unit: "", costPerUnit: "", minimumStock: "", isActive: true };
 type MovementType = "purchase" | "adjustment" | "waste" | "opname";
@@ -141,6 +142,36 @@ export function InventoryManagement() {
               aria-pressed={varianceToleranceFilter === "outside_tolerance" && varianceSort === "largest_difference"}
             >
               Pengecualian bernilai tinggi
+            </button>
+          </div>
+          <div className="settlement-preset-actions" role="group" aria-label="Ekspor laporan varians">
+            <button
+              type="button"
+              className="button secondary compact-button"
+              onClick={() => {
+                if (!orderedVarianceRows.length) return toast.error("Tidak ada data varians untuk diekspor pada periode ini.");
+                const startDate = new Date(varianceStartDate + "T00:00:00+07:00");
+                const endDate = new Date(varianceEndDate + "T23:59:59+07:00");
+                exportHighValueVarianceCsv(orderedVarianceRows, startDate, endDate);
+                toast.success("Laporan CSV berhasil diunduh.");
+              }}
+              disabled={!orderedVarianceRows.length}
+            >
+              Unduh CSV
+            </button>
+            <button
+              type="button"
+              className="button secondary compact-button"
+              onClick={() => {
+                if (!orderedVarianceRows.length) return toast.error("Tidak ada data varians untuk diekspor pada periode ini.");
+                const startDate = new Date(varianceStartDate + "T00:00:00+07:00");
+                const endDate = new Date(varianceEndDate + "T23:59:59+07:00");
+                exportHighValueVariancePdf(orderedVarianceRows, startDate, endDate);
+                toast.success("Laporan PDF berhasil diunduh.");
+              }}
+              disabled={!orderedVarianceRows.length}
+            >
+              Unduh PDF
             </button>
           </div>
         </div>
