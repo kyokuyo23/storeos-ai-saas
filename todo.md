@@ -235,3 +235,8 @@
 - [x] Implementasikan agregasi backend tren varians menggunakan data ledger stok yang ada.
 - [x] Render chart responsif tren varians di bawah panel Analisis Varians.
 - [x] Uji agregasi, jalankan tes penuh, periksa TypeScript, buat build produksi, dan validasi tampilan responsif.
+- [x] Audit helper ekspor CSV/PDF dan kontrol Inventory export saat ini.
+- [x] Definisikan cakupan catatan audit kustom, validasi, dan format rendering ekspor.
+- [ ] Implementasikan input catatan audit kustom dan dukung ekspor CSV/PDF dengan catatan tersebut.
+- [ ] Uji validasi catatan serta verifikasi alur ekspor desktop dan mobile.
+- [ ] Simpan checkpoint dan serahkan hasil ekspor varians beresolusi catatan audit kustom.

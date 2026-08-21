@@ -17,7 +17,7 @@ export type ExportVarianceRow = {
   varianceExcessValue: number;
 };
 
-export function exportHighValueVarianceCsv(rows: ExportVarianceRow[], startDate: Date, endDate: Date) {
+export function exportHighValueVarianceCsv(rows: ExportVarianceRow[], startDate: Date, endDate: Date, auditNote?: string) {
   const formatIdDate = (d: Date) => d.toLocaleDateString("id-ID", { timeZone: "Asia/Jakarta", day: "2-digit", month: "short", year: "numeric" });
   const periodStr = `${formatIdDate(startDate)} - ${formatIdDate(endDate)}`;
   
@@ -35,10 +35,15 @@ export function exportHighValueVarianceCsv(rows: ExportVarianceRow[], startDate:
   const csvRows = [
     `"Laporan Pengecualian Varians Bernilai Tinggi - Kopi Nusantara (Cibitung Bekasi)"`,
     `"Periode: ${periodStr}"`,
-    `"Diekspor pada: ${new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}"`,
-    "",
-    headers.map(h => `"${h}"`).join(",")
+    `"Diekspor pada: ${new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}"`
   ];
+
+  if (auditNote && auditNote.trim() !== "") {
+    csvRows.push(`"Catatan Audit: ${auditNote.replace(/"/g, '""')}"`);
+  }
+
+  csvRows.push("");
+  csvRows.push(headers.map(h => `"${h}"`).join(","));
 
   for (const row of rows) {
     const statusLabel = row.status === "over" ? "Lebih (Over)" : row.status === "under" ? "Kurang (Under)" : "Sesuai (OK)";
@@ -65,7 +70,7 @@ export function exportHighValueVarianceCsv(rows: ExportVarianceRow[], startDate:
   document.body.removeChild(link);
 }
 
-export function exportHighValueVariancePdf(rows: ExportVarianceRow[], startDate: Date, endDate: Date) {
+export function exportHighValueVariancePdf(rows: ExportVarianceRow[], startDate: Date, endDate: Date, auditNote?: string) {
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const formatIdDate = (d: Date) => d.toLocaleDateString("id-ID", { timeZone: "Asia/Jakarta", day: "2-digit", month: "short", year: "numeric" });
   const periodStr = `${formatIdDate(startDate)} - ${formatIdDate(endDate)}`;
@@ -78,6 +83,14 @@ export function exportHighValueVariancePdf(rows: ExportVarianceRow[], startDate:
   doc.setFontSize(10);
   doc.setTextColor(100, 116, 139);
   doc.text(`Periode: ${periodStr} | Diekspor: ${new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}`, 14, 22);
+
+  let startY = 28;
+  if (auditNote && auditNote.trim() !== "") {
+    doc.setFontSize(10);
+    doc.setTextColor(30, 41, 59);
+    doc.text(`Catatan Audit: ${auditNote}`, 14, 28);
+    startY = 34;
+  }
 
   const tableHeaders = [
     "Bahan",
@@ -102,7 +115,7 @@ export function exportHighValueVariancePdf(rows: ExportVarianceRow[], startDate:
   ]);
 
   autoTable(doc, {
-    startY: 28,
+    startY,
     head: [tableHeaders],
     body: tableData,
     theme: "grid",

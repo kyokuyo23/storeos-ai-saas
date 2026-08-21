@@ -43,6 +43,7 @@ export function InventoryManagement() {
   const [varianceToleranceFilter, setVarianceToleranceFilter] = useState<VarianceToleranceFilter>("all");
   const [varianceSort, setVarianceSort] = useState<VarianceSort>("default");
   const [selectedVarianceIngredientId, setSelectedVarianceIngredientId] = useState<number | null>(null);
+  const [auditNote, setAuditNote] = useState("");
   const invalidVarianceRange = varianceStartDate > varianceEndDate;
   const varianceRange = useMemo(() => ({ startDate: varianceStartDate, endDate: varianceEndDate }), [varianceStartDate, varianceEndDate]);
   const varianceQueryResult = trpc.stockMovement.intelligence.useQuery(varianceRange, { enabled: !invalidVarianceRange });
@@ -146,7 +147,16 @@ export function InventoryManagement() {
               Pengecualian bernilai tinggi
             </button>
           </div>
-          <div className="settlement-preset-actions" role="group" aria-label="Ekspor laporan varians">
+          <div className="settlement-preset-actions" role="group" aria-label="Catatan audit dan ekspor laporan varians">
+            <input
+              type="text"
+              className="form-input"
+              style={{ maxWidth: "260px", display: "inline-block", marginRight: "0.5rem" }}
+              value={auditNote}
+              onChange={(e) => setAuditNote(e.target.value)}
+              placeholder="Catatan audit kustom (opsional)"
+              aria-label="Catatan audit kustom"
+            />
             <button
               type="button"
               className="button secondary compact-button"
@@ -154,8 +164,8 @@ export function InventoryManagement() {
                 if (!orderedVarianceRows.length) return toast.error("Tidak ada data varians untuk diekspor pada periode ini.");
                 const startDate = new Date(varianceStartDate + "T00:00:00+07:00");
                 const endDate = new Date(varianceEndDate + "T23:59:59+07:00");
-                exportHighValueVarianceCsv(orderedVarianceRows, startDate, endDate);
-                toast.success("Laporan CSV berhasil diunduh.");
+                exportHighValueVarianceCsv(orderedVarianceRows, startDate, endDate, auditNote);
+                toast.success("Laporan CSV berhasil diunduh dengan catatan audit.");
               }}
               disabled={!orderedVarianceRows.length}
             >
@@ -168,8 +178,8 @@ export function InventoryManagement() {
                 if (!orderedVarianceRows.length) return toast.error("Tidak ada data varians untuk diekspor pada periode ini.");
                 const startDate = new Date(varianceStartDate + "T00:00:00+07:00");
                 const endDate = new Date(varianceEndDate + "T23:59:59+07:00");
-                exportHighValueVariancePdf(orderedVarianceRows, startDate, endDate);
-                toast.success("Laporan PDF berhasil diunduh.");
+                exportHighValueVariancePdf(orderedVarianceRows, startDate, endDate, auditNote);
+                toast.success("Laporan PDF berhasil diunduh dengan catatan audit.");
               }}
               disabled={!orderedVarianceRows.length}
             >
