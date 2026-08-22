@@ -125,6 +125,11 @@ const validateJakartaDateRange = (input: { startDate?: string; endDate?: string 
   if (input.startDate && input.endDate && input.startDate > input.endDate) context.addIssue({ code: "custom", path: ["endDate"], message: "Tanggal akhir tidak boleh lebih awal dari tanggal mulai." });
 };
 
+export const monthlyReportInput = z.object({
+  year: z.coerce.number().int().min(2000).max(2100),
+  month: z.coerce.number().int().min(1).max(12),
+});
+
 export const settlementDateRangeInput = z.object({
   startDate: jakartaDateInput.optional(),
   endDate: jakartaDateInput.optional(),

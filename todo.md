@@ -245,3 +245,8 @@
 - [x] Implementasikan deteksi varians berulang berbasis ledger dan riwayat periode.
 - [x] Render penanda otomatis varians berulang pada panel Analisis Varians dan grafik tren.
 - [x] Tambahkan pengujian unit deteksi varians berulang, jalankan suite penuh, periksa TypeScript, buat build produksi, dan validasi responsif.
+
+- [x] Implement Phase 2.1 monthly management reporting from the approved design documents, including read-only API, UI, exact-month CSV/PDF exports, regression tests, and validation.
+- [x] Verify Phase 2.1 monthly reporting against existing Financial Core and Inventory Intelligence without adding duplicate models or changing transaction behavior.
+- [x] Run Phase 2.1 tests, TypeScript check, production build, and desktop/mobile review before checkpoint.
+- [x] Save the Phase 2.1 implementation checkpoint and report deviations.

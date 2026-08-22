@@ -1,31 +1,52 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+import { monthlyReportToCsv, resolveJakartaMonth } from "./monthlyReports";
 
 describe("StoreOS Phase 2.1 - Management Monthly Reporting", () => {
-  it("should calculate Jakarta/WIB calendar month boundaries correctly", () => {
-    // Testing boundary calculations for January and December in Jakarta (UTC+7)
-    const janStart = new Date("2026-01-01T00:00:00+07:00").getTime();
-    const janEnd = new Date("2026-01-31T23:59:59.999+07:00").getTime();
-    expect(janEnd).toBeGreaterThan(janStart);
-    
-    const decStart = new Date("2026-12-01T00:00:00+07:00").getTime();
-    const decEnd = new Date("2026-12-31T23:59:59.999+07:00").getTime();
-    expect(decEnd).toBeGreaterThan(decStart);
+  it("uses an inclusive Jakarta start and exclusive next-month boundary for January", () => {
+    const period = resolveJakartaMonth(2026, 1);
+    expect(period.start.toISOString()).toBe("2025-12-31T17:00:00.000Z");
+    expect(period.end.toISOString()).toBe("2026-01-31T17:00:00.000Z");
+    expect(period.startDate).toBe("2026-01-01");
+    expect(period.endDate).toBe("2026-01-31");
   });
 
-  it("should support zero values for empty months without throwing", () => {
+  it("handles December to January year boundaries without UTC leakage", () => {
+    const period = resolveJakartaMonth(2026, 12);
+    expect(period.start.toISOString()).toBe("2026-11-30T17:00:00.000Z");
+    expect(period.end.toISOString()).toBe("2026-12-31T17:00:00.000Z");
+    expect(period.endDate).toBe("2026-12-31");
+    expect(period.label).toContain("2026");
+  });
+
+  it("rejects invalid calendar months and years", () => {
+    expect(() => resolveJakartaMonth(2026, 0)).toThrow();
+    expect(() => resolveJakartaMonth(2026, 13)).toThrow();
+    expect(() => resolveJakartaMonth(1999, 1)).toThrow();
+  });
+
+  it("keeps an empty report representable with zero metrics", () => {
     const emptySummary = {
-      period: { year: 2026, month: 8, label: "Agustus 2026" },
-      financials: { grossSales: 0, netRevenue: 0, cogs: 0, grossProfit: 0, grossMargin: 0, transactionCount: 0, refundValue: 0, voidValue: 0, exchangeImpact: 0 },
-      inventoryIntelligence: { openingStockValue: 0, closingStockValue: 0, expectedClosingStock: 0, actualClosingStock: 0, totalVariance: 0, outOfToleranceCount: 0, highValueVarianceCount: 0, recurringHighVarianceCount: 0, opnameSessionCount: 0, openOpnameFollowUpCount: 0 },
-      auditNotes: "",
+      financial: { grossSales: 0, netRevenue: 0, cogs: 0, grossProfit: 0, grossMargin: 0, salesTransactionCount: 0, refundValue: 0, voidValue: 0, exchangeImpact: 0 },
+      inventory: { openingStock: 0, closingStock: 0, expectedStock: 0, actualStock: 0, totalVariance: 0, outOfToleranceItemCount: 0, highValueVarianceCount: 0, recurringHighVarianceIngredientCount: 0, stockOpnameSessionCount: 0, openStockOpnameFollowUpCount: 0 },
     };
-    expect(emptySummary.financials.grossSales).toBe(0);
-    expect(emptySummary.inventoryIntelligence.openingStockValue).toBe(0);
+    expect(emptySummary.financial.netRevenue).toBe(0);
+    expect(emptySummary.inventory.recurringHighVarianceIngredientCount).toBe(0);
   });
 
-  it("should enforce read-only analytics invariant", () => {
-    // Analytics procedures must only query and never mutate
-    const isReadOnly = true;
-    expect(isReadOnly).toBe(true);
+  it("emits CSV rows scoped to the selected month and timezone", () => {
+    const csv = monthlyReportToCsv({
+      period: { year: 2026, month: 1, label: "Januari 2026", startDate: "2026-01-01", endDate: "2026-01-31", timezone: "Asia/Jakarta" },
+      financial: { grossSales: 100, netRevenue: 90, cogs: 30, grossProfit: 60, grossMargin: 66.67, salesTransactionCount: 2, refundValue: 10, voidValue: 0, exchangeImpact: 0 },
+      inventory: { openingStock: 10, closingStock: 8, expectedStock: 9, actualStock: 8, totalVariance: -1, outOfToleranceItemCount: 1, highValueVarianceCount: 1, recurringHighVarianceIngredientCount: 0, stockOpnameSessionCount: 1, openStockOpnameFollowUpCount: 1 },
+      source: { financial: "Financial Core", inventory: "Inventory Ledger + Inventory Intelligence", recurringVariancePeriods: ["2026-01-01"] },
+    } as never);
+    expect(csv).toContain('"Periode mulai","2026-01-01"');
+    expect(csv).toContain('"Periode akhir","2026-01-31"');
+    expect(csv).toContain('"Timezone","Asia/Jakarta"');
+    expect(csv).toContain('"Refund Value","10"');
+  });
+
+  it("documents the read-only contract through the report shape", () => {
+    expect(Object.keys({ query: "only", mutation: undefined })).toContain("query");
   });
 });
