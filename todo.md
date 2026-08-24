@@ -284,3 +284,7 @@
 - [x] Implement only the supported automated monthly report-generation foundation using Phase 2.1 sources and exports
 - [x] Add Phase 2.2 tests for scheduling, Jakarta/WIB boundaries, report generation, exports, empty/non-empty months, failures, retries, and read-only integrity
 - [x] Run full tests, TypeScript, production build, and desktop/mobile validation for Phase 2.2
+- [x] Inspect existing storage/database infrastructure for durable monthly report artifacts
+- [x] Add durable CSV and printable HTML artifact storage with deterministic Jakarta/WIB period retrieval and duplicate protection
+- [x] Integrate artifact persistence with the Phase 2.2 report foundation without mutating financial or inventory records
+- [x] Add artifact lifecycle and read-only integrity tests, then run full tests, TypeScript, build, and desktop/mobile validation

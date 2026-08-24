@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { sdk } from "./_core/sdk";
 import { getMonthlyManagementReport, monthlyReportToCsv, resolveJakartaMonth } from "./monthlyReports";
+import { persistMonthlyReportArtifacts } from "./monthlyReportArtifacts";
 
 const JAKARTA_TIMEZONE = "Asia/Jakarta";
 
@@ -79,8 +80,8 @@ export async function generateAutomatedMonthlyManagementReport(year: number, mon
 /**
  * Project-level Heartbeat callback. It generates the previous completed
  * Jakarta calendar month and returns both report artifacts without mutating
- * transactional, inventory, or audit data. Server-side PDF rendering and
- * durable artifact delivery are intentionally not implied by this handler.
+ * transactional, inventory, or audit data. Server-side PDF rendering remains
+ * intentionally out of scope; CSV and printable HTML are durably stored.
  */
 export async function handleAutomatedMonthlyReport(req: Request, res: Response) {
   try {
@@ -88,13 +89,14 @@ export async function handleAutomatedMonthlyReport(req: Request, res: Response) 
     if (!user.isCron) return res.status(403).json({ error: "cron-only" });
     const target = resolvePreviousCompletedJakartaMonth();
     const artifacts = await generateAutomatedMonthlyManagementReport(target.year, target.month);
+    const persisted = await persistMonthlyReportArtifacts(artifacts);
     return res.json({
       ok: true,
       period: artifacts.report.period,
       generatedAt: artifacts.generatedAt,
-      csv: artifacts.csv,
-      printableHtml: artifacts.printableHtml,
-      delivery: { csv: "generated", pdf: "printable-html-source-only" },
+      artifact: persisted.artifact,
+      created: persisted.created,
+      delivery: { csv: "stored", printableHtml: "stored", pdf: "not-generated" },
     });
   } catch (error) {
     return res.status(500).json({

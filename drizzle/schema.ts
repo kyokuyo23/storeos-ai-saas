@@ -1,4 +1,4 @@
-import { boolean, decimal, index, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { boolean, decimal, index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /** Retained for framework compatibility; the Step 2 user experience has no authentication screens. */
 export const users = mysqlTable("users", {
@@ -157,6 +157,25 @@ export const stockOpnameFollowUps = mysqlTable("stockOpnameFollowUps", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+export const monthlyReportArtifacts = mysqlTable("monthlyReportArtifacts", {
+  id: int("id").autoincrement().primaryKey(),
+  year: int("year").notNull(),
+  month: int("month").notNull(),
+  timezone: varchar("timezone", { length: 80 }).notNull(),
+  periodStartDate: varchar("periodStartDate", { length: 10 }).notNull(),
+  periodEndDate: varchar("periodEndDate", { length: 10 }).notNull(),
+  generatedAt: timestamp("generatedAt").notNull(),
+  csvKey: varchar("csvKey", { length: 512 }).notNull(),
+  csvUrl: varchar("csvUrl", { length: 512 }).notNull(),
+  csvSha256: varchar("csvSha256", { length: 64 }).notNull(),
+  csvBytes: int("csvBytes").notNull(),
+  htmlKey: varchar("htmlKey", { length: 512 }).notNull(),
+  htmlUrl: varchar("htmlUrl", { length: 512 }).notNull(),
+  htmlSha256: varchar("htmlSha256", { length: 64 }).notNull(),
+  htmlBytes: int("htmlBytes").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [uniqueIndex("monthly_report_artifacts_period_unique").on(table.year, table.month)]);
+
 export const recipes = mysqlTable("recipes", {
   id: int("id").autoincrement().primaryKey(),
   productId: int("productId").notNull().unique().references(() => products.id, { onDelete: "cascade" }),
@@ -206,3 +225,4 @@ export type ExchangeSettlement = typeof exchangeSettlements.$inferSelect;
 export type Recipe = typeof recipes.$inferSelect;
 export type RecipeItem = typeof recipeItems.$inferSelect;
 export type BusinessSettings = typeof businessSettings.$inferSelect;
+export type MonthlyReportArtifact = typeof monthlyReportArtifacts.$inferSelect;

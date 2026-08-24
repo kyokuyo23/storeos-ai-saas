@@ -1,0 +1,20 @@
+CREATE TABLE `monthlyReportArtifacts` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`year` int NOT NULL,
+	`month` int NOT NULL,
+	`timezone` varchar(80) NOT NULL,
+	`periodStartDate` varchar(10) NOT NULL,
+	`periodEndDate` varchar(10) NOT NULL,
+	`generatedAt` timestamp NOT NULL,
+	`csvKey` varchar(512) NOT NULL,
+	`csvUrl` varchar(512) NOT NULL,
+	`csvSha256` varchar(64) NOT NULL,
+	`csvBytes` int NOT NULL,
+	`htmlKey` varchar(512) NOT NULL,
+	`htmlUrl` varchar(512) NOT NULL,
+	`htmlSha256` varchar(64) NOT NULL,
+	`htmlBytes` int NOT NULL,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	CONSTRAINT `monthlyReportArtifacts_id` PRIMARY KEY(`id`),
+	CONSTRAINT `monthly_report_artifacts_period_unique` UNIQUE(`year`,`month`)
+);

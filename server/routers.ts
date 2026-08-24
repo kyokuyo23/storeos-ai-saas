@@ -7,6 +7,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, monthlyReportInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput, stockOpnameFollowUpInput, stockOpnameFollowUpNoteInput, stockOpnameHistoryInput } from "./foundationSchemas";
 import { getMonthlyManagementReport } from "./monthlyReports";
+import { getMonthlyReportArtifactDownloadUrls } from "./monthlyReportArtifacts";
 
 const idInput = z.object({ id: z.number().int().positive() });
 const runMutation = async <T>(entity: string, operation: () => Promise<T>) => {
@@ -55,6 +56,7 @@ export const appRouter = router({
   }),
   reports: router({
     monthlySummary: publicProcedure.input(monthlyReportInput).query(({ input }) => runMutation("Laporan bulanan", () => getMonthlyManagementReport(input))),
+    monthlyArtifact: publicProcedure.input(monthlyReportInput).query(({ input }) => runMutation("Artefak laporan bulanan", () => getMonthlyReportArtifactDownloadUrls(input.year, input.month))),
   }),
   sale: router({
     list: publicProcedure.query(() => db.listSales()),
