@@ -258,3 +258,7 @@
 - [x] Add browser-level assertions for Monthly Management Summary CSV download and PDF/print output.
 - [x] Verify export scope, selected Jakarta/WIB month, content, and download/print behavior.
 - [x] Run export tests, full suite, TypeScript, production build, and responsive validation.
+
+- [x] Add a real CI browser download-file integration check for the existing Monthly Management Summary CSV export.
+- [x] Verify downloaded filename, non-empty content, UTF-8 BOM, Jakarta/WIB month scope, report sections, and quoted CSV values.
+- [x] Run the download test, full suite, TypeScript, production build, and desktop/mobile validation.
