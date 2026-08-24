@@ -262,3 +262,7 @@
 - [x] Add a real CI browser download-file integration check for the existing Monthly Management Summary CSV export.
 - [x] Verify downloaded filename, non-empty content, UTF-8 BOM, Jakarta/WIB month scope, report sections, and quoted CSV values.
 - [x] Run the download test, full suite, TypeScript, production build, and desktop/mobile validation.
+
+- [x] Add standard CSV parser compatibility assertions to the existing real Playwright Monthly Management Summary download test.
+- [x] Verify BOM handling, quoted fields, section headers, numeric cells, selected Jakarta/WIB month data, and boundary exclusion through parsed rows.
+- [x] Run Vitest, Playwright download, TypeScript, production build, and desktop/mobile validation.

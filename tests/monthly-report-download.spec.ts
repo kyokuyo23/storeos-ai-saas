@@ -1,3 +1,4 @@
+import { parse } from "csv-parse/sync";
 import { expect, test } from "@playwright/test";
 import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -5,7 +6,7 @@ import { join } from "node:path";
 
 const reportFixture = {
   period: {
-    label: "Januari 2026",
+    label: "Januari, 2026",
     startDate: "2026-01-01",
     endDate: "2026-01-31",
     timezone: "Asia/Jakarta",
@@ -51,7 +52,7 @@ test("downloads a non-empty monthly CSV with exact scope and quoted sections", a
 
   await page.getByLabel("Tahun").selectOption("2026");
   await page.getByLabel("Bulan").selectOption("1");
-  await expect(page.getByText("Januari 2026", { exact: true })).toBeVisible();
+  await expect(page.getByText("Januari, 2026", { exact: true })).toBeVisible();
   await expect(page.getByText("2026-01-01 s/d 2026-01-31 · Asia/Jakarta", { exact: true })).toBeVisible();
 
   const downloadPromise = page.waitForEvent("download");
@@ -70,7 +71,7 @@ test("downloads a non-empty monthly CSV with exact scope and quoted sections", a
 
   const csv = await readFile(downloadedPath, "utf8");
   expect(csv.charCodeAt(0)).toBe(0xfeff);
-  expect(csv).toContain('"StoreOS Monthly Management Report","Januari 2026"');
+  expect(csv).toContain('"StoreOS Monthly Management Report","Januari, 2026"');
   expect(csv).toContain('"Periode mulai","2026-01-01"');
   expect(csv).toContain('"Periode akhir","2026-01-31"');
   expect(csv).toContain('"Timezone","Asia/Jakarta"');
@@ -81,4 +82,54 @@ test("downloads a non-empty monthly CSV with exact scope and quoted sections", a
   expect(csv.endsWith("\r\n")).toBe(true);
   expect(csv).not.toContain("2025-12-31");
   expect(csv).not.toContain("2026-02-01");
+
+  const parsedRows = parse(csv, {
+    bom: true,
+    columns: false,
+    relax_column_count: false,
+    skip_empty_lines: true,
+  }) as string[][];
+  expect(parsedRows.every((row) => row.length === 2)).toBe(true);
+  expect(parsedRows[0]).toEqual(["StoreOS Monthly Management Report", "Januari, 2026"]);
+  expect(parsedRows[0]?.[0]).not.toContain("\\uFEFF");
+  expect(parsedRows[1]).toEqual(["Periode mulai", "2026-01-01"]);
+  expect(parsedRows[2]).toEqual(["Periode akhir", "2026-01-31"]);
+  expect(parsedRows[3]).toEqual(["Timezone", "Asia/Jakarta"]);
+  expect(parsedRows.find((row) => row[0] === "Financial")).toEqual(["Financial", "Nilai"]);
+  expect(parsedRows.find((row) => row[0] === "Inventory")).toEqual(["Inventory", "Nilai"]);
+
+  const numericLabels = new Set([
+    "Gross Sales",
+    "Net Revenue",
+    "COGS",
+    "Gross Profit",
+    "Gross Margin (%)",
+    "Sales Transaction Count",
+    "Refund Value",
+    "Void Value",
+    "Exchange Impact",
+    "Opening Stock",
+    "Closing Stock",
+    "Expected Stock",
+    "Actual Stock",
+    "Total Variance",
+    "Out-of-Tolerance Item Count",
+    "High-Value Variance Count",
+    "Recurring High Variance Ingredient Count",
+    "Stock-Opname Session Count",
+    "Open Stock-Opname Follow-Up Count",
+  ]);
+  for (const row of parsedRows) {
+    if (numericLabels.has(row[0])) {
+      expect(row[1]).not.toBe("");
+      expect(Number.isFinite(Number(row[1]))).toBe(true);
+    }
+  }
+
+  const reportRows = new Map(parsedRows.filter((row) => row[0] && row[1] !== undefined).map((row) => [row[0], row[1]]));
+  expect(reportRows.get("StoreOS Monthly Management Report")).toBe("Januari, 2026");
+  expect(reportRows.get("Periode mulai")).toBe("2026-01-01");
+  expect(reportRows.get("Periode akhir")).toBe("2026-01-31");
+  expect(reportRows.get("Net Revenue")).toBe("115000");
+  expect(reportRows.get("Recurring High Variance Ingredient Count")).toBe("1");
 });
