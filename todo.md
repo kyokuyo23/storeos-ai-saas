@@ -254,3 +254,7 @@
 - [x] Add fixture-backed integration tests for non-empty Phase 2.1 monthly financial and inventory periods, including transaction reconciliation, Jakarta/WIB boundaries, exports, and read-only behavior.
 - [x] Run the full Phase 2.1 test, TypeScript, production build, and desktop/mobile validation suite.
 - [x] Save the test-only validation checkpoint and report remaining coverage gaps.
+
+- [x] Add browser-level assertions for Monthly Management Summary CSV download and PDF/print output.
+- [x] Verify export scope, selected Jakarta/WIB month, content, and download/print behavior.
+- [x] Run export tests, full suite, TypeScript, production build, and responsive validation.
