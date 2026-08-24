@@ -266,3 +266,7 @@
 - [x] Add standard CSV parser compatibility assertions to the existing real Playwright Monthly Management Summary download test.
 - [x] Verify BOM handling, quoted fields, section headers, numeric cells, selected Jakarta/WIB month data, and boundary exclusion through parsed rows.
 - [x] Run Vitest, Playwright download, TypeScript, production build, and desktop/mobile validation.
+
+- [x] Add a browser-level UTF-8 Indonesian Unicode-label assertion to the existing Monthly Management Summary CSV download test.
+- [x] Verify BOM preservation, diacritics/special Unicode decoding, csv-parse validity, and unchanged Jakarta/WIB scope and boundary assertions.
+- [x] Run Vitest, Playwright download, TypeScript, production build, and desktop/mobile validation.
