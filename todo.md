@@ -295,3 +295,8 @@
 - [x] Verify deployed Heartbeat callback readiness, report source, durable artifacts, immutability, and read-only behavior
 - [x] Activate the monthly previous-completed-month Jakarta/WIB Heartbeat schedule
 - [x] Run scheduler verification, relevant tests, TypeScript, and production build, then report any remaining Phase 2.2 blockers
+- [x] Verify the first live Heartbeat execution status and its durable artifact results without simulating a run
+- [x] Verify the supported Heartbeat cron solution for 00:15 WIB on the first calendar day of each month
+- [ ] Update only the active Heartbeat schedule and confirm its next UTC and WIB execution times
+- [x] Run scheduler configuration tests, TypeScript, and production build for the timing correction
+- [x] Add and test the minimal Jakarta-first-day callback guard required by the supported UTC day-range schedule

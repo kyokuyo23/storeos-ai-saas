@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   getMonthlyHeartbeatDefinition,
   handleAutomatedMonthlyReport,
+  isJakartaFirstCalendarDay,
   monthlyReportToPrintableHtml,
   resolvePreviousCompletedJakartaMonth,
 } from "./automatedMonthlyReports";
@@ -63,11 +64,16 @@ function response(): MockResponse {
 }
 
 describe("Phase 2.2 automated monthly management reporting", () => {
-  it("defines a first-of-month 00:15 WIB Heartbeat schedule in UTC", () => {
+  it("defines a supported UTC end-of-month range with a Jakarta-first-day generation guard", () => {
     expect(getMonthlyHeartbeatDefinition()).toMatchObject({
-      cron: "0 15 17 1 * *",
+      cron: "0 15 17 28-31 * *",
       path: "/api/scheduled/monthly-management-report",
     });
+  });
+
+  it("recognizes only 00:15 WIB on the Jakarta first calendar day as a report-generation boundary", () => {
+    expect(isJakartaFirstCalendarDay(new Date("2026-08-31T17:15:00.000Z"))).toBe(true);
+    expect(isJakartaFirstCalendarDay(new Date("2026-08-28T17:15:00.000Z"))).toBe(false);
   });
 
   it("selects the previous completed Jakarta month across a year boundary", () => {
@@ -102,6 +108,22 @@ describe("Phase 2.2 automated monthly management reporting", () => {
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith({ error: "cron-only" });
     auth.mockRestore();
+  });
+
+  it("skips authenticated cron wake-ups outside the Jakarta first-day boundary without generating artifacts", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-28T17:15:00.000Z"));
+    const auth = vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ isCron: true } as never);
+    const res = response();
+    await handleAutomatedMonthlyReport({ originalUrl: "/api/scheduled/monthly-management-report" } as never, res as never);
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith({
+      ok: true,
+      skipped: true,
+      reason: "outside_jakarta_month_boundary",
+    });
+    auth.mockRestore();
+    vi.useRealTimers();
   });
 
   it("returns a JSON 500 with retry-safe diagnostics when authentication fails", async () => {

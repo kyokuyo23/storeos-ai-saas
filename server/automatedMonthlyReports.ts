@@ -30,6 +30,19 @@ export function resolvePreviousCompletedJakartaMonth(now = new Date()) {
   };
 }
 
+/**
+ * Heartbeat accepts numeric day-of-month cron fields only. The UTC schedule
+ * therefore wakes near the end of each UTC month; this guard ensures report
+ * generation proceeds exclusively at 00:15 WIB on Jakarta's first day.
+ */
+export function isJakartaFirstCalendarDay(now = new Date()) {
+  const day = new Intl.DateTimeFormat("en-US", {
+    timeZone: JAKARTA_TIMEZONE,
+    day: "2-digit",
+  }).format(now);
+  return day === "01";
+}
+
 export type AutomatedMonthlyReportArtifacts = {
   report: Awaited<ReturnType<typeof getMonthlyManagementReport>>;
   csv: string;
@@ -91,7 +104,15 @@ export async function handleAutomatedMonthlyReport(req: Request, res: Response) 
   try {
     const user = await sdk.authenticateRequest(req);
     if (!user.isCron) return res.status(403).json({ error: "cron-only" });
-    const target = resolvePreviousCompletedJakartaMonth();
+    const now = new Date();
+    if (!isJakartaFirstCalendarDay(now)) {
+      return res.json({
+        ok: true,
+        skipped: true,
+        reason: "outside_jakarta_month_boundary",
+      });
+    }
+    const target = resolvePreviousCompletedJakartaMonth(now);
     const artifacts = await generateAutomatedMonthlyManagementReport(target.year, target.month);
     const persisted = await persistMonthlyReportArtifacts(artifacts);
     return res.json({
@@ -114,9 +135,9 @@ export async function handleAutomatedMonthlyReport(req: Request, res: Response) 
 export function getMonthlyHeartbeatDefinition() {
   return {
     name: "storeos-monthly-management-report",
-    cron: "0 15 17 1 * *",
+    cron: "0 15 17 28-31 * *",
     path: "/api/scheduled/monthly-management-report",
-    description: "Generate the previous completed Jakarta/WIB monthly management report at 00:15 WIB on the first day of each month.",
+    description: "Wake at 00:15 WIB across the final Jakarta calendar days; generate only when the Jakarta-first-day guard confirms the previous completed month boundary.",
   } as const;
 }
 
