@@ -280,3 +280,7 @@
 - [x] Add approved audit notes and generated timestamp to the read-only monthly report/export contract
 - [x] Add persisted-shaped regression and integration tests for financial reversals, exchanges, boundaries, and export metadata
 - [x] Re-run full tests, TypeScript, production build, and desktop/mobile validation
+- [x] Inspect and select the safest existing scheduling/report-delivery mechanism for Phase 2.2
+- [x] Implement only the supported automated monthly report-generation foundation using Phase 2.1 sources and exports
+- [x] Add Phase 2.2 tests for scheduling, Jakarta/WIB boundaries, report generation, exports, empty/non-empty months, failures, retries, and read-only integrity
+- [x] Run full tests, TypeScript, production build, and desktop/mobile validation for Phase 2.2
