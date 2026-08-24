@@ -23,6 +23,7 @@ vi.mock("./storage", () => ({ storagePut, storageGet }));
 vi.mock("./db", () => ({ getDb: vi.fn(async () => db) }));
 
 import { getMonthlyReportArtifact, getMonthlyReportArtifactDownloadUrls, persistMonthlyReportArtifacts } from "./monthlyReportArtifacts";
+import { printableMonthlyHtmlToPdf } from "./monthlyReportPdf";
 
 function generatedReport() {
   return {
@@ -36,6 +37,7 @@ function generatedReport() {
     },
     csv: "\ufeff\"Periode mulai\",\"2026-01-01\"\n\"Audit Notes\",\"Periksa selisih\"\n",
     printableHtml: "<!doctype html><html><body>Januari 2026 · Generated At: 2026-02-01T00:15:00.000Z · Periksa selisih</body></html>",
+    pdf: printableMonthlyHtmlToPdf("<!doctype html><html><body>Januari 2026 · Generated At: 2026-02-01T00:15:00.000Z · Periksa selisih</body></html>"),
     generatedAt: "2026-02-01T00:15:00.000Z",
   } as any;
 }
@@ -47,15 +49,17 @@ describe("Phase 2.2 durable monthly report artifacts", () => {
     storageGet.mockClear();
   });
 
-  it("creates durable CSV and printable HTML metadata for an empty Jakarta month", async () => {
+  it("creates durable CSV, printable HTML, and real PDF metadata for an empty Jakarta month", async () => {
     const result = await persistMonthlyReportArtifacts(generatedReport());
     expect(result.created).toBe(true);
     expect(result.artifact).toMatchObject({ year: 2026, month: 1, timezone: "Asia/Jakarta", periodStartDate: "2026-01-01", periodEndDate: "2026-01-31", generatedAt: new Date("2026-02-01T00:15:00.000Z") });
     expect(result.artifact.csv.bytes).toBeGreaterThan(0);
     expect(result.artifact.printableHtml.bytes).toBeGreaterThan(0);
+    expect(result.artifact.pdf.bytes).toBeGreaterThan(0);
     expect(result.artifact.csv.sha256).toHaveLength(64);
     expect(result.artifact.printableHtml.sha256).toHaveLength(64);
-    expect(storagePut).toHaveBeenCalledTimes(2);
+    expect(result.artifact.pdf.sha256).toHaveLength(64);
+    expect(storagePut).toHaveBeenCalledTimes(3);
   });
 
   it("retrieves one deterministic artifact by year and month with storage URLs", async () => {
@@ -66,7 +70,8 @@ describe("Phase 2.2 durable monthly report artifacts", () => {
     expect(artifact?.month).toBe(1);
     expect(downloadable?.csv.url).toBe("/manus-storage/monthly-management-reports/2026/01/report.csv-stored");
     expect(downloadable?.printableHtml.url).toBe("/manus-storage/monthly-management-reports/2026/01/report.html-stored");
-    expect(storageGet).toHaveBeenCalledTimes(2);
+    expect(downloadable?.pdf.url).toBe("/manus-storage/monthly-management-reports/2026/01/report.pdf-stored");
+    expect(storageGet).toHaveBeenCalledTimes(3);
   });
 
   it("does not overwrite a previously stored period on duplicate generation", async () => {
@@ -75,7 +80,8 @@ describe("Phase 2.2 durable monthly report artifacts", () => {
     expect(first.created).toBe(true);
     expect(second.created).toBe(false);
     expect(second.artifact.csv.sha256).toBe(first.artifact.csv.sha256);
-    expect(storagePut).toHaveBeenCalledTimes(2);
+    expect(second.artifact.pdf.sha256).toBe(first.artifact.pdf.sha256);
+    expect(storagePut).toHaveBeenCalledTimes(3);
     expect(rows).toHaveLength(1);
   });
 
@@ -90,5 +96,15 @@ describe("Phase 2.2 durable monthly report artifacts", () => {
     expect(db).not.toHaveProperty("delete");
     expect(rows[0]).not.toHaveProperty("saleId");
     expect(rows[0]).not.toHaveProperty("ingredientId");
+  });
+
+  it("generates a valid PDF containing Jakarta period, timestamp, and audit-note report content", () => {
+    const pdf = printableMonthlyHtmlToPdf(generatedReport().printableHtml);
+    const text = pdf.toString("latin1");
+    expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(text).toContain("Januari 2026");
+    expect(text).toContain("Generated At: 2026-02-01T00:15:00.000Z");
+    expect(text).toContain("Periksa selisih");
+    expect(text).toContain("%%EOF");
   });
 });

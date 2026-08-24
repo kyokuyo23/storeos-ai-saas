@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { sdk } from "./_core/sdk";
 import { getMonthlyManagementReport, monthlyReportToCsv, resolveJakartaMonth } from "./monthlyReports";
 import { persistMonthlyReportArtifacts } from "./monthlyReportArtifacts";
+import { printableMonthlyHtmlToPdf } from "./monthlyReportPdf";
 
 const JAKARTA_TIMEZONE = "Asia/Jakarta";
 
@@ -33,6 +34,7 @@ export type AutomatedMonthlyReportArtifacts = {
   report: Awaited<ReturnType<typeof getMonthlyManagementReport>>;
   csv: string;
   printableHtml: string;
+  pdf: Buffer;
   generatedAt: string;
 };
 
@@ -69,10 +71,12 @@ export function monthlyReportToPrintableHtml(report: Awaited<ReturnType<typeof g
 
 export async function generateAutomatedMonthlyManagementReport(year: number, month: number): Promise<AutomatedMonthlyReportArtifacts> {
   const report = await getMonthlyManagementReport({ year, month });
+  const printableHtml = monthlyReportToPrintableHtml(report);
   return {
     report,
     csv: monthlyReportToCsv(report),
-    printableHtml: monthlyReportToPrintableHtml(report),
+    printableHtml,
+    pdf: printableMonthlyHtmlToPdf(printableHtml),
     generatedAt: report.generatedAt,
   };
 }
@@ -96,7 +100,7 @@ export async function handleAutomatedMonthlyReport(req: Request, res: Response) 
       generatedAt: artifacts.generatedAt,
       artifact: persisted.artifact,
       created: persisted.created,
-      delivery: { csv: "stored", printableHtml: "stored", pdf: "not-generated" },
+      delivery: { csv: "stored", printableHtml: "stored", pdf: "stored" },
     });
   } catch (error) {
     return res.status(500).json({

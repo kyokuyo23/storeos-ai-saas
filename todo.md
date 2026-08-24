@@ -288,3 +288,7 @@
 - [x] Add durable CSV and printable HTML artifact storage with deterministic Jakarta/WIB period retrieval and duplicate protection
 - [x] Integrate artifact persistence with the Phase 2.2 report foundation without mutating financial or inventory records
 - [x] Add artifact lifecycle and read-only integrity tests, then run full tests, TypeScript, build, and desktop/mobile validation
+- [x] Inspect the existing report artifact service and select a production-safe server-side PDF generation path
+- [x] Generate and persist a real PDF artifact with Jakarta/WIB period identity, timestamp, checksum, size, and duplicate-period protection
+- [x] Add PDF artifact regression tests for empty and non-empty reports, audit metadata, integrity, retrieval, and read-only behavior
+- [x] Run full tests, TypeScript, production build, and desktop/mobile validation for the PDF artifact implementation

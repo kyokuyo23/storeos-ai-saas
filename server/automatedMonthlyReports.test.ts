@@ -6,6 +6,7 @@ import {
   resolvePreviousCompletedJakartaMonth,
 } from "./automatedMonthlyReports";
 import { sdk } from "./_core/sdk";
+import { printableMonthlyHtmlToPdf } from "./monthlyReportPdf";
 
 const report = {
   period: {
@@ -82,7 +83,16 @@ describe("Phase 2.2 automated monthly management reporting", () => {
     expect(html).toContain("135000");
     expect(html).toContain("Recurring High Variance Ingredient Count");
     const empty = { ...report, auditNotes: [] } as never;
-    expect(monthlyReportToPrintableHtml(empty)).toContain("Tidak ada catatan audit pada periode ini.");
+    const emptyHtml = monthlyReportToPrintableHtml(empty);
+    expect(emptyHtml).toContain("Tidak ada catatan audit pada periode ini.");
+
+    const nonEmptyPdf = printableMonthlyHtmlToPdf(html).toString("latin1");
+    const emptyPdf = printableMonthlyHtmlToPdf(emptyHtml).toString("latin1");
+    expect(nonEmptyPdf).toContain("%PDF-");
+    expect(nonEmptyPdf).toContain("Januari 2026");
+    expect(nonEmptyPdf).toContain("Generated At: 2026-02-01T00:15:00.000Z");
+    expect(nonEmptyPdf).toContain("Periksa selisih kopi");
+    expect(emptyPdf).toContain("Tidak ada catatan audit pada periode ini.");
   });
 
   it("rejects non-cron callers without running report generation", async () => {

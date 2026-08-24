@@ -173,6 +173,10 @@ export const monthlyReportArtifacts = mysqlTable("monthlyReportArtifacts", {
   htmlUrl: varchar("htmlUrl", { length: 512 }).notNull(),
   htmlSha256: varchar("htmlSha256", { length: 64 }).notNull(),
   htmlBytes: int("htmlBytes").notNull(),
+  pdfKey: varchar("pdfKey", { length: 512 }).notNull(),
+  pdfUrl: varchar("pdfUrl", { length: 512 }).notNull(),
+  pdfSha256: varchar("pdfSha256", { length: 64 }).notNull(),
+  pdfBytes: int("pdfBytes").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => [uniqueIndex("monthly_report_artifacts_period_unique").on(table.year, table.month)]);
 
