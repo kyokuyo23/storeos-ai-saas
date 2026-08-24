@@ -1,4 +1,6 @@
 export type MonthlyReportExportData = {
+  generatedAt?: string;
+  auditNotes?: Array<{ reference: string; type: "session" | "follow_up"; note: string }>;
   period: {
     label: string;
     startDate: string;
@@ -37,6 +39,7 @@ const rowsFor = (report: MonthlyReportExportData): Array<Array<string | number>>
   ["Periode mulai", report.period.startDate],
   ["Periode akhir", report.period.endDate],
   ["Timezone", report.period.timezone],
+  ["Generated At", report.generatedAt ?? ""],
   [],
   ["Financial", "Nilai"],
   ["Gross Sales", report.financial.grossSales],
@@ -60,6 +63,9 @@ const rowsFor = (report: MonthlyReportExportData): Array<Array<string | number>>
   ["Recurring High Variance Ingredient Count", report.inventory.recurringHighVarianceIngredientCount],
   ["Stock-Opname Session Count", report.inventory.stockOpnameSessionCount],
   ["Open Stock-Opname Follow-Up Count", report.inventory.openStockOpnameFollowUpCount],
+  [],
+  ["Audit Notes", "Catatan"],
+  ...(report.auditNotes ?? []).map((entry) => ["", `${entry.reference} · ${entry.type}: ${entry.note}`]),
 ];
 
 const escapeCell = (cell: string | number | undefined | null) => `"${String(cell ?? "").replaceAll('"', '""')}"`;

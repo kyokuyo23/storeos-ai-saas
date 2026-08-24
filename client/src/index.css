@@ -58,3 +58,10 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .foundation-content { padding: 0; }
   .foundation-panel { box-shadow: none; break-inside: avoid; }
 }
+
+.report-metadata { display: grid; gap: 14px; }
+.report-metadata > div { display: grid; gap: 5px; }
+.report-metadata span { color: #84918a; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.report-metadata strong { color: #154f3c; font-size: 14px; overflow-wrap: anywhere; }
+.report-metadata ul { display: grid; gap: 6px; margin: 0; padding-left: 18px; color: #405048; font-size: 13px; line-height: 1.45; }
+@media print { .report-metadata { break-inside: avoid; } }

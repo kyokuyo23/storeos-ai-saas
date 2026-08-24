@@ -64,8 +64,14 @@ export async function getMonthlyManagementReport(input: { year: number; month: n
   const openingStock = round(currentInventory.rows.reduce((sum, row) => sum + row.openingStock, 0), 3);
   const closingStock = round(currentInventory.rows.reduce((sum, row) => sum + row.actualClosingStock, 0), 3);
   const expectedStock = round(currentInventory.rows.reduce((sum, row) => sum + row.expectedClosingStock, 0), 3);
+  const auditNotes = monthSessions.flatMap((session) => [
+    session.note ? { reference: session.reference, type: "session" as const, note: session.note } : null,
+    session.followUpNote ? { reference: session.reference, type: "follow_up" as const, note: session.followUpNote } : null,
+  ].filter((entry): entry is { reference: string; type: "session" | "follow_up"; note: string } => Boolean(entry)));
   return {
     period: { year: period.year, month: period.month, startDate: period.startDate, endDate: period.endDate, label: period.label, timezone: "Asia/Jakarta" },
+    generatedAt: new Date().toISOString(),
+    auditNotes,
     financial: {
       grossSales: financial.revenue,
       netRevenue: financial.revenue,
@@ -73,9 +79,9 @@ export async function getMonthlyManagementReport(input: { year: number; month: n
       grossProfit: financial.grossProfit,
       grossMargin: financial.grossMargin,
       salesTransactionCount: financial.saleCount,
-      refundValue: 0,
-      voidValue: 0,
-      exchangeImpact: 0,
+      refundValue: financial.refundValue,
+      voidValue: financial.voidValue,
+      exchangeImpact: financial.exchangeImpact,
     },
     inventory: {
       openingStock,
@@ -89,7 +95,7 @@ export async function getMonthlyManagementReport(input: { year: number; month: n
       stockOpnameSessionCount: monthSessions.length,
       openStockOpnameFollowUpCount: openFollowUpCount,
     },
-    source: { financial: "Financial Core", inventory: "Inventory Ledger + Inventory Intelligence", recurringVariancePeriods: inventoryPeriods.map(({ period: item }) => item.startDate) },
+    source: { financial: "Financial Core", inventory: "Inventory Ledger + Inventory Intelligence", auditNotes: "Stock Opname + Follow-up", recurringVariancePeriods: inventoryPeriods.map(({ period: item }) => item.startDate) },
   };
 }
 
@@ -99,6 +105,7 @@ export function monthlyReportToCsv(report: Awaited<ReturnType<typeof getMonthlyM
     ["Periode mulai", report.period.startDate],
     ["Periode akhir", report.period.endDate],
     ["Timezone", report.period.timezone],
+    ["Generated At", report.generatedAt ?? ""],
     [],
     ["Financial", "Nilai"],
     ["Gross Sales", report.financial.grossSales],
@@ -122,6 +129,9 @@ export function monthlyReportToCsv(report: Awaited<ReturnType<typeof getMonthlyM
     ["Recurring High Variance Ingredient Count", report.inventory.recurringHighVarianceIngredientCount],
     ["Stock-Opname Session Count", report.inventory.stockOpnameSessionCount],
     ["Open Stock-Opname Follow-Up Count", report.inventory.openStockOpnameFollowUpCount],
+    [],
+    ["Audit Notes", "Catatan"],
+    ...(report.auditNotes ?? []).map((entry) => ["", `${entry.reference} · ${entry.type}: ${entry.note}`]),
   ];
   return rows.map((row) => row.map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`).join(",")).join("\n");
 }

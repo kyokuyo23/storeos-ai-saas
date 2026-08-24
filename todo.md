@@ -273,3 +273,10 @@
 
 - [x] Configure failure-only CI artifacts for the Playwright CSV download test: trace, downloaded CSV, and test report/output.
 - [x] Run Vitest, Playwright download, TypeScript, production build, and desktop/mobile validation.
+
+- [x] Perform final Phase 2.1 acceptance review against PRD, SRS, TECH, and ACCEPTANCE documents.
+- [x] Run final acceptance tests, TypeScript, production build, and desktop/mobile browser validation.
+- [x] Reconcile monthly refund, void, exchange, and net revenue metrics from existing authoritative transaction data
+- [x] Add approved audit notes and generated timestamp to the read-only monthly report/export contract
+- [x] Add persisted-shaped regression and integration tests for financial reversals, exchanges, boundaries, and export metadata
+- [x] Re-run full tests, TypeScript, production build, and desktop/mobile validation

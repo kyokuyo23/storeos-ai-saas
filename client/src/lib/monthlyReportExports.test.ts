@@ -9,6 +9,8 @@ import {
 } from "./monthlyReportExports";
 
 const report: MonthlyReportExportData = {
+  generatedAt: "2026-08-24T04:00:00.000Z",
+  auditNotes: [{ reference: "OPN-2026-01-ABC12", type: "follow_up", note: "Periksa waste akhir bulan — bahan kopi" }],
   period: {
     label: "Januari 2026",
     startDate: "2026-01-01",
@@ -56,6 +58,9 @@ describe("monthly report browser exports", () => {
     expect(csv).toContain('"Periode mulai","2026-01-01"');
     expect(csv).toContain('"Periode akhir","2026-01-31"');
     expect(csv).toContain('"Timezone","Asia/Jakarta"');
+    expect(csv).toContain('"Generated At","2026-08-24T04:00:00.000Z"');
+    expect(csv).toContain('"Audit Notes","Catatan"');
+    expect(csv).toContain('"","OPN-2026-01-ABC12 · follow_up: Periksa waste akhir bulan — bahan kopi"');
     expect(csv).toContain('"Gross Sales","150000"');
     expect(csv).toContain('"Recurring High Variance Ingredient Count","1"');
     expect(csv).not.toContain("2025-12-31");

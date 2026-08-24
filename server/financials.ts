@@ -1,14 +1,14 @@
 export type FinancialIngredientSnapshot = { ingredientId?: number; unitQuantity: number; unitCost: number };
 export type FinancialExchangeItem = { productId: number; productName: string; quantity: number; lineTotal: number; ingredientSnapshots: FinancialIngredientSnapshot[] };
-export type FinancialExchange = { id: number; saleItemId: number; returnedQuantity: number; returnedTotal: number; replacementTotal: number; items: FinancialExchangeItem[] };
+export type FinancialExchange = { id: number; saleItemId: number; returnedQuantity: number; returnedTotal: number; replacementTotal: number; paymentAdjustment?: number; items: FinancialExchangeItem[] };
 export type FinancialSaleLine = { id: number; productId: number; productName: string; quantity: number; unitPrice: number; lineTotal: number; refundedQuantity: number; exchanges: FinancialExchange[]; ingredientSnapshots: FinancialIngredientSnapshot[] };
-export type FinancialSale = { id: number; status: "completed" | "partially_refunded" | "voided" | "refunded"; completedAt: Date; lines: FinancialSaleLine[] };
+export type FinancialSale = { id: number; status: "completed" | "partially_refunded" | "voided" | "refunded"; total?: number; completedAt: Date; lines: FinancialSaleLine[] };
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 export const cogsForSnapshots = (snapshots: FinancialIngredientSnapshot[], quantity = 1) => round(snapshots.reduce((sum, snapshot) => sum + snapshot.unitQuantity * snapshot.unitCost * quantity, 0));
 export const percentage = (numerator: number, denominator: number) => denominator > 0 ? round((numerator / denominator) * 100) : 0;
 
-export type FinancialTotals = { revenue: number; cogs: number; grossProfit: number; grossMargin: number; saleCount: number; unitsSold: number };
+export type FinancialTotals = { revenue: number; cogs: number; grossProfit: number; grossMargin: number; saleCount: number; unitsSold: number; refundValue: number; voidValue: number; exchangeImpact: number };
 export type ProductPerformance = { productId: number; productName: string; quantity: number; revenue: number; cogs: number; grossProfit: number; grossMargin: number };
 export type ProductFinancialHistory = {
   id: string;
@@ -26,7 +26,7 @@ export type ProductFinancialHistory = {
   ingredientSnapshots: FinancialIngredientSnapshot[];
 };
 
-function blankTotals(): FinancialTotals { return { revenue: 0, cogs: 0, grossProfit: 0, grossMargin: 0, saleCount: 0, unitsSold: 0 }; }
+function blankTotals(): FinancialTotals { return { revenue: 0, cogs: 0, grossProfit: 0, grossMargin: 0, saleCount: 0, unitsSold: 0, refundValue: 0, voidValue: 0, exchangeImpact: 0 }; }
 function addProduct(products: Map<number, ProductPerformance>, product: Omit<ProductPerformance, "grossProfit" | "grossMargin">) {
   const current = products.get(product.productId) ?? { ...product, quantity: 0, revenue: 0, cogs: 0, grossProfit: 0, grossMargin: 0 };
   current.quantity += product.quantity;
@@ -39,7 +39,17 @@ export function summarizeFinancialSales(sales: FinancialSale[]) {
   const totals = blankTotals();
   const products = new Map<number, ProductPerformance>();
   const saleSummaries = sales.map((sale) => {
-    if (sale.status === "voided" || sale.status === "refunded") return { saleId: sale.id, revenue: 0, cogs: 0, grossProfit: 0, grossMargin: 0, unitsSold: 0 };
+    const saleGross = round(sale.total ?? sale.lines.reduce((sum, line) => sum + line.lineTotal, 0));
+    const partialRefundValue = round(sale.lines.reduce((sum, line) => sum + line.unitPrice * line.refundedQuantity, 0));
+    const exchangeImpact = round(sale.lines.reduce((sum, line) => sum + line.exchanges.reduce((exchangeSum, exchange) => exchangeSum + (exchange.paymentAdjustment ?? exchange.replacementTotal - exchange.returnedTotal), 0), 0));
+    if (sale.status === "voided" || sale.status === "refunded") {
+      if (sale.status === "voided") totals.voidValue += saleGross;
+      else totals.refundValue += saleGross;
+      totals.exchangeImpact += exchangeImpact;
+      return { saleId: sale.id, revenue: 0, cogs: 0, grossProfit: 0, grossMargin: 0, unitsSold: 0 };
+    }
+    totals.refundValue += partialRefundValue;
+    totals.exchangeImpact += exchangeImpact;
     const summary = { saleId: sale.id, revenue: 0, cogs: 0, grossProfit: 0, grossMargin: 0, unitsSold: 0 };
     sale.lines.forEach((line) => {
       const returnedQuantity = line.refundedQuantity + line.exchanges.reduce((sum, exchange) => sum + exchange.returnedQuantity, 0);

@@ -2,6 +2,7 @@
 "Periode mulai","2026-01-01"
 "Periode akhir","2026-01-31"
 "Timezone","Asia/Jakarta"
+"Generated At",""
 
 "Financial","Nilai"
 "Gross Sales","125000"
@@ -25,3 +26,5 @@
 "Recurring High Variance Ingredient Count","1"
 "Stock-Opname Session Count","2"
 "Open Stock-Opname Follow-Up Count","1"
+
+"Audit Notes","Catatan"

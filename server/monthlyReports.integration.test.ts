@@ -106,6 +106,14 @@ describe("Phase 2.1 non-empty monthly report integration fixtures", () => {
     expect(report.financial.grossProfit).toBe(expected.grossProfit);
     expect(report.financial.grossMargin).toBe(expected.grossMargin);
     expect(report.financial.salesTransactionCount).toBe(expected.saleCount);
+    expect(report.financial.refundValue).toBe(110);
+    expect(report.financial.voidValue).toBe(40);
+    expect(report.financial.exchangeImpact).toBe(-20);
+    expect(report.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    expect(report.auditNotes).toEqual([
+      { reference: "OPN-1769875200000-ABC12", type: "session", note: "Januari closing" },
+      { reference: "OPN-1769875200000-ABC12", type: "follow_up", note: "Periksa waste akhir bulan" },
+    ]);
     expect(expected.revenue).toBe(210);
     expect(expected.cogs).toBe(38);
     expect(expected.grossProfit).toBe(172);
@@ -129,6 +137,10 @@ describe("Phase 2.1 non-empty monthly report integration fixtures", () => {
     const report = await getMonthlyManagementReport({ year: 2026, month: 1 });
     expect(report.inventory.stockOpnameSessionCount).toBe(1);
     expect(report.inventory.openStockOpnameFollowUpCount).toBe(1);
+    const csv = (await import("./monthlyReports")).monthlyReportToCsv(report);
+    expect(csv).toContain('"Generated At","');
+    expect(csv).toContain('"Audit Notes","Catatan"');
+    expect(csv).toContain('"","OPN-1769875200000-ABC12 · follow_up: Periksa waste akhir bulan"');
   });
 
   it("keeps month boundaries isolated at Jakarta midnight and handles December rollover", async () => {
