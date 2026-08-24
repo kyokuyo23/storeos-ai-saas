@@ -250,3 +250,7 @@
 - [x] Verify Phase 2.1 monthly reporting against existing Financial Core and Inventory Intelligence without adding duplicate models or changing transaction behavior.
 - [x] Run Phase 2.1 tests, TypeScript check, production build, and desktop/mobile review before checkpoint.
 - [x] Save the Phase 2.1 implementation checkpoint and report deviations.
+
+- [x] Add fixture-backed integration tests for non-empty Phase 2.1 monthly financial and inventory periods, including transaction reconciliation, Jakarta/WIB boundaries, exports, and read-only behavior.
+- [x] Run the full Phase 2.1 test, TypeScript, production build, and desktop/mobile validation suite.
+- [x] Save the test-only validation checkpoint and report remaining coverage gaps.
