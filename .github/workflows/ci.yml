@@ -36,6 +36,17 @@ jobs:
       - name: Run real CSV download-file browser check
         run: pnpm test:browser
 
+      - name: Upload Playwright failure diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-csv-download-failure
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: TypeScript validation
         run: pnpm check
 

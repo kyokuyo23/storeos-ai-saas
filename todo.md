@@ -270,3 +270,6 @@
 - [x] Add a browser-level UTF-8 Indonesian Unicode-label assertion to the existing Monthly Management Summary CSV download test.
 - [x] Verify BOM preservation, diacritics/special Unicode decoding, csv-parse validity, and unchanged Jakarta/WIB scope and boundary assertions.
 - [x] Run Vitest, Playwright download, TypeScript, production build, and desktop/mobile validation.
+
+- [x] Configure failure-only CI artifacts for the Playwright CSV download test: trace, downloaded CSV, and test report/output.
+- [x] Run Vitest, Playwright download, TypeScript, production build, and desktop/mobile validation.

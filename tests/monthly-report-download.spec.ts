@@ -1,8 +1,6 @@
 import { parse } from "csv-parse/sync";
 import { expect, test } from "@playwright/test";
-import { mkdtemp, readFile, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFile, stat } from "node:fs/promises";
 
 const reportFixture = {
   period: {
@@ -38,7 +36,7 @@ const reportFixture = {
   },
 };
 
-test("downloads a non-empty monthly CSV with exact scope and quoted sections", async ({ page }) => {
+test("downloads a non-empty monthly CSV with exact scope and quoted sections", async ({ page }, testInfo) => {
   await page.route("**/api/trpc/reports.monthlySummary*", async (route) => {
     await route.fulfill({
       status: 200,
@@ -62,9 +60,12 @@ test("downloads a non-empty monthly CSV with exact scope and quoted sections", a
   expect(download.suggestedFilename()).toBe("storeos-monthly-2026-01.csv");
   expect(await download.failure()).toBeNull();
 
-  const directory = await mkdtemp(join(tmpdir(), "storeos-monthly-download-"));
-  const downloadedPath = join(directory, download.suggestedFilename());
+  const downloadedPath = testInfo.outputPath(download.suggestedFilename());
   await download.saveAs(downloadedPath);
+  await testInfo.attach("monthly-report-csv", {
+    path: downloadedPath,
+    contentType: "text/csv; charset=utf-8",
+  });
   const fileInfo = await stat(downloadedPath);
   expect(fileInfo.isFile()).toBe(true);
   expect(fileInfo.size).toBeGreaterThan(0);
