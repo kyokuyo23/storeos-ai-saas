@@ -292,3 +292,6 @@
 - [x] Generate and persist a real PDF artifact with Jakarta/WIB period identity, timestamp, checksum, size, and duplicate-period protection
 - [x] Add PDF artifact regression tests for empty and non-empty reports, audit metadata, integrity, retrieval, and read-only behavior
 - [x] Run full tests, TypeScript, production build, and desktop/mobile validation for the PDF artifact implementation
+- [x] Verify deployed Heartbeat callback readiness, report source, durable artifacts, immutability, and read-only behavior
+- [x] Activate the monthly previous-completed-month Jakarta/WIB Heartbeat schedule
+- [x] Run scheduler verification, relevant tests, TypeScript, and production build, then report any remaining Phase 2.2 blockers
