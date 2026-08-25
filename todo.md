@@ -304,3 +304,5 @@
 - [x] Verify the first completed live Phase 2.2 scheduled execution and create its verification checkpoint without triggering or modifying the system
 - [x] Verify the real post-boundary Heartbeat execution, persisted August 2026 artifacts, and requested validation gates without triggering the scheduler
 - [x] Perform a strict live-only Phase 2.2 scheduler status check without synthetic artifacts or production changes
+- [x] Inspect and execute an isolated controlled-date Phase 2.2 end-to-end verification without touching production scheduler or artifacts
+- [x] Verify the full isolated artifact pipeline, idempotency, read-only integrity, tests, TypeScript, and production build
