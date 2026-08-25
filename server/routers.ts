@@ -8,7 +8,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, monthlyReportInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput, stockOpnameFollowUpInput, stockOpnameFollowUpNoteInput, stockOpnameHistoryInput } from "./foundationSchemas";
 import { getMonthlyManagementReport } from "./monthlyReports";
-import { archiveMonthlyReportArtifactWithOwnerApproval, canAccessMonthlyReportArtifacts, getMonthlyReportArtifactGovernanceSummary, getMonthlyReportArtifactLifecycleHistory, listMonthlyReportArtifacts } from "./monthlyReportArtifacts";
+import { archiveMonthlyReportArtifactWithOwnerApproval, canAccessMonthlyReportArtifacts, getMonthlyReportArtifactGovernanceAuditExport, getMonthlyReportArtifactGovernanceSummary, getMonthlyReportArtifactLifecycleHistory, listMonthlyReportArtifacts } from "./monthlyReportArtifacts";
 
 const idInput = z.object({ id: z.number().int().positive() });
 const runMutation = async <T>(entity: string, operation: () => Promise<T>) => {
@@ -68,6 +68,16 @@ export const appRouter = router({
     monthlyArtifactLifecycleHistory: protectedProcedure.input(z.object({ year: z.number().int().min(2000).max(2200), month: z.number().int().min(1).max(12) })).query(({ ctx, input }) => {
       if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Akses riwayat lifecycle laporan dibatasi untuk pemilik StoreOS." });
       return runMutation("Riwayat lifecycle artefak", () => getMonthlyReportArtifactLifecycleHistory(input.year, input.month, ctx.user.openId));
+    }),
+    monthlyArtifactGovernanceAuditExport: protectedProcedure.input(z.object({
+      year: z.number().int().min(2000).max(2200).optional(),
+      month: z.number().int().min(1).max(12).optional(),
+      lifecycleStatus: z.enum(["generated", "verified", "retained", "eligible_for_archive", "archived"]).optional(),
+      artifactFormat: z.enum(["csv", "html", "pdf"]).optional(),
+      artifactScope: z.enum(["active", "archived_or_retired"]).optional(),
+    }).optional()).query(({ ctx, input }) => {
+      if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Ekspor audit governance dibatasi untuk pemilik StoreOS." });
+      return runMutation("Ekspor audit governance", () => getMonthlyReportArtifactGovernanceAuditExport(ctx.user.openId, input ?? {}));
     }),
     archiveMonthlyArtifact: protectedProcedure.input(z.object({ year: z.number().int().min(2000).max(2200), month: z.number().int().min(1).max(12) })).mutation(({ ctx, input }) => {
       if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Arsip laporan dibatasi untuk pemilik StoreOS." });

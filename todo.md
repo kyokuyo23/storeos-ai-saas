@@ -342,3 +342,10 @@
 - [x] Add explicit owner-admin archive confirmation UI with eligibility, consequence, success, idempotency, and error states
 - [x] Add Phase 2.6 authorization, eligibility, integrity, archive, history, concurrency, and browser responsive coverage
 - [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.6
+
+- [x] Inspect Phase 2.6 lifecycle-event, authorization, existing export, printable-report, and governance UI architecture for Phase 2.7 reuse
+- [x] Add owner-admin-only, server-filtered governance audit export contract with deterministic lifecycle event metadata
+- [x] Implement UTF-8 BOM CSV and printable/PDF-compatible governance audit outputs without lifecycle mutation or storage credential exposure
+- [x] Add responsive governance audit export filters, download, print, loading, empty, authorization, and error UI states
+- [x] Add Phase 2.7 authorization, scope, filtering, integrity, CSV, printable, browser-download, and responsive regression coverage
+- [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.7

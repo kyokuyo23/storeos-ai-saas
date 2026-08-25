@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-const { archiveMonthlyReportArtifactWithOwnerApproval, getMonthlyReportArtifactGovernanceSummary, getMonthlyReportArtifactLifecycleHistory, listMonthlyReportArtifacts } = vi.hoisted(() => ({
+const { archiveMonthlyReportArtifactWithOwnerApproval, getMonthlyReportArtifactGovernanceAuditExport, getMonthlyReportArtifactGovernanceSummary, getMonthlyReportArtifactLifecycleHistory, listMonthlyReportArtifacts } = vi.hoisted(() => ({
   archiveMonthlyReportArtifactWithOwnerApproval: vi.fn(async () => ({ outcome: "archived", artifact: { id: 7, year: 2024, month: 1, lifecycleStatus: "archived" }, availability: [], archivedAt: new Date("2026-02-02T00:00:00.000Z") })),
+  getMonthlyReportArtifactGovernanceAuditExport: vi.fn(async () => ({ kind: "storeos_governance_lifecycle_audit", version: 1, recordCount: 0, records: [] })),
   listMonthlyReportArtifacts: vi.fn(async () => []),
   getMonthlyReportArtifactGovernanceSummary: vi.fn(async () => ({ retainedArtifactCount: 0 })),
   getMonthlyReportArtifactLifecycleHistory: vi.fn(async () => null),
@@ -9,6 +10,7 @@ const { archiveMonthlyReportArtifactWithOwnerApproval, getMonthlyReportArtifactG
 vi.mock("./monthlyReportArtifacts", () => ({
   archiveMonthlyReportArtifactWithOwnerApproval,
   canAccessMonthlyReportArtifacts: (user: { openId: string; role: string } | null) => user?.openId === "owner-1" && user.role === "admin",
+  getMonthlyReportArtifactGovernanceAuditExport,
   getMonthlyReportArtifactGovernanceSummary,
   getMonthlyReportArtifactLifecycleHistory,
   listMonthlyReportArtifacts,
@@ -61,5 +63,18 @@ describe("reports.monthlyArtifacts authorization", () => {
   it("forwards an owner-admin approval using the authenticated owner scope as both actor and archive authority", async () => {
     await expect(caller({ openId: "owner-1", role: "admin" }).reports.archiveMonthlyArtifact({ year: 2024, month: 1 })).resolves.toMatchObject({ outcome: "archived", artifact: { year: 2024, month: 1, lifecycleStatus: "archived" } });
     expect(archiveMonthlyReportArtifactWithOwnerApproval).toHaveBeenCalledWith(2024, 1, "owner-1", "owner-1");
+  });
+
+  it("rejects anonymous, member, and cross-workspace governance audit exports before the audit service is called", async () => {
+    await expect(caller(null).reports.monthlyArtifactGovernanceAuditExport()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller({ openId: "owner-1", role: "user" }).reports.monthlyArtifactGovernanceAuditExport()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller({ openId: "other-workspace", role: "admin" }).reports.monthlyArtifactGovernanceAuditExport()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(getMonthlyReportArtifactGovernanceAuditExport).not.toHaveBeenCalled();
+  });
+
+  it("forwards only owner-admin-selected audit filters to the scoped lifecycle export", async () => {
+    const filters = { year: 2024, month: 1, lifecycleStatus: "archived" as const, artifactFormat: "pdf" as const, artifactScope: "archived_or_retired" as const };
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.monthlyArtifactGovernanceAuditExport(filters)).resolves.toMatchObject({ kind: "storeos_governance_lifecycle_audit", recordCount: 0 });
+    expect(getMonthlyReportArtifactGovernanceAuditExport).toHaveBeenCalledWith("owner-1", filters);
   });
 });

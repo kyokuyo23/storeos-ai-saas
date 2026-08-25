@@ -72,6 +72,7 @@ import {
   archiveEligibleMonthlyReportArtifacts,
   canAccessMonthlyReportArtifacts,
   getMonthlyReportArtifact,
+  getMonthlyReportArtifactGovernanceAuditExport,
   getMonthlyReportArtifactGovernanceSummary,
   getMonthlyReportArtifactLifecycleEvents,
   getMonthlyReportArtifactLifecycleHistory,
@@ -302,5 +303,65 @@ describe("Phase 2.4 monthly report artifact governance", () => {
     expect(repeated).toMatchObject({ outcome: "already_archived", archivedAt: approvalAt });
     expect(lifecycleEvents.filter((event) => event.lifecycleStatus === "archived" && event.source === "owner_archive_action")).toHaveLength(1);
     expect(artifactRows[0]).toMatchObject({ lifecycleStatus: "archived", archiveReason: "owner_approved_archive" });
+  });
+
+  it("exports only the requested owner-scoped archived PDF audit snapshot with deterministic archive metadata and no storage read", async () => {
+    const persisted = await persistMonthlyReportArtifacts(generatedReport({ year: 2024, month: 1, generatedAt: "2024-02-01T00:15:00.000Z" }));
+    const approvalAt = new Date("2026-02-02T00:00:00.000Z");
+    await markMonthlyReportArtifactsEligibleForArchive(approvalAt, 24, "owner-1");
+    await archiveMonthlyReportArtifactWithOwnerApproval(2024, 1, "owner-1", "owner-1", approvalAt);
+    storageGetBytes.mockClear();
+
+    const audit = await getMonthlyReportArtifactGovernanceAuditExport("owner-1", {
+      year: 2024,
+      month: 1,
+      lifecycleStatus: "archived",
+      artifactFormat: "pdf",
+      artifactScope: "archived_or_retired",
+    }, new Date("2026-02-03T00:00:00.000Z"));
+
+    expect(audit).toMatchObject({
+      kind: "storeos_governance_lifecycle_audit",
+      version: 1,
+      timezone: "Asia/Jakarta",
+      generatedAt: new Date("2026-02-03T00:00:00.000Z"),
+      filters: { year: 2024, month: 1, lifecycleStatus: "archived", artifactFormat: "pdf", artifactScope: "archived_or_retired" },
+      recordCount: 1,
+    });
+    expect(audit.records[0]).toMatchObject({
+      reportPeriod: { year: 2024, month: 1, timezone: "Asia/Jakarta" },
+      lifecycleStatus: "archived",
+      occurredAt: approvalAt,
+      source: "owner_archive_action",
+      actor: "owner-1",
+      transitionReason: "owner_approved_archive",
+      artifactFormat: "pdf",
+      bytes: persisted.artifact.pdf.bytes,
+      sha256: persisted.artifact.pdf.sha256,
+      integritySnapshotStatus: "recorded",
+      artifactScope: "archived",
+      currentLifecycleStatus: "archived",
+      archiveEligibleAt: approvalAt,
+      archivedAt: approvalAt,
+      retiredAt: approvalAt,
+      archiveReason: "owner_approved_archive",
+    });
+    expect(JSON.stringify(audit)).not.toContain("monthly-management-reports/");
+    expect(storageGetBytes).not.toHaveBeenCalled();
+    expect(artifactRows[0].csvSha256).toBe(persisted.artifact.csv.sha256);
+  });
+
+  it("filters audit records by active scope, lifecycle, period, and snapshot format while preserving deterministic reverse chronology", async () => {
+    await persistMonthlyReportArtifacts(generatedReport({ year: 2025, month: 12, generatedAt: "2026-01-01T00:15:00.000Z" }));
+
+    const csvAudit = await getMonthlyReportArtifactGovernanceAuditExport("owner-1", { artifactScope: "active", artifactFormat: "csv" }, new Date("2026-02-03T00:00:00.000Z"));
+    expect(csvAudit.recordCount).toBe(3);
+    expect(csvAudit.records.every((record) => record.artifactScope === "active" && record.artifactFormat === "csv")).toBe(true);
+    expect(csvAudit.records.map((record) => record.lifecycleStatus)).toEqual(["retained", "verified", "generated"]);
+
+    const retainedDecember = await getMonthlyReportArtifactGovernanceAuditExport("owner-1", { year: 2025, month: 12, lifecycleStatus: "retained", artifactFormat: "html" });
+    expect(retainedDecember.records).toHaveLength(1);
+    expect(retainedDecember.records[0]).toMatchObject({ lifecycleStatus: "retained", artifactFormat: "html", artifactScope: "active", reportPeriod: { year: 2025, month: 12 } });
+    await expect(getMonthlyReportArtifactGovernanceAuditExport("other-workspace")).rejects.toThrow("not authorized");
   });
 });

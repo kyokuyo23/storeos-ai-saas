@@ -87,6 +87,52 @@ export type OwnerApprovedArchiveResult = {
   archivedAt: Date | null;
 };
 
+export type GovernanceAuditArtifactScope = "active" | "archived_or_retired";
+
+export type GovernanceAuditExportFilters = {
+  year?: number;
+  month?: number;
+  lifecycleStatus?: ArtifactLifecycleStatus;
+  artifactFormat?: ArtifactKind;
+  artifactScope?: GovernanceAuditArtifactScope;
+};
+
+export type GovernanceAuditExportRecord = {
+  reportPeriod: { year: number; month: number; timezone: string };
+  lifecycleStatus: ArtifactLifecycleStatus;
+  occurredAt: Date;
+  source: string;
+  actor: string;
+  transitionReason: string | null;
+  eventArtifactFormat: string;
+  artifactFormat: ArtifactKind | "bundle";
+  bytes: number | null;
+  sha256: string | null;
+  integritySnapshotStatus: "recorded" | "unavailable";
+  artifactScope: "active" | "archived" | "retired";
+  currentLifecycleStatus: ArtifactLifecycleStatus;
+  archiveEligibleAt: Date | null;
+  archivedAt: Date | null;
+  retiredAt: Date | null;
+  archiveReason: string | null;
+};
+
+export type GovernanceAuditExport = {
+  kind: "storeos_governance_lifecycle_audit";
+  version: 1;
+  generatedAt: Date;
+  timezone: "Asia/Jakarta";
+  filters: {
+    year: number | null;
+    month: number | null;
+    lifecycleStatus: ArtifactLifecycleStatus | null;
+    artifactFormat: ArtifactKind | null;
+    artifactScope: GovernanceAuditArtifactScope | null;
+  };
+  recordCount: number;
+  records: GovernanceAuditExportRecord[];
+};
+
 function digest(content: string | Buffer) {
   return createHash("sha256").update(content).digest("hex");
 }
@@ -172,6 +218,23 @@ function parseIntegritySnapshot(value: string | null, fallback: StoredMonthlyRep
     // Legacy or malformed snapshots safely fall back to immutable artifact metadata.
   }
   return integritySnapshotFor(fallback);
+}
+
+/** Governance exports preserve the exact transition snapshot; they never recalculate legacy values. */
+function parseStoredIntegritySnapshot(value: string | null): Array<{ kind: ArtifactKind; sha256: string; bytes: number }> {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((entry) => {
+      if (!entry || typeof entry !== "object") return [];
+      const candidate = entry as { kind?: unknown; sha256?: unknown; bytes?: unknown };
+      if (!(["csv", "html", "pdf"] as const).includes(candidate.kind as ArtifactKind) || typeof candidate.sha256 !== "string" || typeof candidate.bytes !== "number") return [];
+      return [{ kind: candidate.kind as ArtifactKind, sha256: candidate.sha256, bytes: candidate.bytes }];
+    });
+  } catch {
+    return [];
+  }
 }
 
 function lifecycleEventKey(status: ArtifactLifecycleStatus, source: string, reason: string | null) {
@@ -397,6 +460,110 @@ export async function getMonthlyReportArtifactLifecycleHistory(year: number, mon
       artifactFormat: event.artifactFormat,
       integrity: parseIntegritySnapshot(event.integritySnapshot, artifact),
     })),
+  };
+}
+
+function validateGovernanceAuditExportFilters(filters: GovernanceAuditExportFilters) {
+  if (filters.year !== undefined && (!Number.isInteger(filters.year) || filters.year < 2000 || filters.year > 2200)) throw new Error("Invalid report year");
+  if (filters.month !== undefined && (!Number.isInteger(filters.month) || filters.month < 1 || filters.month > 12)) throw new Error("Invalid report month");
+  if (filters.lifecycleStatus !== undefined && !(filters.lifecycleStatus in lifecycleOrder)) throw new Error("Invalid artifact lifecycle status");
+  if (filters.artifactFormat !== undefined && !(["csv", "html", "pdf"] as const).includes(filters.artifactFormat)) throw new Error("Invalid artifact format");
+  if (filters.artifactScope !== undefined && filters.artifactScope !== "active" && filters.artifactScope !== "archived_or_retired") throw new Error("Invalid artifact audit scope");
+}
+
+function auditArtifactScope(artifact: StoredMonthlyReportArtifact): "active" | "archived" | "retired" {
+  if (artifact.archivedAt || artifact.lifecycleStatus === "archived") return "archived";
+  if (artifact.retiredAt) return "retired";
+  return "active";
+}
+
+/**
+ * Owner-scoped, read-only lifecycle audit dataset. It exports only immutable
+ * event values and their recorded integrity snapshots; it never probes storage,
+ * derives a replacement checksum, or records a new lifecycle event.
+ */
+export async function getMonthlyReportArtifactGovernanceAuditExport(
+  ownerOpenId = defaultArtifactScope(),
+  filters: GovernanceAuditExportFilters = {},
+  generatedAt = new Date(),
+): Promise<GovernanceAuditExport> {
+  if (!isAuthorizedOwnerScope(ownerOpenId)) throw new Error("Artifact governance scope is not authorized");
+  validateGovernanceAuditExportFilters(filters);
+  const db = await getDb();
+  if (!db) throw new Error("Database tidak tersedia. Silakan coba lagi.");
+
+  const artifacts = (await db.select().from(monthlyReportArtifacts)).map(mapArtifact)
+    .filter((artifact) => belongsToOwnerScope(artifact, ownerOpenId) && isProductionArtifact(artifact))
+    .filter((artifact) => filters.year === undefined || artifact.year === filters.year)
+    .filter((artifact) => filters.month === undefined || artifact.month === filters.month)
+    .filter((artifact) => {
+      const scope = auditArtifactScope(artifact);
+      return filters.artifactScope === undefined
+        || (filters.artifactScope === "active" && scope === "active")
+        || (filters.artifactScope === "archived_or_retired" && scope !== "active");
+    });
+  const artifactById = new Map(artifacts.map((artifact) => [artifact.id, artifact]));
+  const events = await db.select().from(monthlyReportArtifactLifecycleEvents);
+  const records: GovernanceAuditExportRecord[] = [];
+
+  for (const event of events) {
+    const artifact = artifactById.get(event.artifactId);
+    if (!artifact || event.ownerOpenId !== artifact.ownerOpenId) continue;
+    const lifecycleStatus = event.lifecycleStatus as ArtifactLifecycleStatus;
+    if (filters.lifecycleStatus !== undefined && lifecycleStatus !== filters.lifecycleStatus) continue;
+    const snapshot = parseStoredIntegritySnapshot(event.integritySnapshot);
+    const scope = auditArtifactScope(artifact);
+    const base = {
+      reportPeriod: { year: artifact.year, month: artifact.month, timezone: artifact.timezone },
+      lifecycleStatus,
+      occurredAt: event.occurredAt,
+      source: event.source,
+      actor: event.actor,
+      transitionReason: event.reason,
+      eventArtifactFormat: event.artifactFormat,
+      integritySnapshotStatus: snapshot.length ? "recorded" as const : "unavailable" as const,
+      artifactScope: scope,
+      currentLifecycleStatus: artifact.lifecycleStatus,
+      archiveEligibleAt: artifact.archiveEligibleAt,
+      archivedAt: artifact.archivedAt,
+      retiredAt: artifact.retiredAt,
+      archiveReason: artifact.archiveReason,
+    };
+    if (snapshot.length) {
+      for (const item of snapshot) {
+        if (filters.artifactFormat !== undefined && filters.artifactFormat !== item.kind) continue;
+        records.push({ ...base, artifactFormat: item.kind, bytes: item.bytes, sha256: item.sha256 });
+      }
+    } else if (filters.artifactFormat === undefined) {
+      records.push({ ...base, artifactFormat: "bundle", bytes: null, sha256: null });
+    }
+  }
+
+  records.sort((left, right) => (
+    right.reportPeriod.year - left.reportPeriod.year
+    || right.reportPeriod.month - left.reportPeriod.month
+    || right.occurredAt.getTime() - left.occurredAt.getTime()
+    || lifecycleOrder[right.lifecycleStatus] - lifecycleOrder[left.lifecycleStatus]
+    || left.source.localeCompare(right.source)
+    || left.actor.localeCompare(right.actor)
+    || (left.transitionReason ?? "").localeCompare(right.transitionReason ?? "")
+    || left.artifactFormat.localeCompare(right.artifactFormat)
+  ));
+
+  return {
+    kind: "storeos_governance_lifecycle_audit",
+    version: 1,
+    generatedAt,
+    timezone: "Asia/Jakarta",
+    filters: {
+      year: filters.year ?? null,
+      month: filters.month ?? null,
+      lifecycleStatus: filters.lifecycleStatus ?? null,
+      artifactFormat: filters.artifactFormat ?? null,
+      artifactScope: filters.artifactScope ?? null,
+    },
+    recordCount: records.length,
+    records,
   };
 }
 

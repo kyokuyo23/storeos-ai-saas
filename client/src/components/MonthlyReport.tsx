@@ -2,6 +2,7 @@ import { AlertTriangle, Archive, CheckCircle2, Clock3, Download, FileText, Histo
 import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { downloadMonthlyReportCsv, printMonthlyReport } from "@/lib/monthlyReportExports";
+import { downloadGovernanceAuditCsv, governanceAuditFilterScope, printGovernanceAudit, type GovernanceAuditExportData } from "@/lib/governanceAuditExports";
 import { AppShell, ErrorState, PageHeader, Panel } from "./FoundationShell";
 import { useAuth } from "../_core/hooks/useAuth";
 import { startLogin } from "@/const";
@@ -91,6 +92,39 @@ function GovernancePanel({ enabled }: { enabled: boolean }) {
   </Panel>;
 }
 
+function GovernanceAuditExportPanel({ enabled, initialYear }: { enabled: boolean; initialYear: number }) {
+  const [auditYear, setAuditYear] = useState<number | "all">("all");
+  const [auditMonth, setAuditMonth] = useState<number | "all">("all");
+  const [auditLifecycle, setAuditLifecycle] = useState<LifecycleStatus | "all">("all");
+  const [auditFormat, setAuditFormat] = useState<"csv" | "html" | "pdf" | "all">("all");
+  const [auditScope, setAuditScope] = useState<"active" | "archived_or_retired" | "all">("all");
+  const input = useMemo(() => ({
+    ...(auditYear === "all" ? {} : { year: auditYear }),
+    ...(auditMonth === "all" ? {} : { month: auditMonth }),
+    ...(auditLifecycle === "all" ? {} : { lifecycleStatus: auditLifecycle }),
+    ...(auditFormat === "all" ? {} : { artifactFormat: auditFormat }),
+    ...(auditScope === "all" ? {} : { artifactScope: auditScope }),
+  }), [auditYear, auditMonth, auditLifecycle, auditFormat, auditScope]);
+  const auditQuery = trpc.reports.monthlyArtifactGovernanceAuditExport.useQuery(input, { enabled, retry: false, refetchOnWindowFocus: false });
+  if (!enabled) return null;
+  const audit = auditQuery.data as GovernanceAuditExportData | undefined;
+  return <Panel className="governance-audit-export-panel" title="Ekspor Audit Governance" description="Ekspor read-only jejak lifecycle yang sudah tersimpan. Filter diproses di server dalam scope owner-admin dan tidak mencatat event lifecycle baru.">
+    <div className="governance-audit-stack">
+      <div className="governance-audit-filters" aria-label="Filter ekspor audit governance">
+        <label className="field"><span>Tahun periode</span><select aria-label="Tahun audit governance" className="form-input" value={auditYear} onChange={(event) => setAuditYear(event.target.value === "all" ? "all" : Number(event.target.value))}><option value="all">Semua tahun</option>{Array.from({ length: 8 }, (_, index) => initialYear - 5 + index).map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+        <label className="field"><span>Bulan periode</span><select aria-label="Bulan audit governance" className="form-input" value={auditMonth} onChange={(event) => setAuditMonth(event.target.value === "all" ? "all" : Number(event.target.value))}><option value="all">Semua bulan</option>{months.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}</select></label>
+        <label className="field"><span>Lifecycle event</span><select aria-label="Lifecycle audit governance" className="form-input" value={auditLifecycle} onChange={(event) => setAuditLifecycle(event.target.value as LifecycleStatus | "all")}><option value="all">Semua lifecycle</option>{Object.entries(lifecycleLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        <label className="field"><span>Format snapshot</span><select aria-label="Format audit governance" className="form-input" value={auditFormat} onChange={(event) => setAuditFormat(event.target.value as "csv" | "html" | "pdf" | "all")}><option value="all">Semua format</option><option value="csv">CSV</option><option value="pdf">PDF</option><option value="html">HTML</option></select></label>
+        <label className="field"><span>Status artefak</span><select aria-label="Status artefak audit governance" className="form-input" value={auditScope} onChange={(event) => setAuditScope(event.target.value as "active" | "archived_or_retired" | "all")}><option value="all">Aktif, archived, dan retired</option><option value="active">Aktif saja</option><option value="archived_or_retired">Archived / retired</option></select></label>
+      </div>
+      {auditQuery.isLoading ? <div className="loading-state"><span className="loading-dot" /> Menyiapkan audit governance…</div> : auditQuery.isError ? <ErrorState message="Ekspor audit governance tidak tersedia atau akses owner-admin ditolak." /> : audit ? <>
+        <div className="governance-audit-summary"><div><span>Audit lifecycle</span><strong>{number(audit.recordCount)} record</strong><small>{governanceAuditFilterScope(audit)}</small></div><div><span>Dibuat pada</span><strong>{wibTime(audit.generatedAt)}</strong><small>Metadata ekspor deterministik · {audit.timezone}</small></div><div className="governance-audit-actions"><button type="button" className="button secondary compact-button" onClick={() => downloadGovernanceAuditCsv(audit)}><Download size={14} /> CSV Audit</button><button type="button" className="button ghost compact-button" onClick={() => printGovernanceAudit(audit)}><FileText size={14} /> PDF / Cetak</button></div></div>
+        {audit.records.length ? <div className="governance-audit-preview" aria-label="Pratinjau audit lifecycle"><div className="governance-section-heading"><History size={16} /><strong>Pratinjau event lifecycle</strong><small>{audit.recordCount} record sesuai filter</small></div><ul>{audit.records.map((record, index) => <li key={`${record.reportPeriod.year}-${record.reportPeriod.month}-${record.lifecycleStatus}-${record.occurredAt}-${record.artifactFormat}-${index}`}><div><strong>{months[record.reportPeriod.month - 1]} {record.reportPeriod.year}</strong><span className={`badge ${lifecycleClass[record.lifecycleStatus]}`}>{lifecycleLabel[record.lifecycleStatus]}</span><small>{wibTime(record.occurredAt)} · {record.source} · {record.actor}</small></div><div><span className="badge neutral">{record.artifactScope}</span><small>{record.artifactFormat.toUpperCase()} · {record.bytes === null ? "Snapshot tidak tersedia" : `${fileSize(record.bytes)} · SHA-256 ${record.sha256?.slice(0, 12)}…`}</small></div></li>)}</ul>{audit.recordCount > 5 && <p className="settings-help"><History size={14} /> Pratinjau menampilkan 5 event terbaru; CSV dan cetak memuat seluruh {audit.recordCount} record terfilter.</p>}</div> : <div className="empty-state artifact-empty"><div className="empty-icon"><History size={20} /></div><strong>Tidak ada event lifecycle untuk filter ini.</strong><p>CSV audit tetap dapat diunduh sebagai bukti filter, metadata, dan hasil kosong tanpa mengubah lifecycle artefak.</p></div>}
+      </> : null}
+    </div>
+  </Panel>;
+}
+
 function LifecycleHistoryPanel({ selection, onClose }: { selection: { year: number; month: number } | null; onClose: () => void }) {
   const historyQuery = trpc.reports.monthlyArtifactLifecycleHistory.useQuery(selection ?? { year: 2000, month: 1 }, { enabled: Boolean(selection), retry: false, refetchOnWindowFocus: false });
   if (!selection) return null;
@@ -170,6 +204,7 @@ export function MonthlyReport() {
       </>}
     </Panel>
     <GovernancePanel enabled={isOwnerAdmin} />
+    <GovernanceAuditExportPanel enabled={isOwnerAdmin} initialYear={initial.year} />
     <p className="settings-help"><RefreshCw size={14} /> Laporan dan governance ini bersifat read-only serta tidak mengubah penjualan, ledger, stock-opname, atau Financial Core.</p>
   </AppShell>;
 }

@@ -176,6 +176,19 @@ const lifecycleHistoryFixture = {
   ],
 };
 
+const governanceAuditExportFixture = {
+  kind: "storeos_governance_lifecycle_audit",
+  version: 1,
+  generatedAt: "2026-08-25T03:15:00.000Z",
+  timezone: "Asia/Jakarta",
+  filters: { year: null, month: null, lifecycleStatus: null, artifactFormat: null, artifactScope: null },
+  recordCount: 2,
+  records: [
+    { reportPeriod: { year: 2024, month: 10, timezone: "Asia/Jakarta" }, lifecycleStatus: "archived", occurredAt: "2026-08-25T03:00:00.000Z", source: "owner_archive_action", actor: "owner-1", transitionReason: "owner_approved_archive, checksum tervalidasi", eventArtifactFormat: "bundle", artifactFormat: "pdf", bytes: 512, sha256: "a".repeat(64), integritySnapshotStatus: "recorded", artifactScope: "archived", currentLifecycleStatus: "archived", archiveEligibleAt: "2026-08-24T03:00:00.000Z", archivedAt: "2026-08-25T03:00:00.000Z", retiredAt: "2026-08-25T03:00:00.000Z", archiveReason: "owner_approved_archive" },
+    { reportPeriod: { year: 2026, month: 1, timezone: "Asia/Jakarta" }, lifecycleStatus: "retained", occurredAt: "2026-02-01T00:15:03.000Z", source: "report_generation", actor: "storeos-system", transitionReason: "monthly_report_retained", eventArtifactFormat: "bundle", artifactFormat: "csv", bytes: 93, sha256: "b".repeat(64), integritySnapshotStatus: "recorded", artifactScope: "active", currentLifecycleStatus: "retained", archiveEligibleAt: null, archivedAt: null, retiredAt: null, archiveReason: null },
+  ],
+};
+
 async function installArtifactOwnerRoutes(
   page: import("@playwright/test").Page,
   artifacts: unknown[],
@@ -183,6 +196,7 @@ async function installArtifactOwnerRoutes(
   lifecycleHistory: unknown = null,
   archiveResult: unknown = { outcome: "archived", artifact: { id: 42, year: 2024, month: 10, lifecycleStatus: "archived" }, availability: [], archivedAt: "2026-08-25T00:00:00.000Z" },
   onArchive?: () => void,
+  governanceAuditExport: unknown = governanceAuditExportFixture,
 ) {
   const owner = { id: 1, openId: "owner-1", name: "Pemilik", role: "admin" };
   await page.route("**/api/trpc/**", async (route) => {
@@ -193,6 +207,7 @@ async function installArtifactOwnerRoutes(
           : procedure === "reports.monthlyArtifacts" ? artifacts
             : procedure === "reports.monthlyArtifactGovernance" ? governance
               : procedure === "reports.monthlyArtifactLifecycleHistory" ? lifecycleHistory
+                : procedure === "reports.monthlyArtifactGovernanceAuditExport" ? governanceAuditExport
                 : procedure === "reports.archiveMonthlyArtifact" ? (onArchive?.(), archiveResult)
               : undefined;
       return data === undefined ? { error: { json: { message: `Unhandled test procedure: ${procedure}`, code: -32601, data: { code: "NOT_FOUND", httpStatus: 404 } } } } : { result: { data: { json: data } } };
@@ -330,5 +345,77 @@ test("keeps the archive confirmation usable on a narrow mobile viewport", async 
   await expect(confirmation.getByRole("button", { name: "Batalkan" })).toBeVisible();
   await expect(confirmation.getByRole("button", { name: "Setujui & Arsipkan" })).toBeVisible();
   const box = await confirmation.boundingBox();
+  expect(box?.width).toBeLessThanOrEqual(358);
+});
+
+test("filters, downloads, and prints the owner-admin governance audit with scoped lifecycle metadata", async ({ page }, testInfo) => {
+  const auditRequests: string[] = [];
+  await page.addInitScript(() => {
+    window.print = () => document.body.setAttribute("data-governance-audit-printed", "true");
+  });
+  await installArtifactOwnerRoutes(page, [storedArtifactFixture]);
+  page.on("request", (request) => {
+    if (request.url().includes("reports.monthlyArtifactGovernanceAuditExport")) auditRequests.push(decodeURIComponent(request.url()));
+  });
+  await page.goto("/reports");
+  const panel = page.locator(".governance-audit-export-panel");
+  await expect(page.getByRole("heading", { name: "Ekspor Audit Governance" })).toBeVisible();
+  await expect(page.getByText("2 record", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Tahun audit governance")).toBeVisible();
+  await expect(page.getByText("owner_archive_action · owner-1")).toBeVisible();
+  await expect(page.getByText(/SHA-256 a{12}/)).toBeVisible();
+
+  await page.getByLabel("Lifecycle audit governance").selectOption("archived");
+  await expect.poll(() => auditRequests.length).toBeGreaterThan(1);
+  expect(auditRequests.at(-1)).toContain('"lifecycleStatus":"archived"');
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "CSV Audit" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("storeos-governance-audit-all-all-all-all-all.csv");
+  const path = testInfo.outputPath(download.suggestedFilename());
+  await download.saveAs(path);
+  const csv = await readFile(path, "utf8");
+  expect(csv.charCodeAt(0)).toBe(0xfeff);
+  const parsed = parse(csv, { bom: true, columns: false, relax_column_count: false, skip_empty_lines: false }) as string[][];
+  expect(parsed.every((row) => row.length === 19)).toBe(true);
+  expect(parsed.find((row) => row[0] === "Tahun")).toContain("Metadata transisi");
+  expect(parsed.find((row) => row[0] === "2024" && row[3] === "archived")?.[18]).toBe("owner_approved_archive, checksum tervalidasi");
+
+  await panel.getByRole("button", { name: "PDF / Cetak" }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-governance-audit-printed", "true");
+  await expect(page.locator("body")).not.toHaveClass(/printing-governance-audit/);
+  await expect(panel).toBeVisible();
+});
+
+test("shows governance audit empty and error states without exposing raw artifact paths", async ({ page }) => {
+  await installArtifactOwnerRoutes(page, [], governanceFixture, null, undefined, undefined, { ...governanceAuditExportFixture, recordCount: 0, records: [] });
+  await page.goto("/reports");
+  await expect(page.getByText("Tidak ada event lifecycle untuk filter ini.")).toBeVisible();
+  await expect(page.getByText(/CSV audit tetap dapat diunduh sebagai bukti filter/)).toBeVisible();
+  await expect(page.locator("body")).not.toContainText("monthly-management-reports/");
+
+  await page.unroute("**/api/trpc/**");
+  await page.route("**/api/trpc/**", async (route) => {
+    const procedures = new URL(route.request().url()).pathname.split("/").at(-1)?.split(",") ?? [];
+    const result = procedures.map((procedure) => procedure === "reports.monthlyArtifactGovernanceAuditExport"
+      ? { error: { json: { message: "Akses owner-admin ditolak", code: -32003, data: { code: "FORBIDDEN", httpStatus: 403 } } } }
+      : { result: { data: { json: procedure === "auth.me" ? { id: 1, openId: "owner-1", name: "Pemilik", role: "admin" } : procedure === "reports.monthlySummary" ? reportFixture : procedure === "reports.monthlyArtifacts" ? [] : procedure === "reports.monthlyArtifactGovernance" ? governanceFixture : null } } });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(result) });
+  });
+  await page.reload();
+  await expect(page.getByText("Ekspor audit governance tidak tersedia atau akses owner-admin ditolak.")).toBeVisible();
+});
+
+test("keeps governance audit filters and export actions readable on a narrow mobile viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installArtifactOwnerRoutes(page, [storedArtifactFixture]);
+  await page.goto("/reports");
+  const heading = page.getByRole("heading", { name: "Ekspor Audit Governance" });
+  const panel = page.locator(".governance-audit-export-panel");
+  await expect(heading).toBeVisible();
+  await expect(panel.getByRole("button", { name: "CSV Audit" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "PDF / Cetak" })).toBeVisible();
+  const box = await panel.boundingBox();
   expect(box?.width).toBeLessThanOrEqual(358);
 });
