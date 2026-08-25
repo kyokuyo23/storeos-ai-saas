@@ -179,10 +179,35 @@ export const monthlyReportArtifacts = mysqlTable("monthlyReportArtifacts", {
   pdfUrl: varchar("pdfUrl", { length: 512 }).notNull(),
   pdfSha256: varchar("pdfSha256", { length: 64 }).notNull(),
   pdfBytes: int("pdfBytes").notNull(),
+  /** Governance state is additive and never changes the immutable report content. */
+  lifecycleStatus: mysqlEnum("lifecycleStatus", ["generated", "verified", "retained", "eligible_for_archive", "archived"]).default("retained").notNull(),
+  verifiedAt: timestamp("verifiedAt"),
+  retainedAt: timestamp("retainedAt"),
+  archiveEligibleAt: timestamp("archiveEligibleAt"),
+  archivedAt: timestamp("archivedAt"),
+  archiveReason: varchar("archiveReason", { length: 160 }),
   /** Logical retention removal preserves immutable metadata while permanently revoking application access. */
   retiredAt: timestamp("retiredAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-}, (table) => [uniqueIndex("monthly_report_artifacts_period_owner_unique").on(table.ownerOpenId, table.year, table.month), index("monthly_report_artifacts_owner_retired_idx").on(table.ownerOpenId, table.retiredAt)]);
+}, (table) => [
+  uniqueIndex("monthly_report_artifacts_period_owner_unique").on(table.ownerOpenId, table.year, table.month),
+  index("monthly_report_artifacts_owner_retired_idx").on(table.ownerOpenId, table.retiredAt),
+  index("monthly_report_artifacts_owner_lifecycle_idx").on(table.ownerOpenId, table.lifecycleStatus, table.retiredAt),
+  index("monthly_report_artifacts_owner_archive_due_idx").on(table.ownerOpenId, table.archiveEligibleAt),
+]);
+
+/** Immutable lifecycle audit trail for managed report artifacts. */
+export const monthlyReportArtifactLifecycleEvents = mysqlTable("monthlyReportArtifactLifecycleEvents", {
+  id: int("id").autoincrement().primaryKey(),
+  artifactId: int("artifactId").notNull().references(() => monthlyReportArtifacts.id, { onDelete: "restrict" }),
+  ownerOpenId: varchar("ownerOpenId", { length: 64 }).notNull(),
+  lifecycleStatus: mysqlEnum("lifecycleStatus", ["generated", "verified", "retained", "eligible_for_archive", "archived"]).notNull(),
+  occurredAt: timestamp("occurredAt").defaultNow().notNull(),
+  reason: varchar("reason", { length: 160 }),
+}, (table) => [
+  index("monthly_report_artifact_lifecycle_artifact_idx").on(table.artifactId, table.occurredAt),
+  index("monthly_report_artifact_lifecycle_owner_idx").on(table.ownerOpenId, table.lifecycleStatus, table.occurredAt),
+]);
 
 export const recipes = mysqlTable("recipes", {
   id: int("id").autoincrement().primaryKey(),

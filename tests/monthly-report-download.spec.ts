@@ -154,10 +154,31 @@ const storedArtifactFixture = {
   pdf: { kind: "pdf", bytes: 512, sha256: "c".repeat(64), status: "available" },
 };
 
-async function installArtifactOwnerRoutes(page: import("@playwright/test").Page, artifacts: unknown[]) {
-  await page.route("**/api/trpc/auth.me*", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ result: { data: { json: { id: 1, openId: "owner-1", name: "Pemilik", role: "admin" } } } }]) }));
-  await page.route("**/api/trpc/reports.monthlySummary*", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ result: { data: { json: reportFixture } } }]) }));
-  await page.route("**/api/trpc/reports.monthlyArtifacts*", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ result: { data: { json: artifacts } } }]) }));
+const governanceFixture = {
+  retentionMonths: 24,
+  archiveWarningWindowDays: 90,
+  retainedArtifactCount: 2,
+  artifactTypeCounts: { csv: 2, html: 2, pdf: 2 },
+  oldestRetainedReport: { year: 2024, month: 10, generatedAt: "2024-11-01T00:15:00.000Z" },
+  approachingArchive: [{ year: 2024, month: 10, generatedAt: "2024-11-01T00:15:00.000Z", lifecycleStatus: "eligible_for_archive", daysUntilArchive: 0 }],
+  lifecycleCounts: { generated: 0, verified: 0, retained: 1, eligible_for_archive: 1, archived: 3 },
+  integrityCounts: { available: 6, missing: 0, corrupt: 0, retired: 0, archived: 0 },
+};
+
+async function installArtifactOwnerRoutes(page: import("@playwright/test").Page, artifacts: unknown[], governance = governanceFixture) {
+  const owner = { id: 1, openId: "owner-1", name: "Pemilik", role: "admin" };
+  await page.route("**/api/trpc/**", async (route) => {
+    const procedures = new URL(route.request().url()).pathname.split("/").at(-1)?.split(",") ?? [];
+    const result = procedures.map((procedure) => {
+      const data = procedure === "auth.me" ? owner
+        : procedure === "reports.monthlySummary" ? reportFixture
+          : procedure === "reports.monthlyArtifacts" ? artifacts
+            : procedure === "reports.monthlyArtifactGovernance" ? governance
+              : undefined;
+      return data === undefined ? { error: { json: { message: `Unhandled test procedure: ${procedure}`, code: -32601, data: { code: "NOT_FOUND", httpStatus: 404 } } } } : { result: { data: { json: data } } };
+    });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(result) });
+  });
 }
 
 test("shows the owner-visible stored-artifact empty state", async ({ page }) => {
@@ -166,6 +187,20 @@ test("shows the owner-visible stored-artifact empty state", async ({ page }) => 
   await expect(page.getByRole("heading", { name: "Ringkasan Manajemen Bulanan" })).toBeVisible();
   await expect(page.getByText("Belum ada artefak tersimpan untuk filter ini.")).toBeVisible();
   await expect(page.getByText("Artefak akan muncul setelah laporan bulanan periode selesai dibuat dan melewati verifikasi integritas.")).toBeVisible();
+});
+
+test("renders owner-admin artifact governance counts, lifecycle, and archive threshold", async ({ page }) => {
+  await installArtifactOwnerRoutes(page, [storedArtifactFixture]);
+  await page.goto("/reports");
+  await expect(page.getByRole("heading", { name: "Governance artefak laporan" })).toBeVisible();
+  await expect(page.getByText("Artefak aktif tersimpan")).toBeVisible();
+  await expect(page.getByText("2 CSV · 2 PDF · 2 HTML")).toBeVisible();
+  await expect(page.getByText("Oktober 2024").first()).toBeVisible();
+  await expect(page.getByText("Integritas artefak aktif sehat")).toBeVisible();
+  await expect(page.getByText("Siap arsip 1")).toBeVisible();
+  await expect(page.getByText("Mendekati ambang retensi")).toBeVisible();
+  await expect(page.getByText("Memenuhi syarat arsip")).toBeVisible();
+  await expect(page.getByText(/Lifecycle: Dihasilkan/)).toBeVisible();
 });
 
 test("downloads a checksum-verified stored CSV through the controlled report endpoint", async ({ page }, testInfo) => {

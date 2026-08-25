@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
-const { listMonthlyReportArtifacts } = vi.hoisted(() => ({ listMonthlyReportArtifacts: vi.fn(async () => []) }));
+const { getMonthlyReportArtifactGovernanceSummary, listMonthlyReportArtifacts } = vi.hoisted(() => ({
+  listMonthlyReportArtifacts: vi.fn(async () => []),
+  getMonthlyReportArtifactGovernanceSummary: vi.fn(async () => ({ retainedArtifactCount: 0 })),
+}));
 vi.mock("./monthlyReportArtifacts", () => ({
   canAccessMonthlyReportArtifacts: (user: { openId: string; role: string } | null) => user?.openId === "owner-1" && user.role === "admin",
+  getMonthlyReportArtifactGovernanceSummary,
   listMonthlyReportArtifacts,
 }));
 
@@ -25,5 +29,13 @@ describe("reports.monthlyArtifacts authorization", () => {
   it("allows the current StoreOS owner to request only their filtered metadata", async () => {
     await expect(caller({ openId: "owner-1", role: "admin" }).reports.monthlyArtifacts({ year: 2026, month: 1 })).resolves.toEqual([]);
     expect(listMonthlyReportArtifacts).toHaveBeenCalledWith("owner-1", { year: 2026, month: 1 });
+  });
+
+  it("limits governance totals to the current owner-admin scope", async () => {
+    await expect(caller(null).reports.monthlyArtifactGovernance()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller({ openId: "other-workspace", role: "admin" }).reports.monthlyArtifactGovernance()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(getMonthlyReportArtifactGovernanceSummary).not.toHaveBeenCalled();
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.monthlyArtifactGovernance()).resolves.toEqual({ retainedArtifactCount: 0 });
+    expect(getMonthlyReportArtifactGovernanceSummary).toHaveBeenCalledWith("owner-1");
   });
 });

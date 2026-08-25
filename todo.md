@@ -315,3 +315,17 @@
 - [x] Build responsive Management Reports artifact UI with filtering, states, and safe CSV/PDF/HTML downloads
 - [x] Add Phase 2.3 retention, integrity, authorization, isolation, browser download, and UI-state coverage
 - [x] Run full tests, TypeScript, production build, and desktop/mobile real-retrieval validation for Phase 2.3
+- [x] Verify only the first real Phase 2.2/2.3 production scheduler execution and its persisted August 2026 artifacts without changing production state
+- [x] Perform final read-only preflight for the first live monthly scheduler run, including scheduler, deployment, pipeline, and Phase 2.3 artifact-control readiness
+- [x] Verify only the first real Phase 2.2/2.3 live execution, production artifact integrity, authorization controls, idempotency, and read-only data integrity after the September Jakarta boundary
+- [x] Perform a fresh read-only verification of the first real production scheduler execution and August 2026 artifact evidence
+- [x] Review deployment registration and scheduler configuration files without modifying them
+- [x] Review the callback route, Jakarta cron guard, Phase 2.3 retention policy, and storage access configuration without executing or modifying them
+- [x] Perform final read-only verification of the first real monthly scheduler execution and August 2026 production artifact evidence
+- [x] Perform a fresh final read-only verification of the first real monthly scheduler execution and August 2026 production artifact evidence
+- [x] Inspect current artifact persistence, authorization, UI, storage, and test architecture for Phase 2.4 governance
+- [x] Add lifecycle metadata, retained-count summaries, retention-threshold visibility, and idempotent archival governance
+- [x] Enforce lifecycle-aware artifact access so archived, retired, missing, and corrupt artifacts are never served
+- [x] Add owner-admin reporting governance UI with retained totals, lifecycle health, threshold indicators, and responsive states
+- [x] Add Phase 2.4 lifecycle, count, archive, integrity, authorization, isolation, and UI regression coverage
+- [x] Run full tests, TypeScript, production build, and desktop/mobile validation for Phase 2.4
