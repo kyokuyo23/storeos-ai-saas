@@ -165,7 +165,18 @@ const governanceFixture = {
   integrityCounts: { available: 6, missing: 0, corrupt: 0, retired: 0, archived: 0 },
 };
 
-async function installArtifactOwnerRoutes(page: import("@playwright/test").Page, artifacts: unknown[], governance = governanceFixture) {
+const lifecycleHistoryFixture = {
+  artifact: { ...storedArtifactFixture, lifecycleStatus: "archived" },
+  events: [
+    { lifecycleStatus: "generated", occurredAt: "2026-02-01T00:15:00.000Z", source: "scheduler", actor: "cron:storeos-monthly-management-report", artifactFormat: "CSV, HTML, PDF", reportPeriod: { year: 2026, month: 1, timezone: "Asia/Jakarta" }, integrity: [{ kind: "csv", bytes: 93, sha256: "a".repeat(64) }, { kind: "pdf", bytes: 512, sha256: "c".repeat(64) }], reason: "Artefak laporan berhasil dibuat." },
+    { lifecycleStatus: "verified", occurredAt: "2026-02-01T00:15:02.000Z", source: "integrity-check", actor: "system", artifactFormat: "CSV, HTML, PDF", reportPeriod: { year: 2026, month: 1, timezone: "Asia/Jakarta" }, integrity: [{ kind: "csv", bytes: 93, sha256: "a".repeat(64) }], reason: "Checksum SHA-256 tervalidasi." },
+    { lifecycleStatus: "retained", occurredAt: "2026-02-01T00:15:03.000Z", source: "retention-policy", actor: "system", artifactFormat: "CSV, HTML, PDF", reportPeriod: { year: 2026, month: 1, timezone: "Asia/Jakarta" }, integrity: [{ kind: "html", bytes: 210, sha256: "b".repeat(64) }], reason: "Artefak aktif dalam masa retensi." },
+    { lifecycleStatus: "eligible_for_archive", occurredAt: "2028-01-31T00:15:00.000Z", source: "retention-policy", actor: "system", artifactFormat: "CSV, HTML, PDF", reportPeriod: { year: 2026, month: 1, timezone: "Asia/Jakarta" }, integrity: [{ kind: "pdf", bytes: 512, sha256: "c".repeat(64) }], reason: "Memenuhi ambang arsip." },
+    { lifecycleStatus: "archived", occurredAt: "2028-02-01T00:15:00.000Z", source: "archive-policy", actor: "system", artifactFormat: "CSV, HTML, PDF", reportPeriod: { year: 2026, month: 1, timezone: "Asia/Jakarta" }, integrity: [{ kind: "csv", bytes: 93, sha256: "a".repeat(64) }], reason: "Binary dinonaktifkan; metadata audit dipertahankan." },
+  ],
+};
+
+async function installArtifactOwnerRoutes(page: import("@playwright/test").Page, artifacts: unknown[], governance = governanceFixture, lifecycleHistory: unknown = null) {
   const owner = { id: 1, openId: "owner-1", name: "Pemilik", role: "admin" };
   await page.route("**/api/trpc/**", async (route) => {
     const procedures = new URL(route.request().url()).pathname.split("/").at(-1)?.split(",") ?? [];
@@ -174,6 +185,7 @@ async function installArtifactOwnerRoutes(page: import("@playwright/test").Page,
         : procedure === "reports.monthlySummary" ? reportFixture
           : procedure === "reports.monthlyArtifacts" ? artifacts
             : procedure === "reports.monthlyArtifactGovernance" ? governance
+              : procedure === "reports.monthlyArtifactLifecycleHistory" ? lifecycleHistory
               : undefined;
       return data === undefined ? { error: { json: { message: `Unhandled test procedure: ${procedure}`, code: -32601, data: { code: "NOT_FOUND", httpStatus: 404 } } } } : { result: { data: { json: data } } };
     });
@@ -201,6 +213,33 @@ test("renders owner-admin artifact governance counts, lifecycle, and archive thr
   await expect(page.getByText("Mendekati ambang retensi")).toBeVisible();
   await expect(page.getByText("Memenuhi syarat arsip")).toBeVisible();
   await expect(page.getByText(/Lifecycle: Dihasilkan/)).toBeVisible();
+});
+
+test("shows chronological archived lifecycle history with WIB metadata and integrity snapshots", async ({ page }) => {
+  await installArtifactOwnerRoutes(page, [{ ...storedArtifactFixture, lifecycleStatus: "archived" }], governanceFixture, lifecycleHistoryFixture);
+  await page.goto("/reports");
+  await page.getByRole("button", { name: "Riwayat Lifecycle" }).click();
+  const history = page.getByLabel("Riwayat Lifecycle Januari 2026");
+  await expect(history).toBeVisible();
+  await expect(history.getByText("Lifecycle saat ini")).toBeVisible();
+  await expect(history.getByText("Diarsipkan").first()).toBeVisible();
+  await expect(history.getByText("Snapshot integritas").first()).toBeVisible();
+  await expect(history.getByText("scheduler · cron:storeos-monthly-management-report")).toBeVisible();
+  await expect(history.getByText("Januari 2026 · Asia/Jakarta").first()).toBeVisible();
+  expect(await history.getByText(/WIB/).count()).toBeGreaterThan(1);
+  await expect(history.locator(".lifecycle-event")).toHaveCount(5);
+  await expect(history.locator(".lifecycle-event").nth(0)).toContainText("Dihasilkan");
+  await expect(history.locator(".lifecycle-event").nth(4)).toContainText("Diarsipkan");
+});
+
+test("shows a lifecycle-history empty state without exposing a download path", async ({ page }) => {
+  await installArtifactOwnerRoutes(page, [storedArtifactFixture], governanceFixture, { artifact: { ...storedArtifactFixture, lifecycleStatus: "retained" }, events: [] });
+  await page.goto("/reports");
+  await page.getByRole("button", { name: "Riwayat Lifecycle" }).click();
+  const history = page.getByLabel("Riwayat Lifecycle Januari 2026");
+  await expect(history.getByText("Belum ada event lifecycle.")).toBeVisible();
+  await expect(history.getByText("Riwayat akan terisi secara deterministik ketika metadata artefak melewati transisi lifecycle.")).toBeVisible();
+  await expect(history.getByRole("button", { name: /Unduh/ })).toHaveCount(0);
 });
 
 test("downloads a checksum-verified stored CSV through the controlled report endpoint", async ({ page }, testInfo) => {

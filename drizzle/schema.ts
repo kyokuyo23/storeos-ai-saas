@@ -204,9 +204,20 @@ export const monthlyReportArtifactLifecycleEvents = mysqlTable("monthlyReportArt
   lifecycleStatus: mysqlEnum("lifecycleStatus", ["generated", "verified", "retained", "eligible_for_archive", "archived"]).notNull(),
   occurredAt: timestamp("occurredAt").defaultNow().notNull(),
   reason: varchar("reason", { length: 160 }),
+  /** Application-generated actor label; no credential or storage identity is recorded. */
+  actor: varchar("actor", { length: 80 }).default("system").notNull(),
+  /** Originating application capability, for example monthly_scheduler or retention_policy. */
+  source: varchar("source", { length: 80 }).default("system").notNull(),
+  /** Events govern the immutable CSV, HTML, and PDF bundle together. */
+  artifactFormat: varchar("artifactFormat", { length: 24 }).default("bundle").notNull(),
+  /** Snapshot of non-sensitive SHA-256/size metadata at transition time. */
+  integritySnapshot: text("integritySnapshot"),
+  /** New application events use a deterministic key; legacy history remains readable with NULL. */
+  eventKey: varchar("eventKey", { length: 191 }),
 }, (table) => [
   index("monthly_report_artifact_lifecycle_artifact_idx").on(table.artifactId, table.occurredAt),
   index("monthly_report_artifact_lifecycle_owner_idx").on(table.ownerOpenId, table.lifecycleStatus, table.occurredAt),
+  uniqueIndex("monthly_report_artifact_lifecycle_event_key_unique").on(table.artifactId, table.eventKey),
 ]);
 
 export const recipes = mysqlTable("recipes", {

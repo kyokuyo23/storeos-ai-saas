@@ -73,6 +73,7 @@ import {
   getMonthlyReportArtifact,
   getMonthlyReportArtifactGovernanceSummary,
   getMonthlyReportArtifactLifecycleEvents,
+  getMonthlyReportArtifactLifecycleHistory,
   listMonthlyReportArtifacts,
   markMonthlyReportArtifactsEligibleForArchive,
   persistMonthlyReportArtifacts,
@@ -189,6 +190,31 @@ describe("Phase 2.4 monthly report artifact governance", () => {
     expect(canAccessMonthlyReportArtifacts({ openId: "owner-1", role: "admin" })).toBe(true);
     expect(await listMonthlyReportArtifacts("other-workspace")).toEqual([]);
     await expect(getMonthlyReportArtifactGovernanceSummary("other-workspace")).rejects.toThrow("not authorized");
+  });
+
+  it("returns an append-only chronological lifecycle history for archived artifacts without changing integrity metadata", async () => {
+    const persisted = await persistMonthlyReportArtifacts(generatedReport({ year: 2024, month: 1, generatedAt: "2024-02-01T00:15:00.000Z" }));
+    const initialHistory = await getMonthlyReportArtifactLifecycleHistory(2024, 1, "owner-1");
+    expect(initialHistory?.events.map((event) => event.lifecycleStatus)).toEqual(["generated", "verified", "retained"]);
+    expect(initialHistory?.events.every((event) => event.occurredAt instanceof Date)).toBe(true);
+    expect(JSON.stringify(initialHistory?.events[0].integrity)).toContain(persisted.artifact.csv.sha256);
+
+    await persistMonthlyReportArtifacts(generatedReport({ year: 2024, month: 1, csv: "replacement-must-not-apply" }));
+    const afterDuplicate = await getMonthlyReportArtifactLifecycleHistory(2024, 1, "owner-1");
+    expect(afterDuplicate?.events).toHaveLength(3);
+    expect(JSON.stringify(afterDuplicate?.events[0].integrity)).toContain(persisted.artifact.csv.sha256);
+
+    const now = new Date("2026-02-02T00:00:00.000Z");
+    await markMonthlyReportArtifactsEligibleForArchive(now, 24, "owner-1");
+    await archiveEligibleMonthlyReportArtifacts(now, "owner-1");
+    const archivedHistory = await getMonthlyReportArtifactLifecycleHistory(2024, 1, "owner-1");
+    const statuses = archivedHistory?.events.map((event) => event.lifecycleStatus);
+    expect(archivedHistory?.artifact).toMatchObject({ lifecycleStatus: "archived", year: 2024, month: 1, timezone: "Asia/Jakarta" });
+    expect(statuses).toEqual(["generated", "verified", "retained", "eligible_for_archive", "archived"]);
+    const chronology = archivedHistory!.events.map((event) => event.occurredAt.getTime());
+    expect(chronology).toEqual([...chronology].sort((left, right) => left - right));
+    expect(JSON.stringify(archivedHistory?.events[0].integrity)).toContain(persisted.artifact.csv.sha256);
+    expect(await getMonthlyReportArtifactLifecycleHistory(2024, 1, "other-workspace")).toBeNull();
   });
 
   it("keeps the direct period metadata accessor and valid PDF binary format", async () => {

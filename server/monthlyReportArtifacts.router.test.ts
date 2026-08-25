@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
-const { getMonthlyReportArtifactGovernanceSummary, listMonthlyReportArtifacts } = vi.hoisted(() => ({
+const { getMonthlyReportArtifactGovernanceSummary, getMonthlyReportArtifactLifecycleHistory, listMonthlyReportArtifacts } = vi.hoisted(() => ({
   listMonthlyReportArtifacts: vi.fn(async () => []),
   getMonthlyReportArtifactGovernanceSummary: vi.fn(async () => ({ retainedArtifactCount: 0 })),
+  getMonthlyReportArtifactLifecycleHistory: vi.fn(async () => null),
 }));
 vi.mock("./monthlyReportArtifacts", () => ({
   canAccessMonthlyReportArtifacts: (user: { openId: string; role: string } | null) => user?.openId === "owner-1" && user.role === "admin",
   getMonthlyReportArtifactGovernanceSummary,
+  getMonthlyReportArtifactLifecycleHistory,
   listMonthlyReportArtifacts,
 }));
 
@@ -37,5 +39,13 @@ describe("reports.monthlyArtifacts authorization", () => {
     expect(getMonthlyReportArtifactGovernanceSummary).not.toHaveBeenCalled();
     await expect(caller({ openId: "owner-1", role: "admin" }).reports.monthlyArtifactGovernance()).resolves.toEqual({ retainedArtifactCount: 0 });
     expect(getMonthlyReportArtifactGovernanceSummary).toHaveBeenCalledWith("owner-1");
+  });
+
+  it("limits lifecycle-history access to the owner-admin scope and forwards only the requested period", async () => {
+    await expect(caller(null).reports.monthlyArtifactLifecycleHistory({ year: 2026, month: 1 })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller({ openId: "other-workspace", role: "admin" }).reports.monthlyArtifactLifecycleHistory({ year: 2026, month: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(getMonthlyReportArtifactLifecycleHistory).not.toHaveBeenCalled();
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.monthlyArtifactLifecycleHistory({ year: 2026, month: 1 })).resolves.toBeNull();
+    expect(getMonthlyReportArtifactLifecycleHistory).toHaveBeenCalledWith(2026, 1, "owner-1");
   });
 });

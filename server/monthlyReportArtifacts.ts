@@ -45,9 +45,28 @@ export type ArtifactAvailability = {
 };
 
 export type ArtifactLifecycleEvent = {
+  reportPeriod: { year: number; month: number; timezone: string };
   lifecycleStatus: ArtifactLifecycleStatus;
   occurredAt: Date;
   reason: string | null;
+  actor: string;
+  source: string;
+  artifactFormat: string;
+  integrity: Array<{ kind: ArtifactKind; sha256: string; bytes: number }>;
+};
+
+export type MonthlyReportArtifactLifecycleHistory = {
+  artifact: {
+    id: number;
+    year: number;
+    month: number;
+    timezone: string;
+    generatedAt: Date;
+    lifecycleStatus: ArtifactLifecycleStatus;
+    archivedAt: Date | null;
+    retiredAt: Date | null;
+  };
+  events: ArtifactLifecycleEvent[];
 };
 
 export type MonthlyReportArtifactGovernanceSummary = {
@@ -127,20 +146,59 @@ function isProductionArtifact(artifact: StoredMonthlyReportArtifact) {
     .every((key) => typeof key === "string" && key.startsWith(prefix) && !key.includes("nonproduction-e2e/") && !key.includes(".."));
 }
 
+function integritySnapshotFor(artifact: Pick<StoredMonthlyReportArtifact, "csv" | "printableHtml" | "pdf">): Array<{ kind: ArtifactKind; sha256: string; bytes: number }> {
+  return [
+    { kind: "csv", sha256: artifact.csv.sha256, bytes: artifact.csv.bytes },
+    { kind: "html", sha256: artifact.printableHtml.sha256, bytes: artifact.printableHtml.bytes },
+    { kind: "pdf", sha256: artifact.pdf.sha256, bytes: artifact.pdf.bytes },
+  ];
+}
+
+function parseIntegritySnapshot(value: string | null, fallback: StoredMonthlyReportArtifact) {
+  if (!value) return integritySnapshotFor(fallback);
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (Array.isArray(parsed) && parsed.every((entry) => entry && typeof entry === "object" && ["csv", "html", "pdf"].includes((entry as { kind?: string }).kind ?? "") && typeof (entry as { sha256?: unknown }).sha256 === "string" && typeof (entry as { bytes?: unknown }).bytes === "number")) {
+      return parsed as Array<{ kind: ArtifactKind; sha256: string; bytes: number }>;
+    }
+  } catch {
+    // Legacy or malformed snapshots safely fall back to immutable artifact metadata.
+  }
+  return integritySnapshotFor(fallback);
+}
+
+function lifecycleEventKey(status: ArtifactLifecycleStatus, source: string, reason: string | null) {
+  return `${status}:${source}:${reason ?? "none"}`.slice(0, 191);
+}
+
 async function recordLifecycleEvent(
   db: MonthlyReportDb,
-  artifact: Pick<StoredMonthlyReportArtifact, "id" | "ownerOpenId">,
+  artifact: StoredMonthlyReportArtifact,
   lifecycleStatus: ArtifactLifecycleStatus,
   occurredAt: Date,
-  reason: string | null = null,
+  options: { reason?: string | null; actor?: string; source?: string; artifactFormat?: string } = {},
 ) {
-  await db.insert(monthlyReportArtifactLifecycleEvents).values({
-    artifactId: artifact.id,
-    ownerOpenId: artifact.ownerOpenId,
-    lifecycleStatus,
-    occurredAt,
-    reason,
-  });
+  const reason = options.reason ?? null;
+  const source = options.source ?? "report_governance";
+  try {
+    await db.insert(monthlyReportArtifactLifecycleEvents).values({
+      artifactId: artifact.id,
+      ownerOpenId: artifact.ownerOpenId,
+      lifecycleStatus,
+      occurredAt,
+      reason,
+      actor: options.actor ?? "storeos-system",
+      source,
+      artifactFormat: options.artifactFormat ?? "bundle",
+      integritySnapshot: JSON.stringify(integritySnapshotFor(artifact)),
+      eventKey: lifecycleEventKey(lifecycleStatus, source, reason),
+    });
+    return true;
+  } catch (error) {
+    const candidate = error as { code?: string; message?: string };
+    if (candidate.code === "ER_DUP_ENTRY" || candidate.message?.includes("Duplicate entry")) return false;
+    throw error;
+  }
 }
 
 export async function getMonthlyReportArtifact(year: number, month: number) {
@@ -215,9 +273,9 @@ export async function persistMonthlyReportArtifacts(report: MonthlyReport) {
     const inserted = (await db.select().from(monthlyReportArtifacts).where(eq(monthlyReportArtifacts.id, id)).limit(1))[0];
     if (!inserted) throw new Error("Monthly report artifact record was not created");
     const artifact = mapArtifact(inserted);
-    await recordLifecycleEvent(db, artifact, "generated", generatedAt, "immutable_artifact_persisted");
-    await recordLifecycleEvent(db, artifact, "verified", generatedAt, "sha256_metadata_recorded");
-    await recordLifecycleEvent(db, artifact, "retained", generatedAt, "within_24_month_retention_window");
+    await recordLifecycleEvent(db, artifact, "generated", generatedAt, { reason: "immutable_artifact_persisted", actor: "monthly-report-generator", source: "report_pipeline" });
+    await recordLifecycleEvent(db, artifact, "verified", generatedAt, { reason: "sha256_metadata_recorded", actor: "monthly-report-generator", source: "report_pipeline" });
+    await recordLifecycleEvent(db, artifact, "retained", generatedAt, { reason: "within_24_month_retention_window", actor: "monthly-report-generator", source: "report_pipeline" });
     return { created: true as const, artifact };
   } catch (error) {
     // A concurrent invocation may have won the scoped unique-period race. Never overwrite it.
@@ -297,22 +355,47 @@ export async function listMonthlyReportArtifacts(ownerOpenId = defaultArtifactSc
   })));
 }
 
-export async function getMonthlyReportArtifactLifecycleEvents(year: number, month: number, ownerOpenId = defaultArtifactScope()): Promise<ArtifactLifecycleEvent[]> {
+const lifecycleOrder: Record<ArtifactLifecycleStatus, number> = { generated: 0, verified: 1, retained: 2, eligible_for_archive: 3, archived: 4 };
+
+export async function getMonthlyReportArtifactLifecycleHistory(year: number, month: number, ownerOpenId = defaultArtifactScope()): Promise<MonthlyReportArtifactLifecycleHistory | null> {
   validatePeriod(year, month);
-  if (!isAuthorizedOwnerScope(ownerOpenId)) return [];
+  if (!isAuthorizedOwnerScope(ownerOpenId)) return null;
   const db = await getDb();
   if (!db) throw new Error("Database tidak tersedia. Silakan coba lagi.");
   const artifactRow = (await db.select().from(monthlyReportArtifacts).where(and(eq(monthlyReportArtifacts.year, year), eq(monthlyReportArtifacts.month, month))).limit(5))
     .find((row) => row.ownerOpenId === ownerOpenId || row.ownerOpenId === LEGACY_ARTIFACT_SCOPE);
-  if (!artifactRow) return [];
+  if (!artifactRow) return null;
   const artifact = mapArtifact(artifactRow);
   const events = await db.select().from(monthlyReportArtifactLifecycleEvents)
     .where(and(eq(monthlyReportArtifactLifecycleEvents.artifactId, artifact.id), eq(monthlyReportArtifactLifecycleEvents.ownerOpenId, artifact.ownerOpenId)));
-  return events.sort((left, right) => left.occurredAt.getTime() - right.occurredAt.getTime()).map((event) => ({
-    lifecycleStatus: event.lifecycleStatus as ArtifactLifecycleStatus,
-    occurredAt: event.occurredAt,
-    reason: event.reason,
-  }));
+  const chronological = events.sort((left, right) => left.occurredAt.getTime() - right.occurredAt.getTime() || lifecycleOrder[left.lifecycleStatus as ArtifactLifecycleStatus] - lifecycleOrder[right.lifecycleStatus as ArtifactLifecycleStatus] || left.id - right.id);
+  return {
+    artifact: {
+      id: artifact.id,
+      year: artifact.year,
+      month: artifact.month,
+      timezone: artifact.timezone,
+      generatedAt: artifact.generatedAt,
+      lifecycleStatus: artifact.lifecycleStatus,
+      archivedAt: artifact.archivedAt,
+      retiredAt: artifact.retiredAt,
+    },
+    events: chronological.map((event) => ({
+      reportPeriod: { year: artifact.year, month: artifact.month, timezone: artifact.timezone },
+      lifecycleStatus: event.lifecycleStatus as ArtifactLifecycleStatus,
+      occurredAt: event.occurredAt,
+      reason: event.reason,
+      actor: event.actor,
+      source: event.source,
+      artifactFormat: event.artifactFormat,
+      integrity: parseIntegritySnapshot(event.integritySnapshot, artifact),
+    })),
+  };
+}
+
+/** Compatibility query retained for existing callers; history remains append-only. */
+export async function getMonthlyReportArtifactLifecycleEvents(year: number, month: number, ownerOpenId = defaultArtifactScope()): Promise<ArtifactLifecycleEvent[]> {
+  return (await getMonthlyReportArtifactLifecycleHistory(year, month, ownerOpenId))?.events ?? [];
 }
 
 function emptyLifecycleCounts(): Record<ArtifactLifecycleStatus, number> {
@@ -380,12 +463,18 @@ export async function markMonthlyReportArtifactsEligibleForArchive(
   const candidates = (await db.select().from(monthlyReportArtifacts).where(and(isNull(monthlyReportArtifacts.retiredAt), isNull(monthlyReportArtifacts.archivedAt), lt(monthlyReportArtifacts.generatedAt, cutoff))))
     .map(mapArtifact)
     .filter((artifact) => belongsToOwnerScope(artifact, ownerOpenId) && isProductionArtifact(artifact) && artifact.lifecycleStatus === "retained");
+  let affectedRows = 0;
   for (const artifact of candidates) {
-    await db.update(monthlyReportArtifacts).set({ lifecycleStatus: "eligible_for_archive", archiveEligibleAt: now })
+    const result = await db.update(monthlyReportArtifacts).set({ lifecycleStatus: "eligible_for_archive", archiveEligibleAt: now })
       .where(and(eq(monthlyReportArtifacts.id, artifact.id), eq(monthlyReportArtifacts.lifecycleStatus, "retained")));
-    await recordLifecycleEvent(db, artifact, "eligible_for_archive", now, "retention_window_elapsed");
+    const header = Array.isArray(result) ? result[0] : result;
+    const applied = typeof (header as { affectedRows?: unknown } | undefined)?.affectedRows === "number" ? (header as { affectedRows: number }).affectedRows > 0 : true;
+    if (applied) {
+      affectedRows += 1;
+      await recordLifecycleEvent(db, artifact, "eligible_for_archive", now, { reason: "retention_window_elapsed", actor: "retention-governance", source: "retention_policy" });
+    }
   }
-  return { cutoff, eligibleAt: now, ownerOpenId, affectedRows: candidates.length };
+  return { cutoff, eligibleAt: now, ownerOpenId, affectedRows };
 }
 
 export async function archiveEligibleMonthlyReportArtifacts(now = new Date(), ownerOpenId = defaultArtifactScope()) {
@@ -395,12 +484,18 @@ export async function archiveEligibleMonthlyReportArtifacts(now = new Date(), ow
   const candidates = (await db.select().from(monthlyReportArtifacts).where(and(isNull(monthlyReportArtifacts.retiredAt), isNull(monthlyReportArtifacts.archivedAt), eq(monthlyReportArtifacts.lifecycleStatus, "eligible_for_archive"))))
     .map(mapArtifact)
     .filter((artifact) => artifact.lifecycleStatus === "eligible_for_archive" && belongsToOwnerScope(artifact, ownerOpenId) && isProductionArtifact(artifact));
+  let affectedRows = 0;
   for (const artifact of candidates) {
-    await db.update(monthlyReportArtifacts).set({ lifecycleStatus: "archived", archivedAt: now, archiveReason: "retention_window_elapsed", retiredAt: now })
+    const result = await db.update(monthlyReportArtifacts).set({ lifecycleStatus: "archived", archivedAt: now, archiveReason: "retention_window_elapsed", retiredAt: now })
       .where(and(eq(monthlyReportArtifacts.id, artifact.id), eq(monthlyReportArtifacts.lifecycleStatus, "eligible_for_archive"), isNull(monthlyReportArtifacts.retiredAt)));
-    await recordLifecycleEvent(db, artifact, "archived", now, "binary_access_revoked_audit_metadata_preserved");
+    const header = Array.isArray(result) ? result[0] : result;
+    const applied = typeof (header as { affectedRows?: unknown } | undefined)?.affectedRows === "number" ? (header as { affectedRows: number }).affectedRows > 0 : true;
+    if (applied) {
+      affectedRows += 1;
+      await recordLifecycleEvent(db, artifact, "archived", now, { reason: "binary_access_revoked_audit_metadata_preserved", actor: "retention-governance", source: "retention_policy" });
+    }
   }
-  return { archivedAt: now, ownerOpenId, affectedRows: candidates.length };
+  return { archivedAt: now, ownerOpenId, affectedRows };
 }
 
 export async function archiveExpiredMonthlyReportArtifacts(

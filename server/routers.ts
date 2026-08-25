@@ -8,7 +8,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, monthlyReportInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput, stockOpnameFollowUpInput, stockOpnameFollowUpNoteInput, stockOpnameHistoryInput } from "./foundationSchemas";
 import { getMonthlyManagementReport } from "./monthlyReports";
-import { canAccessMonthlyReportArtifacts, getMonthlyReportArtifactGovernanceSummary, listMonthlyReportArtifacts } from "./monthlyReportArtifacts";
+import { canAccessMonthlyReportArtifacts, getMonthlyReportArtifactGovernanceSummary, getMonthlyReportArtifactLifecycleHistory, listMonthlyReportArtifacts } from "./monthlyReportArtifacts";
 
 const idInput = z.object({ id: z.number().int().positive() });
 const runMutation = async <T>(entity: string, operation: () => Promise<T>) => {
@@ -64,6 +64,10 @@ export const appRouter = router({
     monthlyArtifactGovernance: protectedProcedure.query(({ ctx }) => {
       if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Akses governance laporan dibatasi untuk pemilik StoreOS." });
       return runMutation("Governance artefak laporan", () => getMonthlyReportArtifactGovernanceSummary(ctx.user.openId));
+    }),
+    monthlyArtifactLifecycleHistory: protectedProcedure.input(z.object({ year: z.number().int().min(2000).max(2200), month: z.number().int().min(1).max(12) })).query(({ ctx, input }) => {
+      if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Akses riwayat lifecycle laporan dibatasi untuk pemilik StoreOS." });
+      return runMutation("Riwayat lifecycle artefak", () => getMonthlyReportArtifactLifecycleHistory(input.year, input.month, ctx.user.openId));
     }),
   }),
   sale: router({

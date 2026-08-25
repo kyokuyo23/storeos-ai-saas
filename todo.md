@@ -329,3 +329,9 @@
 - [x] Add owner-admin reporting governance UI with retained totals, lifecycle health, threshold indicators, and responsive states
 - [x] Add Phase 2.4 lifecycle, count, archive, integrity, authorization, isolation, and UI regression coverage
 - [x] Run full tests, TypeScript, production build, and desktop/mobile validation for Phase 2.4
+- [x] Inspect Phase 2.4 lifecycle persistence, governance UI, authorization, and tests for Phase 2.5 history reuse
+- [x] Add append-only, idempotent lifecycle-event audit persistence and protected artifact-history query
+- [x] Preserve lifecycle-aware integrity and download restrictions while exposing archived/retired audit history
+- [x] Add owner-admin Riwayat Lifecycle UI with current state, chronological events, and responsive empty state
+- [x] Add Phase 2.5 lifecycle history, append-only, authorization, isolation, integrity, browser, and responsive coverage
+- [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.5
