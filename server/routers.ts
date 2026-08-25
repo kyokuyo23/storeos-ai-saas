@@ -1,13 +1,14 @@
 import { COOKIE_NAME } from "@shared/const";
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import * as db from "./db";
 import { mapFoundationError } from "./foundationErrors";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, monthlyReportInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput, stockOpnameFollowUpInput, stockOpnameFollowUpNoteInput, stockOpnameHistoryInput } from "./foundationSchemas";
 import { getMonthlyManagementReport } from "./monthlyReports";
-import { getMonthlyReportArtifactDownloadUrls } from "./monthlyReportArtifacts";
+import { canAccessMonthlyReportArtifacts, listMonthlyReportArtifacts } from "./monthlyReportArtifacts";
 
 const idInput = z.object({ id: z.number().int().positive() });
 const runMutation = async <T>(entity: string, operation: () => Promise<T>) => {
@@ -56,7 +57,10 @@ export const appRouter = router({
   }),
   reports: router({
     monthlySummary: publicProcedure.input(monthlyReportInput).query(({ input }) => runMutation("Laporan bulanan", () => getMonthlyManagementReport(input))),
-    monthlyArtifact: publicProcedure.input(monthlyReportInput).query(({ input }) => runMutation("Artefak laporan bulanan", () => getMonthlyReportArtifactDownloadUrls(input.year, input.month))),
+    monthlyArtifacts: protectedProcedure.input(z.object({ year: z.number().int().min(2000).max(2200).optional(), month: z.number().int().min(1).max(12).optional() }).optional()).query(({ ctx, input }) => {
+      if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Akses artefak laporan dibatasi untuk pemilik StoreOS." });
+      return runMutation("Artefak laporan bulanan", () => listMonthlyReportArtifacts(ctx.user.openId, input));
+    }),
   }),
   sale: router({
     list: publicProcedure.query(() => db.listSales()),

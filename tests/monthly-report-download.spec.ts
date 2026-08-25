@@ -2,6 +2,8 @@ import { parse } from "csv-parse/sync";
 import { expect, test } from "@playwright/test";
 import { readFile, stat } from "node:fs/promises";
 
+test.describe.configure({ mode: "serial" });
+
 const reportFixture = {
   period: {
     label: "Januari, 2026 — Kopi Nusantara • Cibitung",
@@ -137,4 +139,60 @@ test("downloads a non-empty monthly CSV with exact scope and quoted sections", a
   expect(reportRows.get("Periode akhir")).toBe("2026-01-31");
   expect(reportRows.get("Net Revenue")).toBe("115000");
   expect(reportRows.get("Recurring High Variance Ingredient Count")).toBe("1");
+});
+
+const storedArtifactFixture = {
+  id: 42,
+  year: 2026,
+  month: 1,
+  timezone: "Asia/Jakarta",
+  periodStartDate: "2026-01-01",
+  periodEndDate: "2026-01-31",
+  generatedAt: "2026-02-01T00:15:00.000Z",
+  csv: { kind: "csv", bytes: 93, sha256: "a".repeat(64), status: "available" },
+  printableHtml: { kind: "html", bytes: 210, sha256: "b".repeat(64), status: "available" },
+  pdf: { kind: "pdf", bytes: 512, sha256: "c".repeat(64), status: "available" },
+};
+
+async function installArtifactOwnerRoutes(page: import("@playwright/test").Page, artifacts: unknown[]) {
+  await page.route("**/api/trpc/auth.me*", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ result: { data: { json: { id: 1, openId: "owner-1", name: "Pemilik", role: "admin" } } } }]) }));
+  await page.route("**/api/trpc/reports.monthlySummary*", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ result: { data: { json: reportFixture } } }]) }));
+  await page.route("**/api/trpc/reports.monthlyArtifacts*", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ result: { data: { json: artifacts } } }]) }));
+}
+
+test("shows the owner-visible stored-artifact empty state", async ({ page }) => {
+  await installArtifactOwnerRoutes(page, []);
+  await page.goto("/reports");
+  await expect(page.getByRole("heading", { name: "Ringkasan Manajemen Bulanan" })).toBeVisible();
+  await expect(page.getByText("Belum ada artefak tersimpan untuk filter ini.")).toBeVisible();
+  await expect(page.getByText("Artefak akan muncul setelah laporan bulanan periode selesai dibuat dan melewati verifikasi integritas.")).toBeVisible();
+});
+
+test("downloads a checksum-verified stored CSV through the controlled report endpoint", async ({ page }, testInfo) => {
+  await installArtifactOwnerRoutes(page, [storedArtifactFixture]);
+  const storedCsv = "\ufeff\"StoreOS Managed Artifact\",\"Januari 2026\"\r\n\"Integrity\",\"verified\"\r\n";
+  const artifactRequests: string[] = [];
+  page.on("request", (request) => { if (request.url().includes("monthly-artifacts")) artifactRequests.push(request.url()); });
+  await page.context().route("**/*", async (route) => {
+    if (!route.request().url().includes("/api/reports/monthly-artifacts/2026/1/csv")) return route.continue();
+    return route.fulfill({
+      status: 200,
+      contentType: "text/csv; charset=utf-8",
+      headers: { "content-disposition": "attachment; filename=\"storeos-management-report-2026-01.csv\"", "cache-control": "no-store" },
+      body: storedCsv,
+    });
+  });
+  await page.goto("/reports");
+  await expect(page.getByText("Terverifikasi").first()).toBeVisible();
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Unduh CSV" }).click();
+  const download = await downloadPromise;
+  expect(artifactRequests).toEqual(["http://127.0.0.1:4173/api/reports/monthly-artifacts/2026/1/csv"]);
+  expect(download.suggestedFilename()).toBe("storeos-management-report-2026-01.csv");
+  const path = testInfo.outputPath(download.suggestedFilename());
+  await download.saveAs(path);
+  const data = await readFile(path, "utf8");
+  expect(data.charCodeAt(0)).toBe(0xfeff);
+  expect(data).toContain('"Integrity","verified"');
+  expect((await stat(path)).size).toBeGreaterThan(0);
 });

@@ -1,8 +1,10 @@
-import { Download, FileText, RefreshCw } from "lucide-react";
+import { AlertTriangle, Archive, Download, FileText, RefreshCw, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { downloadMonthlyReportCsv, printMonthlyReport } from "@/lib/monthlyReportExports";
 import { AppShell, ErrorState, PageHeader, Panel } from "./FoundationShell";
+import { useAuth } from "../_core/hooks/useAuth";
+import { startLogin } from "@/const";
 
 const currency = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
 const number = (value: number) => new Intl.NumberFormat("id-ID", { maximumFractionDigits: 3 }).format(value);
@@ -16,11 +18,50 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
   return <div className="summary-card"><span>{label}</span><strong>{value}</strong>{detail && <small>{detail}</small>}</div>;
 }
 
+type IntegrityStatus = "available" | "missing" | "corrupt" | "retired";
+const artifactStatusLabel: Record<IntegrityStatus, string> = { available: "Terverifikasi", missing: "Tidak ditemukan", corrupt: "Checksum gagal", retired: "Masa simpan berakhir" };
+const artifactStatusClass: Record<IntegrityStatus, string> = { available: "success", missing: "warning", corrupt: "danger", retired: "neutral" };
+const fileSize = (bytes: number) => new Intl.NumberFormat("id-ID", { maximumFractionDigits: 1 }).format(bytes < 1024 ? bytes : bytes / 1024) + (bytes < 1024 ? " B" : " KB");
+
+function ArtifactDownload({ year, month, kind, status }: { year: number; month: number; kind: "csv" | "html" | "pdf"; status: IntegrityStatus }) {
+  const extension = kind === "html" ? "HTML" : kind.toUpperCase();
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const download = async () => {
+    setIsDownloading(true);
+    setDownloadError(null);
+    try {
+      const response = await fetch(`/api/reports/monthly-artifacts/${year}/${month}/${kind}`, { credentials: "same-origin" });
+      if (!response.ok) throw new Error("Artifact verification failed");
+      const disposition = response.headers.get("content-disposition") ?? "";
+      const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] ?? `storeos-management-report-${year}-${String(month).padStart(2, "0")}.${kind}`;
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch { setDownloadError("Unduhan ditolak karena artefak tidak dapat diverifikasi.");
+    } finally { setIsDownloading(false); }
+  };
+  if (status !== "available") return <span className="artifact-unavailable">{extension} tidak tersedia</span>;
+  return <div className="artifact-download-control"><button type="button" className="button secondary compact-button" onClick={() => void download()} disabled={isDownloading} aria-label={`Unduh ${extension}`}><Download size={13} /> {isDownloading ? "Memuat" : extension}</button>{downloadError && <span role="alert" className="artifact-download-error">{downloadError}</span>}</div>;
+}
+
 export function MonthlyReport() {
   const initial = useMemo(currentJakarta, []);
   const [year, setYear] = useState(initial.year);
   const [month, setMonth] = useState(initial.month);
+  const [artifactYear, setArtifactYear] = useState(initial.year);
+  const [artifactMonth, setArtifactMonth] = useState<number | "all">("all");
+  const auth = useAuth();
   const query = trpc.reports.monthlySummary.useQuery({ year, month });
+  const artifactsQuery = trpc.reports.monthlyArtifacts.useQuery(
+    { year: artifactYear, ...(artifactMonth === "all" ? {} : { month: artifactMonth }) },
+    { enabled: auth.isAuthenticated && auth.user?.role === "admin", retry: false, refetchOnWindowFocus: false },
+  );
   const report = query.data;
   const downloadCsv = () => {
     if (report) downloadMonthlyReportCsv(report);
@@ -29,6 +70,12 @@ export function MonthlyReport() {
     <Panel title="Periode laporan" description="Batas laporan memakai 00:00 WIB pada hari pertama sampai sebelum 00:00 WIB bulan berikutnya."><div className="form-grid report-period-controls"><label className="field"><span>Tahun</span><select className="form-input" value={year} onChange={(event) => setYear(Number(event.target.value))}>{Array.from({ length: 7 }, (_, index) => initial.year - 3 + index).map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="field"><span>Bulan</span><select className="form-input" value={month} onChange={(event) => setMonth(Number(event.target.value))}>{months.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}</select></label><div className="report-period-label"><span>Periode aktif</span><strong>{report?.period.label ?? `${months[month - 1]} ${year}`}</strong><small>{report?.period.startDate ?? "—"} s/d {report?.period.endDate ?? "—"} · Asia/Jakarta</small></div></div></Panel>
     {query.isLoading ? <div className="loading-state"><span className="loading-dot" /> Memuat laporan bulanan…</div> : query.isError ? <ErrorState message="Laporan bulanan tidak dapat dimuat. Silakan coba lagi." /> : report ? <div className="monthly-report-grid"><Panel title="Financial Core" description="Nilai yang sudah mengikuti pembatalan, refund, dan exchange sesuai Financial Core."><div className="summary-grid"><Metric label="Gross Sales" value={currency(report.financial.grossSales)} /><Metric label="Net Revenue" value={currency(report.financial.netRevenue)} /><Metric label="COGS" value={currency(report.financial.cogs)} /><Metric label="Gross Profit" value={currency(report.financial.grossProfit)} /><Metric label="Gross Margin" value={`${number(report.financial.grossMargin)}%`} /><Metric label="Sales" value={number(report.financial.salesTransactionCount)} /><Metric label="Refund Value" value={currency(report.financial.refundValue)} /><Metric label="Void Value" value={currency(report.financial.voidValue)} /><Metric label="Exchange Impact" value={currency(report.financial.exchangeImpact)} /></div></Panel><Panel title="Inventory Intelligence" description="Rekonsiliasi memakai inventory ledger dan tolerance engine yang sudah ada."><div className="summary-grid"><Metric label="Opening Stock" value={number(report.inventory.openingStock)} /><Metric label="Expected Stock" value={number(report.inventory.expectedStock)} /><Metric label="Actual / Closing Stock" value={number(report.inventory.actualStock)} /><Metric label="Total Variance" value={number(report.inventory.totalVariance)} /><Metric label="Di luar toleransi" value={number(report.inventory.outOfToleranceItemCount)} /><Metric label="High-value variance" value={number(report.inventory.highValueVarianceCount)} /><Metric label="Varians tinggi berulang" value={number(report.inventory.recurringHighVarianceIngredientCount)} detail="2/3 atau 3/3 periode comparable" /><Metric label="Sesi stock-opname" value={number(report.inventory.stockOpnameSessionCount)} /><Metric label="Follow-up terbuka" value={number(report.inventory.openStockOpnameFollowUpCount)} /></div></Panel></div> : <Panel title="Tidak ada data" description="Belum ada data transaksi atau pergerakan untuk bulan Jakarta/WIB yang dipilih."><div className="empty-state">Belum ada data pada periode yang dipilih.</div></Panel>}
     {report && <Panel title="Metadata laporan" description="Metadata ini ikut tersedia pada CSV dan tampilan cetak/PDF."><div className="report-metadata"><div><span>Dibuat pada</span><strong>{report.generatedAt ? `${new Date(report.generatedAt).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })} WIB` : "—"}</strong></div><div><span>Catatan audit</span>{(report.auditNotes ?? []).length ? <ul>{(report.auditNotes ?? []).map((entry, index) => <li key={`${entry.reference}-${entry.type}-${index}`}><strong>{entry.reference}</strong> · {entry.note}</li>)}</ul> : <strong>Tidak ada catatan audit pada periode ini.</strong>}</div></div></Panel>}
+    <Panel title="Artefak laporan tersimpan" description="CSV, PDF, dan HTML yang tersimpan untuk periode selesai. Akses dan unduhan hanya tersedia bagi pemilik StoreOS setelah checksum tervalidasi di server.">
+      {!auth.isAuthenticated ? <div className="artifact-access-state"><ShieldCheck size={22} /><div><strong>Masuk sebagai pemilik untuk membuka arsip.</strong><p>Ringkasan bulanan tetap tersedia secara read-only. Artefak tersimpan memakai akses server-side yang dibatasi.</p></div><button className="button primary" onClick={() => startLogin()}>Masuk</button></div> : auth.user?.role !== "admin" ? <div className="artifact-access-state restricted"><AlertTriangle size={22} /><div><strong>Arsip laporan dibatasi.</strong><p>Akun ini tidak memiliki akses pemilik untuk artefak Management Reports.</p></div></div> : <>
+        <div className="artifact-filter-row"><label className="field"><span>Tahun arsip</span><select aria-label="Tahun arsip" className="form-input" value={artifactYear} onChange={(event) => setArtifactYear(Number(event.target.value))}>{Array.from({ length: 7 }, (_, index) => initial.year - 3 + index).map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="field"><span>Bulan arsip</span><select aria-label="Bulan arsip" className="form-input" value={artifactMonth} onChange={(event) => setArtifactMonth(event.target.value === "all" ? "all" : Number(event.target.value))}><option value="all">Semua bulan</option>{months.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}</select></label></div>
+        {artifactsQuery.isLoading ? <div className="loading-state"><span className="loading-dot" /> Memverifikasi artefak tersimpan…</div> : artifactsQuery.isError ? <ErrorState message="Arsip laporan tidak dapat dimuat atau akses Anda tidak diizinkan." /> : artifactsQuery.data?.length ? <div className="artifact-table-wrap"><table className="artifact-table"><thead><tr><th>Periode</th><th>Dibuat (WIB)</th><th>CSV</th><th>PDF</th><th>HTML</th><th>Unduh tervalidasi</th></tr></thead><tbody>{artifactsQuery.data.map((artifact) => <tr key={artifact.id}><td><strong>{months[artifact.month - 1]} {artifact.year}</strong><small>{artifact.periodStartDate} s/d {artifact.periodEndDate}</small></td><td>{new Date(artifact.generatedAt).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })} WIB</td>{([artifact.csv, artifact.pdf, artifact.printableHtml] as const).map((file) => <td key={file.kind}><span className={`badge ${artifactStatusClass[file.status]}`}>{artifactStatusLabel[file.status]}</span><small>{fileSize(file.bytes)} · SHA-256</small></td>)}<td><div className="artifact-download-actions"><ArtifactDownload year={artifact.year} month={artifact.month} kind="csv" status={artifact.csv.status} /><ArtifactDownload year={artifact.year} month={artifact.month} kind="pdf" status={artifact.pdf.status} /><ArtifactDownload year={artifact.year} month={artifact.month} kind="html" status={artifact.printableHtml.status} /></div></td></tr>)}</tbody></table></div> : <div className="empty-state artifact-empty"><div className="empty-icon"><Archive size={20} /></div><strong>Belum ada artefak tersimpan untuk filter ini.</strong><p>Artefak akan muncul setelah laporan bulanan periode selesai dibuat dan melewati verifikasi integritas.</p></div>}
+      </>}
+    </Panel>
     <p className="settings-help"><RefreshCw size={14} /> Laporan ini bersifat read-only dan tidak mengubah penjualan, ledger, stock-opname, atau Financial Core.</p>
   </AppShell>;
 }

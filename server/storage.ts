@@ -95,3 +95,27 @@ export async function storageGetSignedUrl(relKey: string): Promise<string> {
   const { url } = (await resp.json()) as { url: string };
   return url;
 }
+
+/**
+ * Reads object bytes only on the server so callers can validate checksums before
+ * an application serves a file. This never exposes a Forge credential or signed
+ * S3 URL to a browser.
+ */
+export async function storageGetBytes(relKey: string): Promise<{ key: string; data: Buffer; contentType: string | null }> {
+  const key = normalizeKey(relKey);
+  const signedUrl = await storageGetSignedUrl(key);
+  const response = await fetch(signedUrl);
+  if (response.status === 404) {
+    const error = new Error("Stored artifact was not found");
+    (error as Error & { code?: string }).code = "STORAGE_NOT_FOUND";
+    throw error;
+  }
+  if (!response.ok) {
+    throw new Error(`Storage download failed (${response.status})`);
+  }
+  return {
+    key,
+    data: Buffer.from(await response.arrayBuffer()),
+    contentType: response.headers.get("content-type"),
+  };
+}
