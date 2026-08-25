@@ -306,3 +306,5 @@
 - [x] Perform a strict live-only Phase 2.2 scheduler status check without synthetic artifacts or production changes
 - [x] Inspect and execute an isolated controlled-date Phase 2.2 end-to-end verification without touching production scheduler or artifacts
 - [x] Verify the full isolated artifact pipeline, idempotency, read-only integrity, tests, TypeScript, and production build
+- [x] Verify only the first real production Phase 2.2 scheduled execution and persisted August 2026 artifacts
+- [x] Check the strict live-only Phase 2.2 production scheduler status without invoking or changing it
