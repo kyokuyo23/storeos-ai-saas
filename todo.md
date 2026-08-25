@@ -302,3 +302,5 @@
 - [x] Add and test the minimal Jakarta-first-day callback guard required by the supported UTC day-range schedule
 - [x] Verify the first real September 2026 Heartbeat run and durable August 2026 artifacts without triggering the scheduler
 - [x] Verify the first completed live Phase 2.2 scheduled execution and create its verification checkpoint without triggering or modifying the system
+- [x] Verify the real post-boundary Heartbeat execution, persisted August 2026 artifacts, and requested validation gates without triggering the scheduler
+- [x] Perform a strict live-only Phase 2.2 scheduler status check without synthetic artifacts or production changes
