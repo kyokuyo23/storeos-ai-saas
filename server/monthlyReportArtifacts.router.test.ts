@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
-const { getMonthlyReportArtifactGovernanceSummary, getMonthlyReportArtifactLifecycleHistory, listMonthlyReportArtifacts } = vi.hoisted(() => ({
+const { archiveMonthlyReportArtifactWithOwnerApproval, getMonthlyReportArtifactGovernanceSummary, getMonthlyReportArtifactLifecycleHistory, listMonthlyReportArtifacts } = vi.hoisted(() => ({
+  archiveMonthlyReportArtifactWithOwnerApproval: vi.fn(async () => ({ outcome: "archived", artifact: { id: 7, year: 2024, month: 1, lifecycleStatus: "archived" }, availability: [], archivedAt: new Date("2026-02-02T00:00:00.000Z") })),
   listMonthlyReportArtifacts: vi.fn(async () => []),
   getMonthlyReportArtifactGovernanceSummary: vi.fn(async () => ({ retainedArtifactCount: 0 })),
   getMonthlyReportArtifactLifecycleHistory: vi.fn(async () => null),
 }));
 vi.mock("./monthlyReportArtifacts", () => ({
+  archiveMonthlyReportArtifactWithOwnerApproval,
   canAccessMonthlyReportArtifacts: (user: { openId: string; role: string } | null) => user?.openId === "owner-1" && user.role === "admin",
   getMonthlyReportArtifactGovernanceSummary,
   getMonthlyReportArtifactLifecycleHistory,
@@ -47,5 +49,17 @@ describe("reports.monthlyArtifacts authorization", () => {
     expect(getMonthlyReportArtifactLifecycleHistory).not.toHaveBeenCalled();
     await expect(caller({ openId: "owner-1", role: "admin" }).reports.monthlyArtifactLifecycleHistory({ year: 2026, month: 1 })).resolves.toBeNull();
     expect(getMonthlyReportArtifactLifecycleHistory).toHaveBeenCalledWith(2026, 1, "owner-1");
+  });
+
+  it("rejects anonymous, member, and cross-workspace archive approvals before the archive service is called", async () => {
+    await expect(caller(null).reports.archiveMonthlyArtifact({ year: 2024, month: 1 })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller({ openId: "owner-1", role: "user" }).reports.archiveMonthlyArtifact({ year: 2024, month: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller({ openId: "other-workspace", role: "admin" }).reports.archiveMonthlyArtifact({ year: 2024, month: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(archiveMonthlyReportArtifactWithOwnerApproval).not.toHaveBeenCalled();
+  });
+
+  it("forwards an owner-admin approval using the authenticated owner scope as both actor and archive authority", async () => {
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.archiveMonthlyArtifact({ year: 2024, month: 1 })).resolves.toMatchObject({ outcome: "archived", artifact: { year: 2024, month: 1, lifecycleStatus: "archived" } });
+    expect(archiveMonthlyReportArtifactWithOwnerApproval).toHaveBeenCalledWith(2024, 1, "owner-1", "owner-1");
   });
 });

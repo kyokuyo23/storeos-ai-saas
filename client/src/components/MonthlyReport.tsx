@@ -5,6 +5,7 @@ import { downloadMonthlyReportCsv, printMonthlyReport } from "@/lib/monthlyRepor
 import { AppShell, ErrorState, PageHeader, Panel } from "./FoundationShell";
 import { useAuth } from "../_core/hooks/useAuth";
 import { startLogin } from "@/const";
+import "./monthly-report-governance.css";
 
 const currency = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
 const number = (value: number) => new Intl.NumberFormat("id-ID", { maximumFractionDigits: 3 }).format(value);
@@ -26,6 +27,15 @@ const lifecycleLabel: Record<LifecycleStatus, string> = { generated: "Dihasilkan
 const lifecycleClass: Record<LifecycleStatus, string> = { generated: "neutral", verified: "success", retained: "success", eligible_for_archive: "warning", archived: "neutral" };
 const fileSize = (bytes: number) => new Intl.NumberFormat("id-ID", { maximumFractionDigits: 1 }).format(bytes < 1024 ? bytes : bytes / 1024) + (bytes < 1024 ? " B" : " KB");
 const wibTime = (value: Date | string) => `${new Date(value).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })} WIB`;
+const jakartaYearMonth = (value: Date | string) => {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jakarta", year: "numeric", month: "numeric" }).formatToParts(new Date(value));
+  return { year: Number(parts.find((part) => part.type === "year")?.value), month: Number(parts.find((part) => part.type === "month")?.value) };
+};
+const retainedAgeMonths = (generatedAt: Date | string) => {
+  const generated = jakartaYearMonth(generatedAt);
+  const now = currentJakarta();
+  return Math.max(0, (now.year - generated.year) * 12 + now.month - generated.month);
+};
 
 function ArtifactDownload({ year, month, kind, status }: { year: number; month: number; kind: "csv" | "html" | "pdf"; status: IntegrityStatus }) {
   const extension = kind === "html" ? "HTML" : kind.toUpperCase();
@@ -94,6 +104,41 @@ function LifecycleHistoryPanel({ selection, onClose }: { selection: { year: numb
   </section>;
 }
 
+function ArchiveConfirmationPanel({ selection, onClose }: { selection: { year: number; month: number; lifecycleStatus: LifecycleStatus; generatedAt: Date | string } | null; onClose: () => void }) {
+  const utils = trpc.useUtils();
+  const [outcome, setOutcome] = useState<string | null>(null);
+  const archiveMutation = trpc.reports.archiveMonthlyArtifact.useMutation({
+    onSuccess: async (result) => {
+      const messages: Record<string, string> = {
+        archived: "Artefak berhasil diarsipkan. Metadata dan riwayat lifecycle tetap dipertahankan.",
+        already_archived: "Artefak ini sudah diarsipkan sebelumnya. Tidak ada perubahan tambahan.",
+        not_eligible: "Artefak tidak lagi memenuhi syarat untuk diarsipkan.",
+        integrity_failed: "Pengarsipan ditolak karena integritas artefak tidak dapat diverifikasi.",
+        not_found: "Artefak tidak ditemukan dalam scope pemilik StoreOS.",
+      };
+      setOutcome(messages[result.outcome] ?? "Status pengarsipan tidak diketahui.");
+      await Promise.all([
+        utils.reports.monthlyArtifacts.invalidate(),
+        utils.reports.monthlyArtifactGovernance.invalidate(),
+        utils.reports.monthlyArtifactLifecycleHistory.invalidate(),
+      ]);
+    },
+  });
+  if (!selection) return null;
+  const period = `${months[selection.month - 1]} ${selection.year}`;
+  const eligible = selection.lifecycleStatus === "eligible_for_archive";
+  const retentionAge = retainedAgeMonths(selection.generatedAt);
+  const approveArchive = () => archiveMutation.mutate({ year: selection.year, month: selection.month });
+  return <section className="archive-confirmation-panel" aria-label={`Konfirmasi arsip ${period}`}>
+    <div className="archive-confirmation-heading"><div><div className="eyebrow">PERSETUJUAN PEMILIK</div><h3>Arsipkan {period}?</h3><p><strong>Usia retensi: sekitar {retentionAge} bulan</strong> sejak dibuat pada {wibTime(selection.generatedAt)}. Ini hanya mengarsipkan artefak laporan yang dipilih; data Financial Core, Inventory Intelligence, ledger, dan sumber laporan tidak akan diubah.</p></div><button type="button" className="button ghost compact-button" onClick={onClose}><X size={15} /> Tutup</button></div>
+    <div className="archive-confirmation-notice"><AlertTriangle size={18} /><div><strong>Unduhan aktif akan dinonaktifkan.</strong><p>Server akan memverifikasi SHA-256 dan ukuran CSV, HTML, serta PDF sebelum transisi. Metadata, checksum, dan Riwayat Lifecycle tetap dipertahankan.</p></div></div>
+    {!eligible && <div role="alert" className="archive-confirmation-error">Artefak ini tidak memenuhi status “Siap diarsipkan”. Server tetap akan menolak transisi yang tidak valid.</div>}
+    {outcome && <div role={archiveMutation.data?.outcome === "archived" || archiveMutation.data?.outcome === "already_archived" ? "status" : "alert"} className={archiveMutation.data?.outcome === "archived" || archiveMutation.data?.outcome === "already_archived" ? "archive-confirmation-success" : "archive-confirmation-error"}>{outcome}</div>}
+    {archiveMutation.isError && <div role="alert" className="archive-confirmation-error">Pengarsipan gagal. Tidak ada data sumber laporan yang diubah.</div>}
+    <div className="archive-confirmation-actions"><button type="button" className="button ghost" onClick={onClose}>Batalkan</button><button type="button" className="button danger compact-button" onClick={approveArchive} disabled={!eligible || archiveMutation.isPending || Boolean(outcome)}><Archive size={14} /> {archiveMutation.isPending ? "Memverifikasi…" : "Setujui & Arsipkan"}</button></div>
+  </section>;
+}
+
 export function MonthlyReport() {
   const initial = useMemo(currentJakarta, []);
   const [year, setYear] = useState(initial.year);
@@ -101,6 +146,7 @@ export function MonthlyReport() {
   const [artifactYear, setArtifactYear] = useState(initial.year);
   const [artifactMonth, setArtifactMonth] = useState<number | "all">("all");
   const [historyPeriod, setHistoryPeriod] = useState<{ year: number; month: number } | null>(null);
+  const [archivePeriod, setArchivePeriod] = useState<{ year: number; month: number; lifecycleStatus: LifecycleStatus; generatedAt: Date | string } | null>(null);
   const auth = useAuth();
   const isOwnerAdmin = auth.isAuthenticated && auth.user?.role === "admin";
   const query = trpc.reports.monthlySummary.useQuery({ year, month });
@@ -118,8 +164,9 @@ export function MonthlyReport() {
     <Panel title="Artefak laporan tersimpan" description="CSV, PDF, dan HTML yang tersimpan untuk periode selesai. Akses dan unduhan hanya tersedia bagi pemilik StoreOS setelah checksum tervalidasi di server.">
       {!auth.isAuthenticated ? <div className="artifact-access-state"><ShieldCheck size={22} /><div><strong>Masuk sebagai pemilik untuk membuka arsip.</strong><p>Ringkasan bulanan tetap tersedia secara read-only. Artefak tersimpan memakai akses server-side yang dibatasi.</p></div><button className="button primary" onClick={() => startLogin()}>Masuk</button></div> : auth.user?.role !== "admin" ? <div className="artifact-access-state restricted"><AlertTriangle size={22} /><div><strong>Arsip laporan dibatasi.</strong><p>Akun ini tidak memiliki akses pemilik untuk artefak Management Reports.</p></div></div> : <>
         <div className="artifact-filter-row"><label className="field"><span>Tahun arsip</span><select aria-label="Tahun arsip" className="form-input" value={artifactYear} onChange={(event) => setArtifactYear(Number(event.target.value))}>{Array.from({ length: 7 }, (_, index) => initial.year - 3 + index).map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="field"><span>Bulan arsip</span><select aria-label="Bulan arsip" className="form-input" value={artifactMonth} onChange={(event) => setArtifactMonth(event.target.value === "all" ? "all" : Number(event.target.value))}><option value="all">Semua bulan</option>{months.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}</select></label></div>
-        {artifactsQuery.isLoading ? <div className="loading-state"><span className="loading-dot" /> Memverifikasi artefak tersimpan…</div> : artifactsQuery.isError ? <ErrorState message="Arsip laporan tidak dapat dimuat atau akses Anda tidak diizinkan." /> : artifactsQuery.data?.length ? <div className="artifact-table-wrap"><table className="artifact-table"><thead><tr><th>Periode</th><th>Dibuat (WIB)</th><th>Lifecycle</th><th>CSV</th><th>PDF</th><th>HTML</th><th>Kontrol</th></tr></thead><tbody>{artifactsQuery.data.map((artifact) => <tr key={artifact.id}><td><strong>{months[artifact.month - 1]} {artifact.year}</strong><small>{artifact.periodStartDate} s/d {artifact.periodEndDate}</small></td><td>{wibTime(artifact.generatedAt)}</td><td><span className={`badge ${lifecycleClass[artifact.lifecycleStatus as LifecycleStatus]}`}>{lifecycleLabel[artifact.lifecycleStatus as LifecycleStatus]}</span></td>{([artifact.csv, artifact.pdf, artifact.printableHtml] as const).map((file) => <td key={file.kind}><span className={`badge ${artifactStatusClass[file.status as IntegrityStatus]}`}>{artifactStatusLabel[file.status as IntegrityStatus]}</span><small>{fileSize(file.bytes)} · SHA-256</small></td>)}<td><div className="artifact-download-actions"><ArtifactDownload year={artifact.year} month={artifact.month} kind="csv" status={artifact.csv.status as IntegrityStatus} /><ArtifactDownload year={artifact.year} month={artifact.month} kind="pdf" status={artifact.pdf.status as IntegrityStatus} /><ArtifactDownload year={artifact.year} month={artifact.month} kind="html" status={artifact.printableHtml.status as IntegrityStatus} /><button type="button" className="button ghost compact-button lifecycle-history-action" onClick={() => setHistoryPeriod({ year: artifact.year, month: artifact.month })}><History size={14} /> Riwayat Lifecycle</button></div></td></tr>)}</tbody></table></div> : <div className="empty-state artifact-empty"><div className="empty-icon"><Archive size={20} /></div><strong>Belum ada artefak tersimpan untuk filter ini.</strong><p>Artefak akan muncul setelah laporan bulanan periode selesai dibuat dan melewati verifikasi integritas.</p></div>}
+        {artifactsQuery.isLoading ? <div className="loading-state"><span className="loading-dot" /> Memverifikasi artefak tersimpan…</div> : artifactsQuery.isError ? <ErrorState message="Arsip laporan tidak dapat dimuat atau akses Anda tidak diizinkan." /> : artifactsQuery.data?.length ? <div className="artifact-table-wrap"><table className="artifact-table"><thead><tr><th>Periode</th><th>Dibuat (WIB)</th><th>Lifecycle</th><th>CSV</th><th>PDF</th><th>HTML</th><th>Kontrol</th></tr></thead><tbody>{artifactsQuery.data.map((artifact) => <tr key={artifact.id}><td><strong>{months[artifact.month - 1]} {artifact.year}</strong><small>{artifact.periodStartDate} s/d {artifact.periodEndDate}</small></td><td>{wibTime(artifact.generatedAt)}</td><td><span className={`badge ${lifecycleClass[artifact.lifecycleStatus as LifecycleStatus]}`}>{lifecycleLabel[artifact.lifecycleStatus as LifecycleStatus]}</span></td>{([artifact.csv, artifact.pdf, artifact.printableHtml] as const).map((file) => <td key={file.kind}><span className={`badge ${artifactStatusClass[file.status as IntegrityStatus]}`}>{artifactStatusLabel[file.status as IntegrityStatus]}</span><small>{fileSize(file.bytes)} · SHA-256</small></td>)}<td><div className="artifact-download-actions"><ArtifactDownload year={artifact.year} month={artifact.month} kind="csv" status={artifact.csv.status as IntegrityStatus} /><ArtifactDownload year={artifact.year} month={artifact.month} kind="pdf" status={artifact.pdf.status as IntegrityStatus} /><ArtifactDownload year={artifact.year} month={artifact.month} kind="html" status={artifact.printableHtml.status as IntegrityStatus} /><button type="button" className="button ghost compact-button lifecycle-history-action" onClick={() => setHistoryPeriod({ year: artifact.year, month: artifact.month })}><History size={14} /> Riwayat Lifecycle</button>{artifact.lifecycleStatus === "eligible_for_archive" && <button type="button" className="button danger compact-button archive-action" onClick={() => setArchivePeriod({ year: artifact.year, month: artifact.month, lifecycleStatus: artifact.lifecycleStatus as LifecycleStatus, generatedAt: artifact.generatedAt })}><Archive size={14} /> Arsipkan</button>}</div></td></tr>)}</tbody></table></div> : <div className="empty-state artifact-empty"><div className="empty-icon"><Archive size={20} /></div><strong>Belum ada artefak tersimpan untuk filter ini.</strong><p>Artefak akan muncul setelah laporan bulanan periode selesai dibuat dan melewati verifikasi integritas.</p></div>}
         <LifecycleHistoryPanel selection={historyPeriod} onClose={() => setHistoryPeriod(null)} />
+        <ArchiveConfirmationPanel selection={archivePeriod} onClose={() => setArchivePeriod(null)} />
       </>}
     </Panel>
     <GovernancePanel enabled={isOwnerAdmin} />

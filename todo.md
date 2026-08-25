@@ -335,3 +335,10 @@
 - [x] Add owner-admin Riwayat Lifecycle UI with current state, chronological events, and responsive empty state
 - [x] Add Phase 2.5 lifecycle history, append-only, authorization, isolation, integrity, browser, and responsive coverage
 - [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.5
+- [x] Review the user-authorized pasted instruction file and confirm the next compatible StoreOS scope
+- [x] Inspect Phase 2.4/2.5 lifecycle, integrity, authorization, storage, and UI architecture for Phase 2.6 archive reuse
+- [x] Add owner-admin, eligible-only, integrity-checked, atomic and idempotent artifact archive transition with append-only history
+- [x] Preserve archived download blocking, audit metadata, cross-scope denial, and deterministic concurrent archive behavior
+- [x] Add explicit owner-admin archive confirmation UI with eligibility, consequence, success, idempotency, and error states
+- [x] Add Phase 2.6 authorization, eligibility, integrity, archive, history, concurrency, and browser responsive coverage
+- [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.6

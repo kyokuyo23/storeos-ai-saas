@@ -80,6 +80,13 @@ export type MonthlyReportArtifactGovernanceSummary = {
   integrityCounts: Record<ArtifactIntegrityStatus, number>;
 };
 
+export type OwnerApprovedArchiveResult = {
+  outcome: "archived" | "already_archived" | "not_found" | "not_eligible" | "integrity_failed";
+  artifact: { id: number; year: number; month: number; lifecycleStatus: ArtifactLifecycleStatus } | null;
+  availability: ArtifactAvailability[];
+  archivedAt: Date | null;
+};
+
 function digest(content: string | Buffer) {
   return createHash("sha256").update(content).digest("hex");
 }
@@ -496,6 +503,78 @@ export async function archiveEligibleMonthlyReportArtifacts(now = new Date(), ow
     }
   }
   return { archivedAt: now, ownerOpenId, affectedRows };
+}
+
+/**
+ * Executes the explicit owner-approved archive transition for exactly one
+ * eligible report bundle. Artifact bytes are verified before a single
+ * conditional metadata update blocks every active download. No bytes, report
+ * source data, or prior lifecycle events are changed.
+ */
+export async function archiveMonthlyReportArtifactWithOwnerApproval(
+  year: number,
+  month: number,
+  ownerOpenId: string,
+  actorOpenId: string,
+  now = new Date(),
+): Promise<OwnerApprovedArchiveResult> {
+  validatePeriod(year, month);
+  if (!isAuthorizedOwnerScope(ownerOpenId) || ownerOpenId !== actorOpenId) {
+    throw new Error("Artifact archive scope is not authorized");
+  }
+  const db = await getDb();
+  if (!db) throw new Error("Database tidak tersedia. Silakan coba lagi.");
+
+  const row = (await db.select().from(monthlyReportArtifacts)
+    .where(and(eq(monthlyReportArtifacts.year, year), eq(monthlyReportArtifacts.month, month)))
+    .limit(5))
+    .find((candidate) => candidate.ownerOpenId === ownerOpenId || candidate.ownerOpenId === LEGACY_ARTIFACT_SCOPE);
+  if (!row) return { outcome: "not_found", artifact: null, availability: [], archivedAt: null };
+
+  const artifact = mapArtifact(row);
+  const reference = { id: artifact.id, year: artifact.year, month: artifact.month, lifecycleStatus: artifact.lifecycleStatus };
+  if (artifact.archivedAt || artifact.retiredAt || artifact.lifecycleStatus === "archived") {
+    return { outcome: "already_archived", artifact: reference, availability: [], archivedAt: artifact.archivedAt ?? artifact.retiredAt ?? null };
+  }
+  if (artifact.lifecycleStatus !== "eligible_for_archive") {
+    return { outcome: "not_eligible", artifact: reference, availability: [], archivedAt: null };
+  }
+
+  const availability = await Promise.all((['csv', 'html', 'pdf'] as const).map((kind) => verifyMonthlyReportArtifact(artifact, kind)));
+  if (availability.some((item) => item.status !== "available")) {
+    return { outcome: "integrity_failed", artifact: reference, availability, archivedAt: null };
+  }
+
+  // One lifecycle-guarded update makes concurrent approvals deterministic: at
+  // most one request wins; followers resolve as already archived without
+  // emitting duplicate audit events.
+  const update = await db.update(monthlyReportArtifacts)
+    .set({ lifecycleStatus: "archived", archivedAt: now, archiveReason: "owner_approved_archive", retiredAt: now })
+    .where(and(
+      eq(monthlyReportArtifacts.id, artifact.id),
+      eq(monthlyReportArtifacts.lifecycleStatus, "eligible_for_archive"),
+      isNull(monthlyReportArtifacts.archivedAt),
+      isNull(monthlyReportArtifacts.retiredAt),
+    ));
+  const header = Array.isArray(update) ? update[0] : update;
+  const affectedRows = typeof (header as { affectedRows?: unknown } | undefined)?.affectedRows === "number"
+    ? (header as { affectedRows: number }).affectedRows
+    : 1;
+  if (affectedRows < 1) {
+    const latest = (await db.select().from(monthlyReportArtifacts).where(eq(monthlyReportArtifacts.id, artifact.id)).limit(1))[0];
+    if (latest?.archivedAt || latest?.retiredAt || latest?.lifecycleStatus === "archived") {
+      return { outcome: "already_archived", artifact: reference, availability: [], archivedAt: latest.archivedAt ?? latest.retiredAt ?? null };
+    }
+    return { outcome: "not_eligible", artifact: reference, availability: [], archivedAt: null };
+  }
+
+  await recordLifecycleEvent(db, artifact, "archived", now, {
+    reason: "owner_approved_archive",
+    actor: actorOpenId,
+    source: "owner_archive_action",
+    artifactFormat: "bundle",
+  });
+  return { outcome: "archived", artifact: { ...reference, lifecycleStatus: "archived" }, availability, archivedAt: now };
 }
 
 export async function archiveExpiredMonthlyReportArtifacts(

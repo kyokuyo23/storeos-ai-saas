@@ -176,7 +176,14 @@ const lifecycleHistoryFixture = {
   ],
 };
 
-async function installArtifactOwnerRoutes(page: import("@playwright/test").Page, artifacts: unknown[], governance = governanceFixture, lifecycleHistory: unknown = null) {
+async function installArtifactOwnerRoutes(
+  page: import("@playwright/test").Page,
+  artifacts: unknown[],
+  governance = governanceFixture,
+  lifecycleHistory: unknown = null,
+  archiveResult: unknown = { outcome: "archived", artifact: { id: 42, year: 2024, month: 10, lifecycleStatus: "archived" }, availability: [], archivedAt: "2026-08-25T00:00:00.000Z" },
+  onArchive?: () => void,
+) {
   const owner = { id: 1, openId: "owner-1", name: "Pemilik", role: "admin" };
   await page.route("**/api/trpc/**", async (route) => {
     const procedures = new URL(route.request().url()).pathname.split("/").at(-1)?.split(",") ?? [];
@@ -186,6 +193,7 @@ async function installArtifactOwnerRoutes(page: import("@playwright/test").Page,
           : procedure === "reports.monthlyArtifacts" ? artifacts
             : procedure === "reports.monthlyArtifactGovernance" ? governance
               : procedure === "reports.monthlyArtifactLifecycleHistory" ? lifecycleHistory
+                : procedure === "reports.archiveMonthlyArtifact" ? (onArchive?.(), archiveResult)
               : undefined;
       return data === undefined ? { error: { json: { message: `Unhandled test procedure: ${procedure}`, code: -32601, data: { code: "NOT_FOUND", httpStatus: 404 } } } } : { result: { data: { json: data } } };
     });
@@ -269,4 +277,58 @@ test("downloads a checksum-verified stored CSV through the controlled report end
   expect(data.charCodeAt(0)).toBe(0xfeff);
   expect(data).toContain('"Integrity","verified"');
   expect((await stat(path)).size).toBeGreaterThan(0);
+});
+
+test("shows the owner-approved archive confirmation only for eligible artifacts and records an explicit approval", async ({ page }) => {
+  const eligibleArtifact = {
+    ...storedArtifactFixture,
+    id: 77,
+    year: 2024,
+    month: 10,
+    periodStartDate: "2024-10-01",
+    periodEndDate: "2024-10-31",
+    generatedAt: "2024-11-01T00:15:00.000Z",
+    lifecycleStatus: "eligible_for_archive",
+  };
+  let archiveCalls = 0;
+  await installArtifactOwnerRoutes(page, [{ ...storedArtifactFixture, lifecycleStatus: "retained" }, eligibleArtifact], governanceFixture, null, undefined, () => { archiveCalls += 1; });
+  await page.goto("/reports");
+
+  await expect(page.getByRole("button", { name: "Arsipkan" })).toHaveCount(1);
+  await page.getByRole("button", { name: "Arsipkan" }).click();
+  const confirmation = page.getByLabel("Konfirmasi arsip Oktober 2024");
+  await expect(confirmation).toBeVisible();
+  await expect(confirmation.getByText("Arsipkan Oktober 2024?")).toBeVisible();
+  await expect(confirmation.getByText(/Usia retensi: sekitar \d+ bulan/)).toBeVisible();
+  await expect(confirmation.getByText(/SHA-256 dan ukuran CSV, HTML, serta PDF/)).toBeVisible();
+  await expect(confirmation.getByText("Unduhan aktif akan dinonaktifkan.")).toBeVisible();
+
+  await confirmation.getByRole("button", { name: "Setujui & Arsipkan" }).click();
+  await expect(confirmation.getByText("Artefak berhasil diarsipkan. Metadata dan riwayat lifecycle tetap dipertahankan.")).toBeVisible();
+  expect(archiveCalls).toBe(1);
+});
+
+test("shows an integrity failure without changing the browser-side approval control into a false success", async ({ page }) => {
+  const eligibleArtifact = { ...storedArtifactFixture, year: 2024, month: 9, generatedAt: "2024-10-01T00:15:00.000Z", lifecycleStatus: "eligible_for_archive" };
+  await installArtifactOwnerRoutes(page, [eligibleArtifact], governanceFixture, null, { outcome: "integrity_failed", artifact: { id: 42, year: 2024, month: 9, lifecycleStatus: "eligible_for_archive" }, availability: [{ kind: "pdf", status: "corrupt", bytes: 512, sha256: "c".repeat(64) }], archivedAt: null });
+  await page.goto("/reports");
+  await page.getByRole("button", { name: "Arsipkan" }).click();
+  const confirmation = page.getByLabel("Konfirmasi arsip September 2024");
+  await confirmation.getByRole("button", { name: "Setujui & Arsipkan" }).click();
+  await expect(confirmation.getByRole("alert")).toContainText("Pengarsipan ditolak karena integritas artefak tidak dapat diverifikasi.");
+  await expect(confirmation.getByText("Artefak berhasil diarsipkan. Metadata dan riwayat lifecycle tetap dipertahankan.")).toHaveCount(0);
+});
+
+test("keeps the archive confirmation usable on a narrow mobile viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const eligibleArtifact = { ...storedArtifactFixture, year: 2024, month: 8, generatedAt: "2024-09-01T00:15:00.000Z", lifecycleStatus: "eligible_for_archive" };
+  await installArtifactOwnerRoutes(page, [eligibleArtifact]);
+  await page.goto("/reports");
+  await page.getByRole("button", { name: "Arsipkan" }).click();
+  const confirmation = page.getByLabel("Konfirmasi arsip Agustus 2024");
+  await expect(confirmation).toBeVisible();
+  await expect(confirmation.getByRole("button", { name: "Batalkan" })).toBeVisible();
+  await expect(confirmation.getByRole("button", { name: "Setujui & Arsipkan" })).toBeVisible();
+  const box = await confirmation.boundingBox();
+  expect(box?.width).toBeLessThanOrEqual(358);
 });

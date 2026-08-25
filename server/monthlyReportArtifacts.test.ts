@@ -68,6 +68,7 @@ vi.mock("./db", () => ({ getDb: vi.fn(async () => db) }));
 vi.mock("./_core/env", () => ({ ENV: { ownerOpenId: "owner-1" } }));
 
 import {
+  archiveMonthlyReportArtifactWithOwnerApproval,
   archiveEligibleMonthlyReportArtifacts,
   canAccessMonthlyReportArtifacts,
   getMonthlyReportArtifact,
@@ -221,5 +222,85 @@ describe("Phase 2.4 monthly report artifact governance", () => {
     await persistMonthlyReportArtifacts(generatedReport());
     expect((await getMonthlyReportArtifact(2026, 1))?.year).toBe(2026);
     expect(printableMonthlyHtmlToPdf(generatedReport().printableHtml).subarray(0, 5).toString()).toBe("%PDF-");
+  });
+
+  it("archives only an eligible, fully verified CSV/HTML/PDF bundle with owner approval while preserving audit evidence and blocking active retrieval", async () => {
+    const persisted = await persistMonthlyReportArtifacts(generatedReport({ year: 2024, month: 1, generatedAt: "2024-02-01T00:15:00.000Z" }));
+    const approvalAt = new Date("2026-02-02T00:00:00.000Z");
+    await markMonthlyReportArtifactsEligibleForArchive(approvalAt, 24, "owner-1");
+    const immutableIntegrity = { csv: persisted.artifact.csv.sha256, html: persisted.artifact.printableHtml.sha256, pdf: persisted.artifact.pdf.sha256 };
+
+    const result = await archiveMonthlyReportArtifactWithOwnerApproval(2024, 1, "owner-1", "owner-1", approvalAt);
+
+    expect(result).toMatchObject({
+      outcome: "archived",
+      artifact: { id: persisted.artifact.id, year: 2024, month: 1, lifecycleStatus: "archived" },
+      archivedAt: approvalAt,
+    });
+    expect(result.availability.map((item) => item.status)).toEqual(["available", "available", "available"]);
+    expect(artifactRows[0]).toMatchObject({ lifecycleStatus: "archived", archivedAt: approvalAt, retiredAt: approvalAt, archiveReason: "owner_approved_archive" });
+    expect(artifactRows[0].csvSha256).toBe(immutableIntegrity.csv);
+    expect(artifactRows[0].htmlSha256).toBe(immutableIntegrity.html);
+    expect(artifactRows[0].pdfSha256).toBe(immutableIntegrity.pdf);
+    expect(objects.has(persisted.artifact.csv.key)).toBe(true);
+    expect(await readVerifiedMonthlyReportArtifact(2024, 1, "csv", "owner-1")).toBeNull();
+    expect(await listMonthlyReportArtifacts("owner-1", { year: 2024, month: 1 })).toEqual([]);
+
+    const history = await getMonthlyReportArtifactLifecycleHistory(2024, 1, "owner-1");
+    const archiveEvent = history?.events.at(-1);
+    expect(archiveEvent).toMatchObject({ lifecycleStatus: "archived", occurredAt: approvalAt, reason: "owner_approved_archive", actor: "owner-1", source: "owner_archive_action", artifactFormat: "bundle" });
+    expect(archiveEvent?.integrity).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "csv", sha256: immutableIntegrity.csv }),
+      expect.objectContaining({ kind: "html", sha256: immutableIntegrity.html }),
+      expect.objectContaining({ kind: "pdf", sha256: immutableIntegrity.pdf }),
+    ]));
+  });
+
+  it("rejects active or integrity-failed bundles without changing lifecycle metadata or writing an archive event", async () => {
+    await persistMonthlyReportArtifacts(generatedReport({ year: 2024, month: 2, generatedAt: "2024-03-01T00:15:00.000Z" }));
+    const approvalAt = new Date("2026-03-02T00:00:00.000Z");
+    const active = await archiveMonthlyReportArtifactWithOwnerApproval(2024, 2, "owner-1", "owner-1", approvalAt);
+    expect(active).toMatchObject({ outcome: "not_eligible", archivedAt: null });
+    expect(artifactRows[0]).toMatchObject({ lifecycleStatus: "retained", archivedAt: null, retiredAt: null });
+
+    await markMonthlyReportArtifactsEligibleForArchive(approvalAt, 24, "owner-1");
+    objects.delete(artifactRows[0].pdfKey);
+    const failed = await archiveMonthlyReportArtifactWithOwnerApproval(2024, 2, "owner-1", "owner-1", approvalAt);
+    expect(failed.outcome).toBe("integrity_failed");
+    expect(failed.availability.map((item) => item.status)).toEqual(["available", "available", "missing"]);
+    expect(artifactRows[0]).toMatchObject({ lifecycleStatus: "eligible_for_archive", archivedAt: null, retiredAt: null, archiveReason: null });
+    expect(lifecycleEvents.filter((event) => event.source === "owner_archive_action")).toEqual([]);
+
+    await expect(archiveMonthlyReportArtifactWithOwnerApproval(2024, 2, "other-workspace", "other-workspace", approvalAt)).rejects.toThrow("not authorized");
+  });
+
+  it("rejects a checksum-corrupt eligible bundle without revoking or mutating its lifecycle metadata", async () => {
+    await persistMonthlyReportArtifacts(generatedReport({ year: 2024, month: 3, generatedAt: "2024-04-01T00:15:00.000Z" }));
+    const approvalAt = new Date("2026-04-02T00:00:00.000Z");
+    await markMonthlyReportArtifactsEligibleForArchive(approvalAt, 24, "owner-1");
+    objects.set(artifactRows[0].csvKey, Buffer.from("checksum-tampered"));
+
+    const corrupt = await archiveMonthlyReportArtifactWithOwnerApproval(2024, 3, "owner-1", "owner-1", approvalAt);
+
+    expect(corrupt.outcome).toBe("integrity_failed");
+    expect(corrupt.availability.map((item) => item.status)).toEqual(["corrupt", "available", "available"]);
+    expect(artifactRows[0]).toMatchObject({ lifecycleStatus: "eligible_for_archive", archivedAt: null, retiredAt: null, archiveReason: null });
+    expect(lifecycleEvents.filter((event) => event.source === "owner_archive_action")).toEqual([]);
+  });
+
+  it("makes repeated and concurrent approvals deterministic: one archive event, one winner, then already_archived", async () => {
+    await persistMonthlyReportArtifacts(generatedReport({ year: 2024, month: 3, generatedAt: "2024-04-01T00:15:00.000Z" }));
+    const approvalAt = new Date("2026-04-02T00:00:00.000Z");
+    await markMonthlyReportArtifactsEligibleForArchive(approvalAt, 24, "owner-1");
+
+    const outcomes = await Promise.all([
+      archiveMonthlyReportArtifactWithOwnerApproval(2024, 3, "owner-1", "owner-1", approvalAt),
+      archiveMonthlyReportArtifactWithOwnerApproval(2024, 3, "owner-1", "owner-1", approvalAt),
+    ]);
+    expect(outcomes.map((result) => result.outcome).sort()).toEqual(["already_archived", "archived"]);
+    const repeated = await archiveMonthlyReportArtifactWithOwnerApproval(2024, 3, "owner-1", "owner-1", approvalAt);
+    expect(repeated).toMatchObject({ outcome: "already_archived", archivedAt: approvalAt });
+    expect(lifecycleEvents.filter((event) => event.lifecycleStatus === "archived" && event.source === "owner_archive_action")).toHaveLength(1);
+    expect(artifactRows[0]).toMatchObject({ lifecycleStatus: "archived", archiveReason: "owner_approved_archive" });
   });
 });
