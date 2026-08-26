@@ -7,9 +7,13 @@ const { archiveMonthlyReportArtifactWithOwnerApproval, getMonthlyReportArtifactG
   getMonthlyReportArtifactGovernanceSummary: vi.fn(async () => ({ retainedArtifactCount: 0 })),
   getMonthlyReportArtifactLifecycleHistory: vi.fn(async () => null),
 }));
-const { generateGovernanceAuditExportArtifact, verifyGovernanceAuditExportBytes } = vi.hoisted(() => ({
+const { generateGovernanceAuditExportArtifact, registerGeneratedGovernanceAuditExport, verifyGovernanceAuditExportBytes } = vi.hoisted(() => ({
   generateGovernanceAuditExportArtifact: vi.fn(async () => ({ exportId: `storeos-governance-audit-csv-${"a".repeat(64)}`, format: "csv", byteSize: 12, sha256: "a".repeat(64), bytesBase64: "77u/" })),
+  registerGeneratedGovernanceAuditExport: vi.fn(),
   verifyGovernanceAuditExportBytes: vi.fn(() => ({ verified: true, status: "verified", byteSize: 3 })),
+}));
+const { issueGovernanceAuditVerificationReceipt } = vi.hoisted(() => ({
+  issueGovernanceAuditVerificationReceipt: vi.fn(() => ({ status: "issued", receipt: { receiptId: "storeos-governance-audit-receipt-test", receiptFormat: "csv", filename: "receipt.csv", contentType: "text/csv;charset=utf-8", receiptByteSize: 12, receiptSha256: "b".repeat(64), bytesBase64: "77u/" } })),
 }));
 vi.mock("./monthlyReportArtifacts", () => ({
   archiveMonthlyReportArtifactWithOwnerApproval,
@@ -19,7 +23,8 @@ vi.mock("./monthlyReportArtifacts", () => ({
   getMonthlyReportArtifactLifecycleHistory,
   listMonthlyReportArtifacts,
 }));
-vi.mock("./governanceAuditExportIntegrity", () => ({ generateGovernanceAuditExportArtifact, verifyGovernanceAuditExportBytes }));
+vi.mock("./governanceAuditExportIntegrity", () => ({ generateGovernanceAuditExportArtifact, registerGeneratedGovernanceAuditExport, verifyGovernanceAuditExportBytes }));
+vi.mock("./governanceAuditVerificationReceipts", () => ({ issueGovernanceAuditVerificationReceipt }));
 
 import { appRouter } from "./routers";
 
@@ -101,5 +106,19 @@ describe("reports.monthlyArtifacts authorization", () => {
     await expect(caller({ openId: "other-workspace", role: "admin" }).reports.verifyMonthlyArtifactGovernanceAuditExport(verification)).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(caller({ openId: "owner-1", role: "admin" }).reports.verifyMonthlyArtifactGovernanceAuditExport(verification)).resolves.toMatchObject({ verified: true, status: "verified" });
     expect(verifyGovernanceAuditExportBytes).toHaveBeenCalledWith(verification.exportId, verification.bytesBase64);
+  });
+
+  it("rejects anonymous, member, and cross-workspace verification receipt requests before receipt issuance", async () => {
+    const receiptInput = { exportId: `storeos-governance-audit-csv-${"a".repeat(64)}`, bytesBase64: "77u/", receiptFormat: "csv" as const };
+    await expect(caller(null).reports.issueMonthlyArtifactGovernanceAuditVerificationReceipt(receiptInput)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller({ openId: "owner-1", role: "user" }).reports.issueMonthlyArtifactGovernanceAuditVerificationReceipt(receiptInput)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller({ openId: "other-workspace", role: "admin" }).reports.issueMonthlyArtifactGovernanceAuditVerificationReceipt(receiptInput)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(issueGovernanceAuditVerificationReceipt).not.toHaveBeenCalled();
+  });
+
+  it("forwards only the authenticated owner-admin's verified export context to receipt issuance", async () => {
+    const receiptInput = { exportId: `storeos-governance-audit-csv-${"a".repeat(64)}`, bytesBase64: "77u/", receiptFormat: "pdf" as const };
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.issueMonthlyArtifactGovernanceAuditVerificationReceipt(receiptInput)).resolves.toMatchObject({ status: "issued", receipt: { receiptFormat: "csv" } });
+    expect(issueGovernanceAuditVerificationReceipt).toHaveBeenCalledWith("owner-1", receiptInput);
   });
 });

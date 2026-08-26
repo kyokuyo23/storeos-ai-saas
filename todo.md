@@ -356,3 +356,10 @@
 - [x] Show compact, copyable integrity metadata and verification status after CSV and printable/PDF audit exports
 - [x] Add Phase 2.8 exact-byte, BOM, Unicode, print/PDF, tamper, authorization, read-only, browser-download, and responsive coverage
 - [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.8
+
+- [x] Inspect the Phase 2.8 exact-byte export integrity contract, verification path, and audit UI for Phase 2.9 receipt reuse
+- [x] Add owner-admin-only server receipt generation for verified governance exports with exact integrity metadata and printable output
+- [x] Prevent receipt issuance for failed, missing, or corrupted verification outcomes without regenerating or mutating exports
+- [x] Add responsive verified receipt download controls, status, timestamp, and error states beside governance export integrity metadata
+- [x] Add Phase 2.9 receipt-content, authorization, read-only, parsing, printable, browser-download, and responsive regression coverage
+- [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.9

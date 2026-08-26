@@ -214,6 +214,28 @@ const governanceAuditIntegrityPdfFixture = {
   byteSize: Buffer.byteLength("%PDF-1.4\nStoreOS Governance Audit\n%%EOF"),
   sha256: "e".repeat(64),
 };
+const governanceAuditReceiptCsvBytes = Buffer.from(`\ufeff"StoreOS Governance Audit Verification Receipt","v1"\r\n"Export ID","${governanceAuditIntegrityCsvFixture.exportId}"\r\n"SHA-256 export","${governanceAuditIntegrityCsvFixture.sha256}"\r\n"Status verifikasi","verified"\r\n`, "utf8");
+const governanceAuditReceiptCsvFixture = {
+  receiptId: `storeos-governance-audit-receipt-${governanceAuditIntegrityCsvFixture.exportId}`,
+  receiptFormat: "csv",
+  filename: "storeos-governance-audit-verification-receipt.csv",
+  contentType: "text/csv;charset=utf-8",
+  verificationAt: "2026-08-26T01:20:00.000Z",
+  export: { exportId: governanceAuditIntegrityCsvFixture.exportId, format: "csv", generatedAt: governanceAuditIntegrityCsvFixture.generatedAt, timezone: "Asia/Jakarta", scope: governanceAuditIntegrityCsvFixture.scope, recordCount: 2, byteSize: governanceAuditIntegrityCsvFixture.byteSize, sha256: governanceAuditIntegrityCsvFixture.sha256 },
+  verification: { verified: true, status: "verified", expectedSha256: governanceAuditIntegrityCsvFixture.sha256, actualSha256: governanceAuditIntegrityCsvFixture.sha256, byteSize: governanceAuditIntegrityCsvFixture.byteSize },
+  receiptByteSize: governanceAuditReceiptCsvBytes.byteLength,
+  receiptSha256: "c".repeat(64),
+  bytesBase64: governanceAuditReceiptCsvBytes.toString("base64"),
+};
+const governanceAuditReceiptPdfFixture = {
+  ...governanceAuditReceiptCsvFixture,
+  receiptFormat: "pdf",
+  filename: "storeos-governance-audit-verification-receipt.pdf",
+  contentType: "application/pdf",
+  receiptByteSize: Buffer.byteLength("%PDF-1.4\nStoreOS Governance Audit Verification Receipt\n%%EOF"),
+  receiptSha256: "f".repeat(64),
+  bytesBase64: Buffer.from("%PDF-1.4\nStoreOS Governance Audit Verification Receipt\n%%EOF", "utf8").toString("base64"),
+};
 
 async function installArtifactOwnerRoutes(
   page: import("@playwright/test").Page,
@@ -224,12 +246,14 @@ async function installArtifactOwnerRoutes(
   onArchive?: () => void,
   governanceAuditExport: unknown = governanceAuditExportFixture,
   governanceAuditVerification: unknown = { verified: true, status: "verified", byteSize: governanceAuditIntegrityCsvFixture.byteSize, expectedSha256: governanceAuditIntegrityCsvFixture.sha256, actualSha256: governanceAuditIntegrityCsvFixture.sha256 },
+  governanceAuditReceipt: unknown = { status: "issued", receipt: governanceAuditReceiptCsvFixture },
 ) {
   const owner = { id: 1, openId: "owner-1", name: "Pemilik", role: "admin" };
   await page.route("**/api/trpc/**", async (route) => {
     const procedures = new URL(route.request().url()).pathname.split("/").at(-1)?.split(",") ?? [];
     const encodedRequest = decodeURIComponent(`${route.request().url()} ${route.request().postData() ?? ""}`);
     const requestedAuditFormat = encodedRequest.includes('"format":"pdf"') ? "pdf" : "csv";
+    const requestedReceiptFormat = encodedRequest.includes('"receiptFormat":"pdf"') ? "pdf" : "csv";
     const result = procedures.map((procedure) => {
       const data = procedure === "auth.me" ? owner
         : procedure === "reports.monthlySummary" ? reportFixture
@@ -237,9 +261,10 @@ async function installArtifactOwnerRoutes(
             : procedure === "reports.monthlyArtifactGovernance" ? governance
               : procedure === "reports.monthlyArtifactLifecycleHistory" ? lifecycleHistory
                 : procedure === "reports.monthlyArtifactGovernanceAuditExport" ? governanceAuditExport
-                  : procedure === "reports.generateMonthlyArtifactGovernanceAuditExport" ? (requestedAuditFormat === "pdf" ? governanceAuditIntegrityPdfFixture : governanceAuditIntegrityCsvFixture)
-                    : procedure === "reports.verifyMonthlyArtifactGovernanceAuditExport" ? governanceAuditVerification
-                    : procedure === "reports.archiveMonthlyArtifact" ? (onArchive?.(), archiveResult)
+                    : procedure === "reports.generateMonthlyArtifactGovernanceAuditExport" ? (requestedAuditFormat === "pdf" ? governanceAuditIntegrityPdfFixture : governanceAuditIntegrityCsvFixture)
+                      : procedure === "reports.verifyMonthlyArtifactGovernanceAuditExport" ? governanceAuditVerification
+                        : procedure === "reports.issueMonthlyArtifactGovernanceAuditVerificationReceipt" ? (requestedReceiptFormat === "pdf" && typeof governanceAuditReceipt === "object" && governanceAuditReceipt && "status" in governanceAuditReceipt && (governanceAuditReceipt as { status?: string }).status === "issued" ? { status: "issued", receipt: governanceAuditReceiptPdfFixture } : governanceAuditReceipt)
+                        : procedure === "reports.archiveMonthlyArtifact" ? (onArchive?.(), archiveResult)
               : undefined;
       return data === undefined ? { error: { json: { message: `Unhandled test procedure: ${procedure}`, code: -32601, data: { code: "NOT_FOUND", httpStatus: 404 } } } } : { result: { data: { json: data } } };
     });
@@ -454,6 +479,37 @@ test("shows an explicit integrity warning when server verification detects tampe
   const integrity = page.getByLabel("Integritas ekspor audit governance");
   await expect(integrity.getByRole("status")).toContainText("HASH TIDAK COCOK");
   await expect(integrity.getByRole("button", { name: "Verifikasi ulang" })).toBeVisible();
+  await expect(integrity.getByRole("button", { name: "Bukti CSV" })).toBeDisabled();
+  await expect(integrity.getByRole("button", { name: "Bukti PDF" })).toBeDisabled();
+});
+
+test("downloads owner-admin verification receipts only after the exact export bytes are server-verified", async ({ page }, testInfo) => {
+  await installArtifactOwnerRoutes(page, [storedArtifactFixture]);
+  await page.goto("/reports");
+  const integrity = page.getByLabel("Integritas ekspor audit governance");
+
+  await page.getByRole("button", { name: "CSV Audit" }).click();
+  await expect(integrity.getByRole("status")).toContainText("Terverifikasi server");
+  await expect(integrity.getByRole("button", { name: "Bukti CSV" })).toBeEnabled();
+  const receiptDownloadPromise = page.waitForEvent("download");
+  await integrity.getByRole("button", { name: "Bukti CSV" }).click();
+  const receiptDownload = await receiptDownloadPromise;
+  expect(receiptDownload.suggestedFilename()).toBe(governanceAuditReceiptCsvFixture.filename);
+  const receiptPath = testInfo.outputPath(receiptDownload.suggestedFilename());
+  await receiptDownload.saveAs(receiptPath);
+  const receipt = await readFile(receiptPath, "utf8");
+  expect(receipt.charCodeAt(0)).toBe(0xfeff);
+  expect(receipt).toContain(governanceAuditIntegrityCsvFixture.exportId);
+  expect(receipt).toContain(governanceAuditIntegrityCsvFixture.sha256);
+  await expect(integrity.getByText(/^Bukti verifikasi CSV diunduh/)).toBeVisible();
+
+  const pdfReceiptPromise = page.waitForEvent("download");
+  await integrity.getByRole("button", { name: "Bukti PDF" }).click();
+  const pdfReceipt = await pdfReceiptPromise;
+  expect(pdfReceipt.suggestedFilename()).toBe(governanceAuditReceiptPdfFixture.filename);
+  const pdfReceiptPath = testInfo.outputPath(pdfReceipt.suggestedFilename());
+  await pdfReceipt.saveAs(pdfReceiptPath);
+  expect((await readFile(pdfReceiptPath)).subarray(0, 5).toString()).toBe("%PDF-");
 });
 
 test("keeps governance audit filters and export actions readable on a narrow mobile viewport", async ({ page }) => {

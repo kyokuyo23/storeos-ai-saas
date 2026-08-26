@@ -9,7 +9,8 @@ import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, monthlyReportInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput, stockOpnameFollowUpInput, stockOpnameFollowUpNoteInput, stockOpnameHistoryInput } from "./foundationSchemas";
 import { getMonthlyManagementReport } from "./monthlyReports";
 import { archiveMonthlyReportArtifactWithOwnerApproval, canAccessMonthlyReportArtifacts, getMonthlyReportArtifactGovernanceAuditExport, getMonthlyReportArtifactGovernanceSummary, getMonthlyReportArtifactLifecycleHistory, listMonthlyReportArtifacts } from "./monthlyReportArtifacts";
-import { generateGovernanceAuditExportArtifact, verifyGovernanceAuditExportBytes } from "./governanceAuditExportIntegrity";
+import { generateGovernanceAuditExportArtifact, registerGeneratedGovernanceAuditExport, verifyGovernanceAuditExportBytes } from "./governanceAuditExportIntegrity";
+import { issueGovernanceAuditVerificationReceipt } from "./governanceAuditVerificationReceipts";
 
 const idInput = z.object({ id: z.number().int().positive() });
 const runMutation = async <T>(entity: string, operation: () => Promise<T>) => {
@@ -90,7 +91,11 @@ export const appRouter = router({
     })).mutation(({ ctx, input }) => {
       if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Ekspor audit governance dibatasi untuk pemilik StoreOS." });
       const { format, ...filters } = input;
-      return runMutation("Ekspor audit governance", () => generateGovernanceAuditExportArtifact(ctx.user.openId, filters, format));
+      return runMutation("Ekspor audit governance", async () => {
+        const artifact = await generateGovernanceAuditExportArtifact(ctx.user.openId, filters, format);
+        registerGeneratedGovernanceAuditExport(ctx.user.openId, artifact);
+        return artifact;
+      });
     }),
     verifyMonthlyArtifactGovernanceAuditExport: protectedProcedure.input(z.object({
       exportId: z.string().min(32).max(128),
@@ -98,6 +103,14 @@ export const appRouter = router({
     })).mutation(({ ctx, input }) => {
       if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Verifikasi ekspor audit governance dibatasi untuk pemilik StoreOS." });
       return runMutation("Verifikasi ekspor audit governance", () => Promise.resolve(verifyGovernanceAuditExportBytes(input.exportId, input.bytesBase64)));
+    }),
+    issueMonthlyArtifactGovernanceAuditVerificationReceipt: protectedProcedure.input(z.object({
+      exportId: z.string().min(32).max(128),
+      bytesBase64: z.string().min(4).max(14_000_000),
+      receiptFormat: z.enum(["csv", "pdf"]),
+    })).mutation(({ ctx, input }) => {
+      if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Bukti verifikasi ekspor audit dibatasi untuk pemilik StoreOS." });
+      return runMutation("Bukti verifikasi ekspor audit", () => Promise.resolve(issueGovernanceAuditVerificationReceipt(ctx.user.openId, input)));
     }),
     archiveMonthlyArtifact: protectedProcedure.input(z.object({ year: z.number().int().min(2000).max(2200), month: z.number().int().min(1).max(12) })).mutation(({ ctx, input }) => {
       if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Arsip laporan dibatasi untuk pemilik StoreOS." });

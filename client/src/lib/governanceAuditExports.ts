@@ -43,6 +43,14 @@ export type GovernanceAuditIntegrityArtifact = {
   bytesBase64: string;
 };
 
+export type GovernanceAuditVerificationReceiptArtifact = {
+  receiptId: string;
+  receiptFormat: "csv" | "pdf";
+  filename: string;
+  contentType: "text/csv;charset=utf-8" | "application/pdf";
+  bytesBase64: string;
+};
+
 const wibTime = (value: Date | string | null) => value ? `${new Date(value).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })} WIB` : "";
 const escapeCell = (cell: string | number | null | undefined) => `"${String(cell ?? "").replaceAll('"', '""')}"`;
 const valueOrAll = <Value extends string | number>(value: Value | null) => value === null ? "Semua" : String(value);
@@ -129,6 +137,17 @@ export function downloadGovernanceAuditIntegrityArtifact(artifact: GovernanceAud
   anchor.download = artifact.filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+/** Downloads the exact server-issued verification receipt bytes. */
+export function downloadGovernanceAuditVerificationReceipt(receipt: GovernanceAuditVerificationReceiptArtifact): void {
+  downloadGovernanceAuditIntegrityArtifact({
+    exportId: receipt.receiptId,
+    format: receipt.receiptFormat,
+    filename: receipt.filename,
+    contentType: receipt.contentType,
+    bytesBase64: receipt.bytesBase64,
+  });
 }
 
 export function printGovernanceAudit(audit: GovernanceAuditExportData | undefined): void {

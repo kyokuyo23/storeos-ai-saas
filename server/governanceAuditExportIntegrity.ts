@@ -38,10 +38,17 @@ export type GovernanceAuditExportVerification = {
   verified: boolean;
 };
 
+type CachedGovernanceAuditExport = {
+  ownerOpenId: string;
+  artifact: GovernanceAuditGeneratedArtifact;
+};
+
 const AUDIT_COLUMNS = [
   "Tahun", "Bulan", "Timezone", "Lifecycle event", "Timestamp event (WIB)", "Sumber event", "Aktor / owner", "Format snapshot", "Format event", "Ukuran byte", "SHA-256 snapshot", "Status snapshot", "Status artefak", "Lifecycle saat ini", "Eligible sejak (WIB)", "Diarsipkan (WIB)", "Retired (WIB)", "Alasan arsip", "Metadata transisi",
 ];
 const MAX_VERIFICATION_BYTES = 10 * 1024 * 1024;
+const MAX_CACHED_AUDIT_EXPORTS = 100;
+const generatedAuditExportCache = new Map<string, CachedGovernanceAuditExport>();
 
 function sha256(bytes: Buffer) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -187,6 +194,27 @@ export async function generateGovernanceAuditExportArtifact(
     sha256: checksum,
     bytesBase64: bytes.toString("base64"),
   };
+}
+
+/**
+ * Retains only the exact server-generated export context needed for a
+ * verification receipt. No artifact, lifecycle, retention, or business row is
+ * persisted or changed.
+ */
+export function registerGeneratedGovernanceAuditExport(ownerOpenId: string, artifact: GovernanceAuditGeneratedArtifact) {
+  generatedAuditExportCache.delete(artifact.exportId);
+  generatedAuditExportCache.set(artifact.exportId, { ownerOpenId, artifact });
+  while (generatedAuditExportCache.size > MAX_CACHED_AUDIT_EXPORTS) {
+    const oldestExportId = generatedAuditExportCache.keys().next().value;
+    if (!oldestExportId) break;
+    generatedAuditExportCache.delete(oldestExportId);
+  }
+}
+
+export function getGeneratedGovernanceAuditExportForOwner(ownerOpenId: string, exportId: string) {
+  const cached = generatedAuditExportCache.get(exportId);
+  if (!cached || cached.ownerOpenId !== ownerOpenId) return null;
+  return cached.artifact;
 }
 
 function decodeBase64Strict(value: string) {
