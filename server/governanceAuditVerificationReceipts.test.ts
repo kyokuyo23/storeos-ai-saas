@@ -54,10 +54,10 @@ async function registeredExport(ownerOpenId = "owner-1") {
 describe("Phase 2.9 governance audit verification receipts", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("issues a deterministic BOM CSV receipt only for the exact verified bytes and includes WIB, scope, size, and hashes", async () => {
+  it("issues a deterministic BOM CSV receipt only for the exact verified bytes and includes WIB, scope, size, hashes, and QR expiry metadata", async () => {
     const { artifact, audit } = await registeredExport();
     const snapshot = JSON.stringify(audit);
-    const result = await issueGovernanceAuditVerificationReceipt("owner-1", { exportId: artifact.exportId, bytesBase64: artifact.bytesBase64, receiptFormat: "csv" }, verificationAt);
+    const result = await issueGovernanceAuditVerificationReceipt("owner-1", { exportId: artifact.exportId, bytesBase64: artifact.bytesBase64, receiptFormat: "csv", qrValidityMinutes: 90 }, verificationAt);
 
     expect(result.status).toBe("issued");
     if (result.status !== "issued") throw new Error("Expected receipt issuance");
@@ -67,26 +67,29 @@ describe("Phase 2.9 governance audit verification receipts", () => {
     expect(text).toContain(artifact.exportId);
     expect(text).toContain(artifact.scope);
     expect(text).toContain(artifact.sha256);
+    expect(text).toContain("QR issuedAt (Asia/Jakarta)");
+    expect(text).toContain("QR expiresAt (Asia/Jakarta)");
     expect(result.receipt).toMatchObject({
       receiptId: `storeos-governance-audit-receipt-${artifact.exportId}`,
       receiptFormat: "csv",
       verificationAt,
       export: { exportId: artifact.exportId, byteSize: artifact.byteSize, sha256: artifact.sha256, scope: artifact.scope, timezone: "Asia/Jakarta" },
       verification: { verified: true, status: "verified", actualSha256: artifact.sha256 },
+      qr: { issuedAt: verificationAt, expiresAt: new Date(verificationAt.getTime() + 90 * 60_000) },
     });
     expect(result.receipt.receiptByteSize).toBe(bytes.byteLength);
     expect(result.receipt.receiptSha256).toBe(createHash("sha256").update(bytes).digest("hex"));
     expect(JSON.stringify(audit)).toBe(snapshot);
   });
 
-  it("issues a PDF receipt from the verified export context with exact receipt-byte metadata", async () => {
+  it("issues a PDF receipt from the verified export context with exact receipt-byte and QR expiry metadata", async () => {
     const { artifact } = await registeredExport();
-    const result = await issueGovernanceAuditVerificationReceipt("owner-1", { exportId: artifact.exportId, bytesBase64: artifact.bytesBase64, receiptFormat: "pdf" }, verificationAt);
+    const result = await issueGovernanceAuditVerificationReceipt("owner-1", { exportId: artifact.exportId, bytesBase64: artifact.bytesBase64, receiptFormat: "pdf", qrValidityMinutes: 90 }, verificationAt);
 
     expect(result.status).toBe("issued");
     if (result.status !== "issued") throw new Error("Expected receipt issuance");
     const bytes = Buffer.from(result.receipt.bytesBase64, "base64");
-    expect(result.receipt).toMatchObject({ receiptFormat: "pdf", contentType: "application/pdf", export: { exportId: artifact.exportId } });
+    expect(result.receipt).toMatchObject({ receiptFormat: "pdf", contentType: "application/pdf", export: { exportId: artifact.exportId }, qr: { referenceId: expect.stringMatching(/^qr_[a-f0-9]{32}$/), issuedAt: verificationAt, expiresAt: new Date(verificationAt.getTime() + 90 * 60_000) } });
     expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
     expect(result.receipt.receiptByteSize).toBe(bytes.byteLength);
     expect(result.receipt.receiptSha256).toBe(createHash("sha256").update(bytes).digest("hex"));

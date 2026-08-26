@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { archiveMonthlyReportArtifactWithOwnerApproval, getMonthlyReportArtifactGovernanceAuditExport, getMonthlyReportArtifactGovernanceSummary, getMonthlyReportArtifactLifecycleHistory, listMonthlyReportArtifacts } = vi.hoisted(() => ({
   archiveMonthlyReportArtifactWithOwnerApproval: vi.fn(async () => ({ outcome: "archived", artifact: { id: 7, year: 2024, month: 1, lifecycleStatus: "archived" }, availability: [], archivedAt: new Date("2026-02-02T00:00:00.000Z") })),
@@ -18,6 +18,10 @@ const { issueGovernanceAuditVerificationReceipt } = vi.hoisted(() => ({
 const { resolveGovernanceAuditVerificationQr } = vi.hoisted(() => ({
   resolveGovernanceAuditVerificationQr: vi.fn(() => ({ status: "verified", exportId: `storeos-governance-audit-csv-${"a".repeat(64)}`, verificationStatus: "verified" })),
 }));
+const { getGovernanceAuditQrExpiryPolicy, updateGovernanceAuditQrExpiryPolicy } = vi.hoisted(() => ({
+  getGovernanceAuditQrExpiryPolicy: vi.fn(),
+  updateGovernanceAuditQrExpiryPolicy: vi.fn(),
+}));
 vi.mock("./monthlyReportArtifacts", () => ({
   archiveMonthlyReportArtifactWithOwnerApproval,
   canAccessMonthlyReportArtifacts: (user: { openId: string; role: string } | null) => user?.openId === "owner-1" && user.role === "admin",
@@ -29,6 +33,7 @@ vi.mock("./monthlyReportArtifacts", () => ({
 vi.mock("./governanceAuditExportIntegrity", () => ({ generateGovernanceAuditExportArtifact, registerGeneratedGovernanceAuditExport, verifyGovernanceAuditExportBytes }));
 vi.mock("./governanceAuditVerificationReceipts", () => ({ issueGovernanceAuditVerificationReceipt }));
 vi.mock("./governanceAuditVerificationQr", () => ({ resolveGovernanceAuditVerificationQr }));
+vi.mock("./db", () => ({ getGovernanceAuditQrExpiryPolicy, updateGovernanceAuditQrExpiryPolicy }));
 
 import { appRouter } from "./routers";
 
@@ -37,6 +42,12 @@ function caller(user: { openId: string; role: string } | null) {
 }
 
 describe("reports.monthlyArtifacts authorization", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getGovernanceAuditQrExpiryPolicy.mockResolvedValue({ ownerOpenId: "owner-1", validityMinutes: 30 });
+    updateGovernanceAuditQrExpiryPolicy.mockImplementation(async (ownerOpenId: string, validityMinutes: number) => ({ ownerOpenId, validityMinutes }));
+  });
+
   it("rejects anonymous artifact access", async () => {
     await expect(caller(null).reports.monthlyArtifacts()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
@@ -123,7 +134,27 @@ describe("reports.monthlyArtifacts authorization", () => {
   it("forwards only the authenticated owner-admin's verified export context to receipt issuance", async () => {
     const receiptInput = { exportId: `storeos-governance-audit-csv-${"a".repeat(64)}`, bytesBase64: "77u/", receiptFormat: "pdf" as const };
     await expect(caller({ openId: "owner-1", role: "admin" }).reports.issueMonthlyArtifactGovernanceAuditVerificationReceipt(receiptInput)).resolves.toMatchObject({ status: "issued", receipt: { receiptFormat: "csv" } });
-    expect(issueGovernanceAuditVerificationReceipt).toHaveBeenCalledWith("owner-1", receiptInput);
+    expect(getGovernanceAuditQrExpiryPolicy).toHaveBeenCalledWith("owner-1");
+    expect(issueGovernanceAuditVerificationReceipt).toHaveBeenCalledWith("owner-1", { ...receiptInput, qrValidityMinutes: 30 });
+  });
+
+  it("restricts persisted QR expiry policy reads and updates to the authenticated owner-admin scope", async () => {
+    await expect(caller(null).reports.getMonthlyArtifactGovernanceAuditQrExpiryPolicy()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller({ openId: "owner-1", role: "user" }).reports.getMonthlyArtifactGovernanceAuditQrExpiryPolicy()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller({ openId: "other-workspace", role: "admin" }).reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy({ validityMinutes: 90 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(getGovernanceAuditQrExpiryPolicy).not.toHaveBeenCalled();
+    expect(updateGovernanceAuditQrExpiryPolicy).not.toHaveBeenCalled();
+
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.getMonthlyArtifactGovernanceAuditQrExpiryPolicy()).resolves.toEqual({ ownerOpenId: "owner-1", validityMinutes: 30 });
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy({ validityMinutes: 90 })).resolves.toEqual({ ownerOpenId: "owner-1", validityMinutes: 90 });
+    expect(getGovernanceAuditQrExpiryPolicy).toHaveBeenCalledWith("owner-1");
+    expect(updateGovernanceAuditQrExpiryPolicy).toHaveBeenCalledWith("owner-1", 90);
+  });
+
+  it("rejects invalid QR expiry policy values before reaching persistence", async () => {
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy({ validityMinutes: 4 })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy({ validityMinutes: 10_081 })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(updateGovernanceAuditQrExpiryPolicy).not.toHaveBeenCalled();
   });
 
   it("rejects anonymous, member, and cross-workspace QR verification resolution before the resolver is called", async () => {

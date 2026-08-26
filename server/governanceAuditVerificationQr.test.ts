@@ -15,6 +15,11 @@ import {
   resolveGovernanceAuditVerificationQr,
   revokeGovernanceAuditVerificationQrReference,
 } from "./governanceAuditVerificationQr";
+import {
+  GOVERNANCE_AUDIT_QR_DEFAULT_VALIDITY_MINUTES,
+  GOVERNANCE_AUDIT_QR_MAX_VALIDITY_MINUTES,
+  GOVERNANCE_AUDIT_QR_MIN_VALIDITY_MINUTES,
+} from "./governanceAuditQrExpiry";
 
 const issuedAt = new Date("2026-08-26T01:20:00.000Z");
 const artifact = {
@@ -49,6 +54,40 @@ describe("Phase 2.10 governance audit verification QR", () => {
     expect(first.verificationUrl).toContain("status=verified");
   });
 
+  it("calculates issued and expiry timestamps server-side for default, configured, and maximum policy values", async () => {
+    const defaultQr = await createGovernanceAuditVerificationQr("owner-1", artifact, `storeos-governance-audit-receipt-${artifact.exportId}-default`, issuedAt);
+    const minimumQr = await createGovernanceAuditVerificationQr("owner-1", artifact, `storeos-governance-audit-receipt-${artifact.exportId}-minimum`, issuedAt, GOVERNANCE_AUDIT_QR_MIN_VALIDITY_MINUTES);
+    const configuredQr = await createGovernanceAuditVerificationQr("owner-1", artifact, `storeos-governance-audit-receipt-${artifact.exportId}-configured`, issuedAt, 90);
+    const maximumQr = await createGovernanceAuditVerificationQr("owner-1", artifact, `storeos-governance-audit-receipt-${artifact.exportId}-maximum`, issuedAt, GOVERNANCE_AUDIT_QR_MAX_VALIDITY_MINUTES);
+
+    expect(defaultQr).toMatchObject({ issuedAt, expiresAt: new Date(issuedAt.getTime() + GOVERNANCE_AUDIT_QR_DEFAULT_VALIDITY_MINUTES * 60_000) });
+    expect(minimumQr.expiresAt).toEqual(new Date(issuedAt.getTime() + 5 * 60_000));
+    expect(configuredQr.expiresAt).toEqual(new Date(issuedAt.getTime() + 90 * 60_000));
+    expect(maximumQr.expiresAt).toEqual(new Date(issuedAt.getTime() + 10_080 * 60_000));
+
+    const validBeforeBoundary = resolveGovernanceAuditVerificationQr("owner-1", { referenceId: minimumQr.referenceId, exportId: artifact.exportId, receiptId: minimumQr.receiptId }, new Date(minimumQr.expiresAt.getTime() - 1));
+    expect(validBeforeBoundary).toMatchObject({ status: "verified", issuedAt, expiresAt: minimumQr.expiresAt });
+    const expiredAtBoundary = resolveGovernanceAuditVerificationQr("owner-1", { referenceId: minimumQr.referenceId, exportId: artifact.exportId, receiptId: minimumQr.receiptId }, minimumQr.expiresAt);
+    expect(expiredAtBoundary).toMatchObject({ status: "expired", issuedAt, expiresAt: minimumQr.expiresAt });
+  });
+
+  it("does not mutate the originally issued QR object when a later reissue applies a new policy", async () => {
+    const receiptId = `storeos-governance-audit-receipt-${artifact.exportId}-reissued`;
+    const first = await createGovernanceAuditVerificationQr("owner-1", artifact, receiptId, issuedAt, 5);
+    const firstExpiry = new Date(first.expiresAt);
+    const reissued = await createGovernanceAuditVerificationQr("owner-1", artifact, receiptId, issuedAt, 90);
+
+    expect(first.expiresAt).toEqual(firstExpiry);
+    expect(reissued.referenceId).toBe(first.referenceId);
+    expect(reissued.expiresAt).toEqual(new Date(issuedAt.getTime() + 90 * 60_000));
+  });
+
+  it("refuses malformed, sub-minimum, and over-maximum policy values before storing a reference", async () => {
+    await expect(createGovernanceAuditVerificationQr("owner-1", artifact, `storeos-governance-audit-receipt-${artifact.exportId}-invalid-low`, issuedAt, 4)).rejects.toThrow("Masa berlaku QR tidak valid");
+    await expect(createGovernanceAuditVerificationQr("owner-1", artifact, `storeos-governance-audit-receipt-${artifact.exportId}-invalid-decimal`, issuedAt, 30.5)).rejects.toThrow("Masa berlaku QR tidak valid");
+    await expect(createGovernanceAuditVerificationQr("owner-1", artifact, `storeos-governance-audit-receipt-${artifact.exportId}-invalid-high`, issuedAt, 10_081)).rejects.toThrow("Masa berlaku QR tidak valid");
+  });
+
   it("recomputes the exact cached export bytes before resolving an owner-scoped QR as verified", async () => {
     const qr = await createGovernanceAuditVerificationQr("owner-1", artifact, `storeos-governance-audit-receipt-${artifact.exportId}`, issuedAt);
     const result = resolveGovernanceAuditVerificationQr("owner-1", { referenceId: qr.referenceId, exportId: artifact.exportId, receiptId: qr.receiptId }, new Date("2026-08-26T01:21:00.000Z"));
@@ -64,7 +103,7 @@ describe("Phase 2.10 governance audit verification QR", () => {
 
     expect(resolveGovernanceAuditVerificationQr("owner-2", input, new Date("2026-08-26T01:21:00.000Z"))).toMatchObject({ status: "invalid_reference" });
     expect(resolveGovernanceAuditVerificationQr("owner-1", { ...input, exportId: `${artifact.exportId}-altered` }, new Date("2026-08-26T01:21:00.000Z"))).toMatchObject({ status: "invalid_reference" });
-    expect(resolveGovernanceAuditVerificationQr("owner-1", input, new Date(issuedAt.getTime() + 30 * 60 * 1000))).toMatchObject({ status: "expired" });
+    expect(resolveGovernanceAuditVerificationQr("owner-1", input, new Date(issuedAt.getTime() + 30 * 60 * 1000))).toMatchObject({ status: "expired", issuedAt, expiresAt: new Date(issuedAt.getTime() + 30 * 60 * 1000) });
 
     const revocable = await createGovernanceAuditVerificationQr("owner-1", artifact, `storeos-governance-audit-receipt-${artifact.exportId}-revoked`, issuedAt);
     revokeGovernanceAuditVerificationQrReference(revocable.referenceId);

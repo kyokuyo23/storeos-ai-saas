@@ -260,14 +260,26 @@ async function installArtifactOwnerRoutes(
   governanceAuditExport: unknown = governanceAuditExportFixture,
   governanceAuditVerification: unknown = { verified: true, status: "verified", byteSize: governanceAuditIntegrityCsvFixture.byteSize, expectedSha256: governanceAuditIntegrityCsvFixture.sha256, actualSha256: governanceAuditIntegrityCsvFixture.sha256 },
   governanceAuditReceipt: unknown = { status: "issued", receipt: governanceAuditReceiptCsvFixture },
-  governanceAuditQrVerification: unknown = { status: "verified", exportId: governanceAuditIntegrityCsvFixture.exportId, receiptId: governanceAuditQrFixture.receiptId, scope: governanceAuditIntegrityCsvFixture.scope, format: "csv", generatedAt: governanceAuditIntegrityCsvFixture.generatedAt, generatedAtWib: "25 Agu 2026 10.15 WIB", verifiedAt: "2026-08-26T01:20:00.000Z", verifiedAtWib: "26 Agu 2026 08.20 WIB", byteSize: governanceAuditIntegrityCsvFixture.byteSize, sha256: governanceAuditIntegrityCsvFixture.sha256, verificationStatus: "verified" },
+  governanceAuditQrVerification: unknown = { status: "verified", exportId: governanceAuditIntegrityCsvFixture.exportId, receiptId: governanceAuditQrFixture.receiptId, scope: governanceAuditIntegrityCsvFixture.scope, format: "csv", generatedAt: governanceAuditIntegrityCsvFixture.generatedAt, generatedAtWib: "25 Agu 2026 10.15 WIB", issuedAt: governanceAuditQrFixture.issuedAt, issuedAtWib: "26 Agu 2026 08.20 WIB", expiresAt: governanceAuditQrFixture.expiresAt, expiresAtWib: "26 Agu 2026 08.50 WIB", verifiedAt: "2026-08-26T01:20:00.000Z", verifiedAtWib: "26 Agu 2026 08.20 WIB", byteSize: governanceAuditIntegrityCsvFixture.byteSize, sha256: governanceAuditIntegrityCsvFixture.sha256, verificationStatus: "verified" },
+  governanceAuditQrExpiryPolicy: { ownerOpenId: string; validityMinutes: number } = { ownerOpenId: "owner-1", validityMinutes: 30 },
+  onQrExpiryPolicyUpdate?: (validityMinutes: number) => void,
 ) {
   const owner = { id: 1, openId: "owner-1", name: "Pemilik", role: "admin" };
+  let qrExpiryValidityMinutes = governanceAuditQrExpiryPolicy.validityMinutes;
   await page.route("**/api/trpc/**", async (route) => {
     const procedures = new URL(route.request().url()).pathname.split("/").at(-1)?.split(",") ?? [];
     const encodedRequest = decodeURIComponent(`${route.request().url()} ${route.request().postData() ?? ""}`);
     const requestedAuditFormat = encodedRequest.includes('"format":"pdf"') ? "pdf" : "csv";
     const requestedReceiptFormat = encodedRequest.includes('"receiptFormat":"pdf"') ? "pdf" : "csv";
+    const requestedQrExpiry = Number(encodedRequest.match(/"validityMinutes":(\d+)/)?.[1]);
+    if (procedures.includes("reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy") && Number.isInteger(requestedQrExpiry)) {
+      qrExpiryValidityMinutes = requestedQrExpiry;
+      onQrExpiryPolicyUpdate?.(requestedQrExpiry);
+    }
+    const receiptQr = {
+      ...governanceAuditQrFixture,
+      expiresAt: new Date(new Date(governanceAuditQrFixture.issuedAt).getTime() + qrExpiryValidityMinutes * 60_000).toISOString(),
+    };
     const result = procedures.map((procedure) => {
       const data = procedure === "auth.me" ? owner
         : procedure === "reports.monthlySummary" ? reportFixture
@@ -277,8 +289,10 @@ async function installArtifactOwnerRoutes(
                 : procedure === "reports.monthlyArtifactGovernanceAuditExport" ? governanceAuditExport
                     : procedure === "reports.generateMonthlyArtifactGovernanceAuditExport" ? (requestedAuditFormat === "pdf" ? governanceAuditIntegrityPdfFixture : governanceAuditIntegrityCsvFixture)
                         : procedure === "reports.verifyMonthlyArtifactGovernanceAuditExport" ? governanceAuditVerification
-                          : procedure === "reports.issueMonthlyArtifactGovernanceAuditVerificationReceipt" ? (requestedReceiptFormat === "pdf" && typeof governanceAuditReceipt === "object" && governanceAuditReceipt && "status" in governanceAuditReceipt && (governanceAuditReceipt as { status?: string }).status === "issued" ? { status: "issued", receipt: governanceAuditReceiptPdfFixture } : governanceAuditReceipt)
+                          : procedure === "reports.issueMonthlyArtifactGovernanceAuditVerificationReceipt" ? (typeof governanceAuditReceipt === "object" && governanceAuditReceipt && "status" in governanceAuditReceipt && (governanceAuditReceipt as { status?: string }).status === "issued" ? { status: "issued", receipt: requestedReceiptFormat === "pdf" ? { ...governanceAuditReceiptPdfFixture, qr: receiptQr } : { ...governanceAuditReceiptCsvFixture, qr: receiptQr } } : governanceAuditReceipt)
                             : procedure === "reports.resolveMonthlyArtifactGovernanceAuditVerificationQr" ? governanceAuditQrVerification
+                            : procedure === "reports.getMonthlyArtifactGovernanceAuditQrExpiryPolicy" ? { ownerOpenId: "owner-1", validityMinutes: qrExpiryValidityMinutes }
+                              : procedure === "reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy" ? { ownerOpenId: "owner-1", validityMinutes: qrExpiryValidityMinutes }
                             : procedure === "reports.archiveMonthlyArtifact" ? (onArchive?.(), archiveResult)
               : undefined;
       return data === undefined ? { error: { json: { message: `Unhandled test procedure: ${procedure}`, code: -32601, data: { code: "NOT_FOUND", httpStatus: 404 } } } } : { result: { data: { json: data } } };
@@ -553,8 +567,52 @@ test("issues a safe QR reference only from a verified receipt and resolves check
   await expect(result.getByText("Checksum ekspor terverifikasi")).toBeVisible();
   await expect(result).toContainText(governanceAuditIntegrityCsvFixture.exportId);
   await expect(result).toContainText(governanceAuditIntegrityCsvFixture.sha256);
+  await expect(result).toContainText("Diterbitkan");
+  await expect(result).toContainText("Berlaku sampai");
   await expect(result.getByRole("button", { name: /Unduh/ })).toHaveCount(0);
   await expect(page.locator("body")).not.toContainText("monthly-management-reports/");
+});
+
+test("allows the owner-admin to persist a bounded QR expiry policy and applies it only to the newly issued receipt", async ({ page }) => {
+  const policyUpdates: number[] = [];
+  await installArtifactOwnerRoutes(page, [storedArtifactFixture], governanceFixture, null, undefined, undefined, governanceAuditExportFixture, undefined, undefined, undefined, { ownerOpenId: "owner-1", validityMinutes: 30 }, (validityMinutes) => policyUpdates.push(validityMinutes));
+  await page.goto("/reports");
+  await page.getByRole("button", { name: "CSV Audit" }).click();
+  const integrity = page.getByLabel("Integritas ekspor audit governance");
+  const expiryInput = integrity.getByLabel("Masa berlaku QR dalam menit");
+  await expect(expiryInput).toHaveValue("30");
+  await expiryInput.fill("90");
+  await integrity.getByRole("button", { name: "Simpan durasi" }).click();
+  await expect(integrity.getByText("Masa berlaku QR baru disimpan: 90 menit", { exact: false })).toBeVisible();
+  await expect(expiryInput).toHaveValue("90");
+  expect(policyUpdates).toEqual([90]);
+
+  const receiptDownloadPromise = page.waitForEvent("download");
+  await integrity.getByRole("button", { name: "Bukti CSV" }).click();
+  await receiptDownloadPromise;
+  const qr = page.getByLabel("Referensi QR verifikasi audit");
+  await expect(qr).toContainText("Diterbitkan");
+  await expect(qr).toContainText("Berlaku sampai");
+  await expect(qr).toContainText("26/8/2026");
+});
+
+test("shows issued and expiry metadata for an expired QR and does not expose artifact downloads", async ({ page }) => {
+  const expired = {
+    status: "expired",
+    message: "Referensi QR verifikasi telah kedaluwarsa. Buat dan verifikasi ulang ekspor audit.",
+    issuedAt: governanceAuditQrFixture.issuedAt,
+    issuedAtWib: "26 Agu 2026 08.20 WIB",
+    expiresAt: governanceAuditQrFixture.expiresAt,
+    expiresAtWib: "26 Agu 2026 08.50 WIB",
+  };
+  await installArtifactOwnerRoutes(page, [storedArtifactFixture], governanceFixture, null, undefined, undefined, governanceAuditExportFixture, undefined, undefined, expired);
+  await page.goto(`/verify?ref=${governanceAuditQrFixture.referenceId}&export=${governanceAuditIntegrityCsvFixture.exportId}&receipt=${governanceAuditQrFixture.receiptId}&status=verified`);
+  const result = page.getByLabel("Verifikasi QR Governance Audit");
+  await expect(result.getByText("Referensi QR kedaluwarsa")).toBeVisible();
+  await expect(result).toContainText("Diterbitkan");
+  await expect(result).toContainText("Berakhir");
+  await expect(result).toContainText("Kedaluwarsa — verifikasi tidak diterima");
+  await expect(result.getByRole("button", { name: /Unduh/ })).toHaveCount(0);
 });
 
 test("keeps governance audit filters and export actions readable on a narrow mobile viewport", async ({ page }) => {
@@ -566,6 +624,9 @@ test("keeps governance audit filters and export actions readable on a narrow mob
   await expect(heading).toBeVisible();
   await expect(panel.getByRole("button", { name: "CSV Audit" })).toBeVisible();
   await expect(panel.getByRole("button", { name: "PDF Audit" })).toBeVisible();
+  await panel.getByRole("button", { name: "CSV Audit" }).click();
+  await expect(panel.getByLabel("Masa berlaku QR dalam menit")).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Simpan durasi" })).toBeVisible();
   const box = await panel.boundingBox();
   expect(box?.width).toBeLessThanOrEqual(358);
 });

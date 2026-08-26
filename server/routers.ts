@@ -111,7 +111,20 @@ export const appRouter = router({
       receiptFormat: z.enum(["csv", "pdf"]),
     })).mutation(({ ctx, input }) => {
       if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Bukti verifikasi ekspor audit dibatasi untuk pemilik StoreOS." });
-      return runMutation("Bukti verifikasi ekspor audit", () => issueGovernanceAuditVerificationReceipt(ctx.user.openId, input));
+      return runMutation("Bukti verifikasi ekspor audit", async () => {
+        const policy = await db.getGovernanceAuditQrExpiryPolicy(ctx.user.openId);
+        return issueGovernanceAuditVerificationReceipt(ctx.user.openId, { ...input, qrValidityMinutes: policy.validityMinutes });
+      });
+    }),
+    getMonthlyArtifactGovernanceAuditQrExpiryPolicy: protectedProcedure.query(({ ctx }) => {
+      if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Pengaturan masa berlaku QR dibatasi untuk pemilik StoreOS." });
+      return runMutation("Pengaturan masa berlaku QR", () => db.getGovernanceAuditQrExpiryPolicy(ctx.user.openId));
+    }),
+    updateMonthlyArtifactGovernanceAuditQrExpiryPolicy: protectedProcedure.input(z.object({
+      validityMinutes: z.number().int().min(5).max(10_080),
+    })).mutation(({ ctx, input }) => {
+      if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Pengaturan masa berlaku QR dibatasi untuk pemilik StoreOS." });
+      return runMutation("Pengaturan masa berlaku QR", () => db.updateGovernanceAuditQrExpiryPolicy(ctx.user.openId, input.validityMinutes));
     }),
     resolveMonthlyArtifactGovernanceAuditVerificationQr: protectedProcedure.input(z.object({
       referenceId: z.string().regex(/^qr_[a-f0-9]{32}$/),

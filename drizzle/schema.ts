@@ -251,6 +251,14 @@ export const businessSettings = mysqlTable("businessSettings", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+export const governanceAuditQrExpiryPolicies = mysqlTable("governanceAuditQrExpiryPolicies", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerOpenId: varchar("ownerOpenId", { length: 64 }).notNull(),
+  validityMinutes: int("validityMinutes").default(30).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => [uniqueIndex("governance_audit_qr_expiry_owner_unique").on(table.ownerOpenId)]);
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Category = typeof categories.$inferSelect;

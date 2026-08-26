@@ -6,8 +6,8 @@ import {
   verifyGovernanceAuditExportBytes,
   type GovernanceAuditGeneratedArtifact,
 } from "./governanceAuditExportIntegrity";
+import { GOVERNANCE_AUDIT_QR_DEFAULT_VALIDITY_MINUTES, isValidGovernanceAuditQrValidityMinutes } from "./governanceAuditQrExpiry";
 
-const QR_REFERENCE_TTL_MS = 30 * 60 * 1000;
 const VERIFY_BASE_URL = "https://storeosai-53f6p9i9.manus.space";
 
 export type GovernanceAuditVerificationQr = {
@@ -57,9 +57,11 @@ export async function createGovernanceAuditVerificationQr(
   artifact: GovernanceAuditGeneratedArtifact,
   receiptId: string,
   issuedAt = new Date(),
+  validityMinutes = GOVERNANCE_AUDIT_QR_DEFAULT_VALIDITY_MINUTES,
 ): Promise<GovernanceAuditVerificationQr> {
+  if (!isValidGovernanceAuditQrValidityMinutes(validityMinutes)) throw new Error("Masa berlaku QR tidak valid.");
   const ref = referenceId(ownerOpenId, artifact.exportId, receiptId);
-  const expiresAt = new Date(issuedAt.getTime() + QR_REFERENCE_TTL_MS);
+  const expiresAt = new Date(issuedAt.getTime() + validityMinutes * 60 * 1000);
   const payload = payloadFor(ref, artifact.exportId, receiptId);
   const url = verificationUrl(ref, artifact.exportId, receiptId);
   qrReferenceCache.set(ref, { ownerOpenId, exportId: artifact.exportId, receiptId, issuedAt, expiresAt, revoked: false });
@@ -88,11 +90,16 @@ export type GovernanceAuditQrVerificationResult =
       generatedAtWib: string;
       verifiedAt: Date;
       verifiedAtWib: string;
+      issuedAt: Date;
+      issuedAtWib: string;
+      expiresAt: Date;
+      expiresAtWib: string;
       byteSize: number;
       sha256: string;
       verificationStatus: "verified";
     }
-  | { status: "invalid_reference" | "expired" | "revoked" | "not_found" | "artifact_missing" | "verification_failed"; message: string };
+  | { status: "invalid_reference" | "revoked" | "not_found" | "artifact_missing" | "verification_failed"; message: string }
+  | { status: "expired"; message: string; issuedAt: Date; issuedAtWib: string; expiresAt: Date; expiresAtWib: string };
 
 function wibTime(value: Date) {
   return `${value.toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })} WIB`;
@@ -114,7 +121,14 @@ export function resolveGovernanceAuditVerificationQr(
     return { status: "invalid_reference", message: "Referensi QR tidak cocok dengan ekspor atau bukti verifikasi yang diminta." };
   }
   if (reference.revoked) return { status: "revoked", message: "Referensi QR verifikasi telah dicabut." };
-  if (reference.expiresAt.getTime() <= now.getTime()) return { status: "expired", message: "Referensi QR verifikasi telah kedaluwarsa. Buat dan verifikasi ulang ekspor audit." };
+  if (reference.expiresAt.getTime() <= now.getTime()) return {
+    status: "expired",
+    message: "Referensi QR verifikasi telah kedaluwarsa. Buat dan verifikasi ulang ekspor audit.",
+    issuedAt: reference.issuedAt,
+    issuedAtWib: wibTime(reference.issuedAt),
+    expiresAt: reference.expiresAt,
+    expiresAtWib: wibTime(reference.expiresAt),
+  };
 
   const artifact = getGeneratedGovernanceAuditExportForOwner(ownerOpenId, reference.exportId);
   if (!artifact) return { status: "artifact_missing", message: "Byte ekspor audit tidak tersedia. Referensi QR tidak dapat membuktikan integritas." };
@@ -137,6 +151,10 @@ export function resolveGovernanceAuditVerificationQr(
     generatedAtWib: wibTime(artifact.generatedAt),
     verifiedAt: now,
     verifiedAtWib: wibTime(now),
+    issuedAt: reference.issuedAt,
+    issuedAtWib: wibTime(reference.issuedAt),
+    expiresAt: reference.expiresAt,
+    expiresAtWib: wibTime(reference.expiresAt),
     byteSize: artifact.byteSize,
     sha256: artifact.sha256,
     verificationStatus: "verified",

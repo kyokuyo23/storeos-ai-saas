@@ -370,3 +370,10 @@
 - [x] Integrate QR references into printable/PDF verification receipts and responsive owner-admin verification UI
 - [x] Add Phase 2.10 QR payload safety, deterministic reference, checksum, missing/corrupt/mismatch, authorization, browser, printable, and responsive coverage
 - [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.10
+
+- [x] Inspect the Phase 2.10 QR reference, receipt, authorization, resolver, schema, and settings architecture for Phase 2.11 expiry reuse
+- [x] Add an owner-admin-only persisted QR expiry policy with safe default and bounded duration validation for newly issued references
+- [x] Enforce server-calculated issuedAt/expiresAt, expiry outcomes, integrity checks, cross-scope denial, and no-download-bypass in the protected resolver
+- [x] Add compact owner-admin QR expiry controls and issued/expiration state to receipt and verification interfaces
+- [x] Add Phase 2.11 default/bounds/configured expiry, timestamp, expiry boundary, failure, authorization, integrity, browser, printable, and responsive regression coverage
+- [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.11

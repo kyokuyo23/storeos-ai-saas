@@ -20,7 +20,7 @@ export type GovernanceAuditVerificationReceipt = {
   receiptSha256: string;
   verificationAt: Date;
   verificationAtWib: string;
-  applicationVersion: "StoreOS Governance Audit v2.9";
+  applicationVersion: "StoreOS Governance Audit v2.11";
   export: {
     exportId: string;
     format: GovernanceAuditExportFormat;
@@ -79,6 +79,8 @@ function receiptRows(receipt: Omit<GovernanceAuditVerificationReceipt, "bytesBas
     ["Verified SHA-256", receipt.verification.actualSha256],
     ["QR verification reference", receipt.qr.referenceId],
     ["QR verification status", receipt.qr.verificationStatus],
+    ["QR issuedAt (Asia/Jakarta)", wibTime(receipt.qr.issuedAt)],
+    ["QR expiresAt (Asia/Jakarta)", wibTime(receipt.qr.expiresAt)],
     ["QR verification payload", receipt.qr.payload],
   ];
 }
@@ -108,7 +110,7 @@ function buildReceiptPdfBytes(receipt: Omit<GovernanceAuditVerificationReceipt, 
 
 export async function issueGovernanceAuditVerificationReceipt(
   ownerOpenId: string,
-  input: { exportId: string; bytesBase64: string; receiptFormat: GovernanceAuditReceiptFormat },
+  input: { exportId: string; bytesBase64: string; receiptFormat: GovernanceAuditReceiptFormat; qrValidityMinutes?: number },
   verificationAt = new Date(),
 ): Promise<GovernanceAuditVerificationReceiptResult> {
   const artifact = getGeneratedGovernanceAuditExportForOwner(ownerOpenId, input.exportId);
@@ -133,7 +135,7 @@ export async function issueGovernanceAuditVerificationReceipt(
   }
 
   const receiptId = `storeos-governance-audit-receipt-${artifact.exportId}`;
-  const qr = await createGovernanceAuditVerificationQr(ownerOpenId, artifact, receiptId, verificationAt);
+  const qr = await createGovernanceAuditVerificationQr(ownerOpenId, artifact, receiptId, verificationAt, input.qrValidityMinutes);
   const baseReceipt = {
     kind: "storeos_governance_audit_verification_receipt" as const,
     version: 1 as const,
@@ -143,7 +145,7 @@ export async function issueGovernanceAuditVerificationReceipt(
     contentType: (input.receiptFormat === "csv" ? "text/csv;charset=utf-8" : "application/pdf") as GovernanceAuditVerificationReceipt["contentType"],
     verificationAt,
     verificationAtWib: wibTime(verificationAt),
-    applicationVersion: "StoreOS Governance Audit v2.9" as const,
+    applicationVersion: "StoreOS Governance Audit v2.11" as const,
     export: {
       exportId: artifact.exportId,
       format: artifact.format,
