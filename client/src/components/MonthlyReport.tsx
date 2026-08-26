@@ -38,6 +38,22 @@ const retainedAgeMonths = (generatedAt: Date | string) => {
   return Math.max(0, (now.year - generated.year) * 12 + now.month - generated.month);
 };
 
+type QrExpiryPolicyHistoryEvent = {
+  eventId: string;
+  previousValidityMinutes: number;
+  newValidityMinutes: number;
+  resultingValidityMinutes: number;
+  changedAt: Date | string;
+  actorOpenId: string;
+};
+
+function QrExpiryPolicyHistory({ history, isLoading, isError, currentValidityMinutes }: { history: QrExpiryPolicyHistoryEvent[] | undefined; isLoading: boolean; isError: boolean; currentValidityMinutes: number }) {
+  return <section className="governance-qr-policy-history" aria-label="Riwayat Kebijakan QR">
+    <div className="governance-section-heading"><History size={16} /><div><strong>Riwayat Kebijakan QR</strong><small>Perubahan efektif dicatat append-only. QR yang telah diterbitkan mempertahankan waktu kedaluwarsanya.</small></div></div>
+    {isLoading ? <div className="loading-state compact-loading"><span className="loading-dot" /> Memuat riwayat kebijakan QR…</div> : isError ? <p role="alert" className="integrity-error">Riwayat kebijakan QR tidak tersedia atau akses owner-admin ditolak.</p> : history?.length ? <ol className="governance-qr-policy-history-list">{history.map((event) => <li key={event.eventId}><div><strong>{event.previousValidityMinutes} → {event.newValidityMinutes} menit</strong><small>{wibTime(event.changedAt)} · oleh {event.actorOpenId}</small></div><code title={event.eventId}>{event.eventId}</code></li>)}</ol> : <div className="governance-qr-policy-history-empty"><History size={15} /><span>Belum ada perubahan kebijakan QR. Durasi aktif saat ini: {currentValidityMinutes} menit.</span></div>}
+  </section>;
+}
+
 function ArtifactDownload({ year, month, kind, status }: { year: number; month: number; kind: "csv" | "html" | "pdf"; status: IntegrityStatus }) {
   const extension = kind === "html" ? "HTML" : kind.toUpperCase();
   const [isDownloading, setIsDownloading] = useState(false);
@@ -112,6 +128,7 @@ function GovernanceAuditExportPanel({ enabled, initialYear }: { enabled: boolean
   const qrRevocationMutation = trpc.reports.revokeMonthlyArtifactGovernanceAuditVerificationQr.useMutation();
   const qrExpiryPolicyQuery = trpc.reports.getMonthlyArtifactGovernanceAuditQrExpiryPolicy.useQuery(undefined, { enabled, retry: false, refetchOnWindowFocus: false });
   const qrExpiryPolicyMutation = trpc.reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy.useMutation();
+  const qrExpiryPolicyHistoryQuery = trpc.reports.listMonthlyArtifactGovernanceAuditQrExpiryPolicyHistory.useQuery(undefined, { enabled, retry: false, refetchOnWindowFocus: false });
   const [latestExport, setLatestExport] = useState<(GovernanceAuditIntegrityArtifact & {
     generatedAt: Date | string;
     timezone: "Asia/Jakarta";
@@ -217,8 +234,9 @@ function GovernanceAuditExportPanel({ enabled, initialYear }: { enabled: boolean
       onSuccess: async (policy) => {
         setQrExpiryMinutes(policy.validityMinutes);
         setQrExpiryPolicyHydrated(true);
-        setQrExpiryMessage(`Masa berlaku QR baru disimpan: ${policy.validityMinutes} menit. Hanya QR yang diterbitkan setelah perubahan ini yang menggunakan durasi baru.`);
+        setQrExpiryMessage(policy.outcome === "unchanged" ? `Masa berlaku QR tetap ${policy.validityMinutes} menit. Tidak ada event riwayat baru karena konfigurasi efektif tidak berubah.` : `Masa berlaku QR baru disimpan: ${policy.validityMinutes} menit. Hanya QR yang diterbitkan setelah perubahan ini yang menggunakan durasi baru.`);
         await qrExpiryPolicyQuery.refetch();
+        await qrExpiryPolicyHistoryQuery.refetch();
       },
       onError: () => setQrExpiryMessage("Masa berlaku QR harus berupa bilangan bulat antara 5 menit dan 7 hari. Tidak ada QR yang diubah."),
     });
@@ -244,6 +262,7 @@ function GovernanceAuditExportPanel({ enabled, initialYear }: { enabled: boolean
   const qrCanBeRevoked = Boolean(latestReceipt && !qrRevocation && new Date(latestReceipt.qr.expiresAt).getTime() > Date.now());
   return <Panel className="governance-audit-export-panel" title="Ekspor Audit Governance" description="Ekspor read-only jejak lifecycle yang sudah tersimpan. Filter diproses di server dalam scope owner-admin dan tidak mencatat event lifecycle baru.">
     <div className="governance-audit-stack">
+      <QrExpiryPolicyHistory history={qrExpiryPolicyHistoryQuery.data} isLoading={qrExpiryPolicyHistoryQuery.isLoading} isError={qrExpiryPolicyHistoryQuery.isError} currentValidityMinutes={qrExpiryPolicyQuery.data?.validityMinutes ?? 30} />
       <div className="governance-audit-filters" aria-label="Filter ekspor audit governance">
         <label className="field"><span>Tahun periode</span><select aria-label="Tahun audit governance" className="form-input" value={auditYear} onChange={(event) => setAuditYear(event.target.value === "all" ? "all" : Number(event.target.value))}><option value="all">Semua tahun</option>{Array.from({ length: 8 }, (_, index) => initialYear - 5 + index).map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
         <label className="field"><span>Bulan periode</span><select aria-label="Bulan audit governance" className="form-input" value={auditMonth} onChange={(event) => setAuditMonth(event.target.value === "all" ? "all" : Number(event.target.value))}><option value="all">Semua bulan</option>{months.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}</select></label>

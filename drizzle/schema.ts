@@ -259,6 +259,21 @@ export const governanceAuditQrExpiryPolicies = mysqlTable("governanceAuditQrExpi
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (table) => [uniqueIndex("governance_audit_qr_expiry_owner_unique").on(table.ownerOpenId)]);
 
+/** Append-only owner audit trail for effective Governance Audit QR expiry-policy changes. */
+export const governanceAuditQrExpiryPolicyHistory = mysqlTable("governanceAuditQrExpiryPolicyHistory", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerOpenId: varchar("ownerOpenId", { length: 64 }).notNull(),
+  eventId: varchar("eventId", { length: 48 }).notNull(),
+  previousValidityMinutes: int("previousValidityMinutes").notNull(),
+  newValidityMinutes: int("newValidityMinutes").notNull(),
+  resultingValidityMinutes: int("resultingValidityMinutes").notNull(),
+  changedAt: timestamp("changedAt").notNull(),
+  actorOpenId: varchar("actorOpenId", { length: 64 }).notNull(),
+}, (table) => [
+  uniqueIndex("governance_audit_qr_expiry_history_event_unique").on(table.eventId),
+  index("governance_audit_qr_expiry_history_owner_changed_idx").on(table.ownerOpenId, table.changedAt),
+]);
+
 /** Immutable governance state for a single opaque QR verification reference. */
 export const governanceAuditQrRevocations = mysqlTable("governanceAuditQrRevocations", {
   id: int("id").autoincrement().primaryKey(),

@@ -1,7 +1,8 @@
 import { and, count, desc, eq, gte, inArray, lt } from "drizzle-orm";
+import { createHash } from "node:crypto";
 import { drizzle } from "drizzle-orm/mysql2";
 import { nanoid } from "nanoid";
-import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, governanceAuditQrExpiryPolicies, governanceAuditQrRevocations, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, stockOpnameFollowUps, users } from "../drizzle/schema";
+import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, governanceAuditQrExpiryPolicies, governanceAuditQrExpiryPolicyHistory, governanceAuditQrRevocations, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, stockOpnameFollowUps, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import type { z } from "zod";
 import type { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput, stockOpnameFollowUpInput, stockOpnameFollowUpNoteInput, stockOpnameHistoryInput } from "./foundationSchemas";
@@ -10,7 +11,7 @@ import { planRecipeDeductions } from "./sales";
 import { summarizeFinancialSales, summarizeProductFinancialDetail, type FinancialSale } from "./financials";
 import { summarizeInventoryIntelligence } from "./inventoryIntelligence";
 import { applyStockOpnameFollowUpStatuses, summarizeOpenStockOpnameSessions, summarizeStockOpnameSessions } from "./opnameHistory";
-import { GOVERNANCE_AUDIT_QR_DEFAULT_VALIDITY_MINUTES, isValidGovernanceAuditQrValidityMinutes } from "./governanceAuditQrExpiry";
+import { GOVERNANCE_AUDIT_QR_DEFAULT_VALIDITY_MINUTES, isValidGovernanceAuditQrValidityMinutes, resolveGovernanceAuditQrExpiryPolicyChange } from "./governanceAuditQrExpiry";
 import { normalizeGovernanceAuditQrRevocationReason } from "./governanceAuditQrRevocation";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -465,16 +466,39 @@ export async function getGovernanceAuditQrExpiryPolicy(ownerOpenId: string) {
   return (await db.select().from(governanceAuditQrExpiryPolicies).where(eq(governanceAuditQrExpiryPolicies.ownerOpenId, ownerOpenId)).limit(1))[0];
 }
 
-export async function updateGovernanceAuditQrExpiryPolicy(ownerOpenId: string, validityMinutes: number) {
+export async function updateGovernanceAuditQrExpiryPolicy(ownerOpenId: string, validityMinutes: number, actorOpenId = ownerOpenId) {
   if (!isValidGovernanceAuditQrValidityMinutes(validityMinutes)) throw new Error("Masa berlaku QR harus berada dalam batas yang diizinkan.");
   const db = await requireDb();
   const existing = await db.select().from(governanceAuditQrExpiryPolicies).where(eq(governanceAuditQrExpiryPolicies.ownerOpenId, ownerOpenId)).limit(1);
-  if (existing[0]) {
-    await db.update(governanceAuditQrExpiryPolicies).set({ validityMinutes }).where(eq(governanceAuditQrExpiryPolicies.id, existing[0].id));
-  } else {
+  if (!existing[0]) {
     await db.insert(governanceAuditQrExpiryPolicies).values({ ownerOpenId, validityMinutes });
+    const policy = await getGovernanceAuditQrExpiryPolicy(ownerOpenId);
+    return { ...policy, outcome: "updated" as const, historyEvent: null };
   }
-  return getGovernanceAuditQrExpiryPolicy(ownerOpenId);
+  const change = resolveGovernanceAuditQrExpiryPolicyChange(existing[0].validityMinutes, validityMinutes);
+  if (change.outcome === "unchanged") {
+    return { ...existing[0], outcome: "unchanged" as const, historyEvent: null };
+  }
+  const changedAt = new Date();
+  const eventId = `qrph_${createHash("sha256").update(`${ownerOpenId}:${existing[0].validityMinutes}:${validityMinutes}:${changedAt.toISOString()}`).digest("hex").slice(0, 32)}`;
+  await db.update(governanceAuditQrExpiryPolicies).set({ validityMinutes }).where(eq(governanceAuditQrExpiryPolicies.id, existing[0].id));
+  await db.insert(governanceAuditQrExpiryPolicyHistory).values({
+    ownerOpenId,
+    eventId,
+    previousValidityMinutes: change.previousValidityMinutes,
+    newValidityMinutes: change.resultingValidityMinutes,
+    resultingValidityMinutes: change.resultingValidityMinutes,
+    changedAt,
+    actorOpenId,
+  });
+  const policy = await getGovernanceAuditQrExpiryPolicy(ownerOpenId);
+  const historyEvent = (await db.select().from(governanceAuditQrExpiryPolicyHistory).where(eq(governanceAuditQrExpiryPolicyHistory.eventId, eventId)).limit(1))[0] ?? null;
+  return { ...policy, outcome: "updated" as const, historyEvent };
+}
+
+export async function listGovernanceAuditQrExpiryPolicyHistory(ownerOpenId: string) {
+  const db = await requireDb();
+  return db.select().from(governanceAuditQrExpiryPolicyHistory).where(eq(governanceAuditQrExpiryPolicyHistory.ownerOpenId, ownerOpenId)).orderBy(desc(governanceAuditQrExpiryPolicyHistory.changedAt), desc(governanceAuditQrExpiryPolicyHistory.id));
 }
 
 export async function getGovernanceAuditQrRevocation(ownerOpenId: string, referenceId: string) {

@@ -385,3 +385,11 @@
 - [x] Add responsive owner-admin revoke confirmation, status, reason, actor, timestamp, and audit-history UI for eligible QR references
 - [x] Add Phase 2.12 authorization, idempotency, invalid/expired/revoked resolver, integrity precedence, append-only, domain-isolation, browser, and responsive regression coverage
 - [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.12
+
+- [x] Inspect the persisted QR expiry policy contract, authorization, database helpers, and Reports governance UI for Phase 2.13 history reuse
+- [x] Add append-only owner-scoped QR expiry-policy change history with deterministic event IDs and no-op duplicate protection
+- [x] Add protected owner-admin policy-history retrieval with member and cross-scope denial
+- [x] Preserve policy bounds, original QR issued/expiry timestamps, and server-only application of changed policy to newly issued QR references
+- [x] Add responsive Riwayat Kebijakan QR UI with current state, chronological history, empty/loading/error states, and no operational-domain mutations
+- [x] Add Phase 2.13 policy change, no-op, ordering, actor/WIB, authorization, QR-isolation, append-only, browser, and responsive regression coverage
+- [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.13

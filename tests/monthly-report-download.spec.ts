@@ -264,9 +264,11 @@ async function installArtifactOwnerRoutes(
   governanceAuditQrExpiryPolicy: { ownerOpenId: string; validityMinutes: number } = { ownerOpenId: "owner-1", validityMinutes: 30 },
   onQrExpiryPolicyUpdate?: (validityMinutes: number) => void,
   qrRevocationWorkflow?: { issuedAt?: string; revocation?: unknown; onRevoke?: (reason: string | null) => void },
+  qrExpiryPolicyHistory: Array<{ eventId: string; previousValidityMinutes: number; newValidityMinutes: number; resultingValidityMinutes: number; changedAt: string; actorOpenId: string }> = [],
 ) {
   const owner = { id: 1, openId: "owner-1", name: "Pemilik", role: "admin" };
   let qrExpiryValidityMinutes = governanceAuditQrExpiryPolicy.validityMinutes;
+  const qrExpiryHistory = [...qrExpiryPolicyHistory];
   let qrRevocation = qrRevocationWorkflow?.revocation ?? null;
   await page.route("**/api/trpc/**", async (route) => {
     const procedures = new URL(route.request().url()).pathname.split("/").at(-1)?.split(",") ?? [];
@@ -275,7 +277,9 @@ async function installArtifactOwnerRoutes(
     const requestedReceiptFormat = encodedRequest.includes('"receiptFormat":"pdf"') ? "pdf" : "csv";
     const requestedQrExpiry = Number(encodedRequest.match(/"validityMinutes":(\d+)/)?.[1]);
     const requestedQrRevocationReason = encodedRequest.match(/"reason":"([^"\\]*(?:\\.[^"\\]*)*)"/)?.[1] ?? null;
+    const qrExpiryChanged = procedures.includes("reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy") && Number.isInteger(requestedQrExpiry) && requestedQrExpiry !== qrExpiryValidityMinutes;
     if (procedures.includes("reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy") && Number.isInteger(requestedQrExpiry)) {
+      if (qrExpiryChanged) qrExpiryHistory.unshift({ eventId: `qrph_browser_${requestedQrExpiry}`, previousValidityMinutes: qrExpiryValidityMinutes, newValidityMinutes: requestedQrExpiry, resultingValidityMinutes: requestedQrExpiry, changedAt: "2026-08-26T02:10:00.000Z", actorOpenId: "owner-1" });
       qrExpiryValidityMinutes = requestedQrExpiry;
       onQrExpiryPolicyUpdate?.(requestedQrExpiry);
     }
@@ -301,8 +305,9 @@ async function installArtifactOwnerRoutes(
                             : procedure === "reports.resolveMonthlyArtifactGovernanceAuditVerificationQr" ? governanceAuditQrVerification
                             : procedure === "reports.getMonthlyArtifactGovernanceAuditQrRevocation" ? qrRevocation
                               : procedure === "reports.revokeMonthlyArtifactGovernanceAuditVerificationQr" ? { outcome: "revoked", revocation: qrRevocation }
-                            : procedure === "reports.getMonthlyArtifactGovernanceAuditQrExpiryPolicy" ? { ownerOpenId: "owner-1", validityMinutes: qrExpiryValidityMinutes }
-                              : procedure === "reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy" ? { ownerOpenId: "owner-1", validityMinutes: qrExpiryValidityMinutes }
+                              : procedure === "reports.getMonthlyArtifactGovernanceAuditQrExpiryPolicy" ? { ownerOpenId: "owner-1", validityMinutes: qrExpiryValidityMinutes }
+                              : procedure === "reports.listMonthlyArtifactGovernanceAuditQrExpiryPolicyHistory" ? qrExpiryHistory
+                              : procedure === "reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy" ? { ownerOpenId: "owner-1", validityMinutes: qrExpiryValidityMinutes, outcome: qrExpiryChanged ? "updated" : "unchanged" }
                             : procedure === "reports.archiveMonthlyArtifact" ? (onArchive?.(), archiveResult)
               : undefined;
       return data === undefined ? { error: { json: { message: `Unhandled test procedure: ${procedure}`, code: -32601, data: { code: "NOT_FOUND", httpStatus: 404 } } } } : { result: { data: { json: data } } };
@@ -589,6 +594,8 @@ test("allows the owner-admin to persist a bounded QR expiry policy and applies i
   await page.goto("/reports");
   await page.getByRole("button", { name: "CSV Audit" }).click();
   const integrity = page.getByLabel("Integritas ekspor audit governance");
+  const policyHistory = page.getByLabel("Riwayat Kebijakan QR");
+  await expect(policyHistory).toContainText("Belum ada perubahan kebijakan QR");
   const expiryInput = integrity.getByLabel("Masa berlaku QR dalam menit");
   await expect(expiryInput).toHaveValue("30");
   await expiryInput.fill("90");
@@ -596,6 +603,13 @@ test("allows the owner-admin to persist a bounded QR expiry policy and applies i
   await expect(integrity.getByText("Masa berlaku QR baru disimpan: 90 menit", { exact: false })).toBeVisible();
   await expect(expiryInput).toHaveValue("90");
   expect(policyUpdates).toEqual([90]);
+  await expect(policyHistory).toContainText("30 → 90 menit");
+  await expect(policyHistory).toContainText("oleh owner-1");
+  await expect(policyHistory).toContainText("WIB");
+  await expect(policyHistory.locator(".governance-qr-policy-history-list li")).toHaveCount(1);
+  await integrity.getByRole("button", { name: "Simpan durasi" }).click();
+  await expect(integrity.getByText("Tidak ada event riwayat baru", { exact: false })).toBeVisible();
+  await expect(policyHistory.locator(".governance-qr-policy-history-list li")).toHaveCount(1);
 
   const receiptDownloadPromise = page.waitForEvent("download");
   await integrity.getByRole("button", { name: "Bukti CSV" }).click();

@@ -7,3 +7,14 @@ export function isValidGovernanceAuditQrValidityMinutes(value: number) {
     && value >= GOVERNANCE_AUDIT_QR_MIN_VALIDITY_MINUTES
     && value <= GOVERNANCE_AUDIT_QR_MAX_VALIDITY_MINUTES;
 }
+
+export function resolveGovernanceAuditQrExpiryPolicyChange(previousValidityMinutes: number, requestedValidityMinutes: number) {
+  if (!isValidGovernanceAuditQrValidityMinutes(previousValidityMinutes) || !isValidGovernanceAuditQrValidityMinutes(requestedValidityMinutes)) {
+    throw new Error("Masa berlaku QR harus berada dalam batas yang diizinkan.");
+  }
+  return {
+    outcome: previousValidityMinutes === requestedValidityMinutes ? "unchanged" as const : "updated" as const,
+    previousValidityMinutes,
+    resultingValidityMinutes: requestedValidityMinutes,
+  };
+}

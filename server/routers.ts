@@ -125,7 +125,11 @@ export const appRouter = router({
       validityMinutes: z.number().int().min(5).max(10_080),
     })).mutation(({ ctx, input }) => {
       if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Pengaturan masa berlaku QR dibatasi untuk pemilik StoreOS." });
-      return runMutation("Pengaturan masa berlaku QR", () => db.updateGovernanceAuditQrExpiryPolicy(ctx.user.openId, input.validityMinutes));
+      return runMutation("Pengaturan masa berlaku QR", () => db.updateGovernanceAuditQrExpiryPolicy(ctx.user.openId, input.validityMinutes, ctx.user.openId));
+    }),
+    listMonthlyArtifactGovernanceAuditQrExpiryPolicyHistory: protectedProcedure.query(({ ctx }) => {
+      if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Riwayat kebijakan QR dibatasi untuk pemilik StoreOS." });
+      return runMutation("Riwayat kebijakan QR", () => db.listGovernanceAuditQrExpiryPolicyHistory(ctx.user.openId));
     }),
     revokeMonthlyArtifactGovernanceAuditVerificationQr: protectedProcedure.input(z.object({
       referenceId: z.string().regex(/^qr_[a-f0-9]{32}$/),

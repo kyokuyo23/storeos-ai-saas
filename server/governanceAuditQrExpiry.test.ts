@@ -4,6 +4,7 @@ import {
   GOVERNANCE_AUDIT_QR_MAX_VALIDITY_MINUTES,
   GOVERNANCE_AUDIT_QR_MIN_VALIDITY_MINUTES,
   isValidGovernanceAuditQrValidityMinutes,
+  resolveGovernanceAuditQrExpiryPolicyChange,
 } from "./governanceAuditQrExpiry";
 
 describe("Phase 2.11 governance audit QR expiry policy bounds", () => {
@@ -20,5 +21,11 @@ describe("Phase 2.11 governance audit QR expiry policy bounds", () => {
     for (const value of [0, 4, 10_081, 30.5, Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(isValidGovernanceAuditQrValidityMinutes(value)).toBe(false);
     }
+  });
+
+  it("records only effective policy changes and makes unchanged requests deterministic no-ops", () => {
+    expect(resolveGovernanceAuditQrExpiryPolicyChange(30, 30)).toEqual({ outcome: "unchanged", previousValidityMinutes: 30, resultingValidityMinutes: 30 });
+    expect(resolveGovernanceAuditQrExpiryPolicyChange(30, 90)).toEqual({ outcome: "updated", previousValidityMinutes: 30, resultingValidityMinutes: 90 });
+    expect(() => resolveGovernanceAuditQrExpiryPolicyChange(4, 30)).toThrow("batas yang diizinkan");
   });
 });

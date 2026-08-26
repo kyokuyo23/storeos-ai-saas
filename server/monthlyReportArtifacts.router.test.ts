@@ -20,9 +20,10 @@ const { getGovernanceAuditVerificationQrReference, resolveGovernanceAuditVerific
   resolveGovernanceAuditVerificationQr: vi.fn(() => ({ status: "verified", exportId: `storeos-governance-audit-csv-${"a".repeat(64)}`, verificationStatus: "verified" })),
   revokeGovernanceAuditVerificationQrReference: vi.fn(),
 }));
-const { getGovernanceAuditQrExpiryPolicy, getGovernanceAuditQrRevocation, revokeGovernanceAuditQrReference, updateGovernanceAuditQrExpiryPolicy } = vi.hoisted(() => ({
+const { getGovernanceAuditQrExpiryPolicy, getGovernanceAuditQrRevocation, listGovernanceAuditQrExpiryPolicyHistory, revokeGovernanceAuditQrReference, updateGovernanceAuditQrExpiryPolicy } = vi.hoisted(() => ({
   getGovernanceAuditQrExpiryPolicy: vi.fn(),
   getGovernanceAuditQrRevocation: vi.fn(),
+  listGovernanceAuditQrExpiryPolicyHistory: vi.fn(),
   revokeGovernanceAuditQrReference: vi.fn(),
   updateGovernanceAuditQrExpiryPolicy: vi.fn(),
 }));
@@ -37,7 +38,7 @@ vi.mock("./monthlyReportArtifacts", () => ({
 vi.mock("./governanceAuditExportIntegrity", () => ({ generateGovernanceAuditExportArtifact, registerGeneratedGovernanceAuditExport, verifyGovernanceAuditExportBytes }));
 vi.mock("./governanceAuditVerificationReceipts", () => ({ issueGovernanceAuditVerificationReceipt }));
 vi.mock("./governanceAuditVerificationQr", () => ({ getGovernanceAuditVerificationQrReference, resolveGovernanceAuditVerificationQr, revokeGovernanceAuditVerificationQrReference }));
-vi.mock("./db", () => ({ getGovernanceAuditQrExpiryPolicy, getGovernanceAuditQrRevocation, revokeGovernanceAuditQrReference, updateGovernanceAuditQrExpiryPolicy }));
+vi.mock("./db", () => ({ getGovernanceAuditQrExpiryPolicy, getGovernanceAuditQrRevocation, listGovernanceAuditQrExpiryPolicyHistory, revokeGovernanceAuditQrReference, updateGovernanceAuditQrExpiryPolicy }));
 
 import { appRouter } from "./routers";
 
@@ -50,6 +51,7 @@ describe("reports.monthlyArtifacts authorization", () => {
     vi.clearAllMocks();
     getGovernanceAuditQrExpiryPolicy.mockResolvedValue({ ownerOpenId: "owner-1", validityMinutes: 30 });
     updateGovernanceAuditQrExpiryPolicy.mockImplementation(async (ownerOpenId: string, validityMinutes: number) => ({ ownerOpenId, validityMinutes }));
+    listGovernanceAuditQrExpiryPolicyHistory.mockResolvedValue([]);
     getGovernanceAuditVerificationQrReference.mockReturnValue({ status: "verified", reference: {} });
     revokeGovernanceAuditQrReference.mockResolvedValue({ outcome: "revoked", revocation: { referenceId: `qr_${"a".repeat(32)}`, actorOpenId: "owner-1" } });
     getGovernanceAuditQrRevocation.mockResolvedValue(null);
@@ -155,7 +157,18 @@ describe("reports.monthlyArtifacts authorization", () => {
     await expect(caller({ openId: "owner-1", role: "admin" }).reports.getMonthlyArtifactGovernanceAuditQrExpiryPolicy()).resolves.toEqual({ ownerOpenId: "owner-1", validityMinutes: 30 });
     await expect(caller({ openId: "owner-1", role: "admin" }).reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy({ validityMinutes: 90 })).resolves.toEqual({ ownerOpenId: "owner-1", validityMinutes: 90 });
     expect(getGovernanceAuditQrExpiryPolicy).toHaveBeenCalledWith("owner-1");
-    expect(updateGovernanceAuditQrExpiryPolicy).toHaveBeenCalledWith("owner-1", 90);
+    expect(updateGovernanceAuditQrExpiryPolicy).toHaveBeenCalledWith("owner-1", 90, "owner-1");
+  });
+
+  it("restricts policy-change history to the authenticated owner-admin and forwards only its owner scope", async () => {
+    const history = [{ eventId: "qrph_test", previousValidityMinutes: 30, newValidityMinutes: 90, resultingValidityMinutes: 90, actorOpenId: "owner-1", changedAt: new Date("2026-08-26T08:00:00.000Z") }];
+    listGovernanceAuditQrExpiryPolicyHistory.mockResolvedValue(history);
+    await expect(caller(null).reports.listMonthlyArtifactGovernanceAuditQrExpiryPolicyHistory()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller({ openId: "owner-1", role: "user" }).reports.listMonthlyArtifactGovernanceAuditQrExpiryPolicyHistory()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller({ openId: "other-workspace", role: "admin" }).reports.listMonthlyArtifactGovernanceAuditQrExpiryPolicyHistory()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(listGovernanceAuditQrExpiryPolicyHistory).not.toHaveBeenCalled();
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.listMonthlyArtifactGovernanceAuditQrExpiryPolicyHistory()).resolves.toEqual(history);
+    expect(listGovernanceAuditQrExpiryPolicyHistory).toHaveBeenCalledWith("owner-1");
   });
 
   it("rejects invalid QR expiry policy values before reaching persistence", async () => {
