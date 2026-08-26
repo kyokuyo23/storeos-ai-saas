@@ -1,8 +1,8 @@
-import { AlertTriangle, Archive, CheckCircle2, Clock3, Download, FileText, History, RefreshCw, ShieldCheck, X } from "lucide-react";
+import { AlertTriangle, Archive, CheckCircle2, Clock3, Copy, Download, FileText, History, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { downloadMonthlyReportCsv, printMonthlyReport } from "@/lib/monthlyReportExports";
-import { downloadGovernanceAuditCsv, governanceAuditFilterScope, printGovernanceAudit, type GovernanceAuditExportData } from "@/lib/governanceAuditExports";
+import { downloadGovernanceAuditIntegrityArtifact, governanceAuditFilterScope, type GovernanceAuditExportData, type GovernanceAuditIntegrityArtifact } from "@/lib/governanceAuditExports";
 import { AppShell, ErrorState, PageHeader, Panel } from "./FoundationShell";
 import { useAuth } from "../_core/hooks/useAuth";
 import { startLogin } from "@/const";
@@ -106,8 +106,51 @@ function GovernanceAuditExportPanel({ enabled, initialYear }: { enabled: boolean
     ...(auditScope === "all" ? {} : { artifactScope: auditScope }),
   }), [auditYear, auditMonth, auditLifecycle, auditFormat, auditScope]);
   const auditQuery = trpc.reports.monthlyArtifactGovernanceAuditExport.useQuery(input, { enabled, retry: false, refetchOnWindowFocus: false });
+  const exportMutation = trpc.reports.generateMonthlyArtifactGovernanceAuditExport.useMutation();
+  const verifyMutation = trpc.reports.verifyMonthlyArtifactGovernanceAuditExport.useMutation();
+  const [latestExport, setLatestExport] = useState<(GovernanceAuditIntegrityArtifact & {
+    generatedAt: Date | string;
+    timezone: "Asia/Jakarta";
+    scope: string;
+    recordCount: number;
+    byteSize: number;
+    sha256: string;
+  }) | null>(null);
+  const [integrityMessage, setIntegrityMessage] = useState<string | null>(null);
+  const [copyMessage, setCopyMessage] = useState<string | null>(null);
   if (!enabled) return null;
   const audit = auditQuery.data as GovernanceAuditExportData | undefined;
+  const verifyLatestExport = (artifact = latestExport) => {
+    if (!artifact) return;
+    setIntegrityMessage(null);
+    verifyMutation.mutate({ exportId: artifact.exportId, bytesBase64: artifact.bytesBase64 }, {
+      onSuccess: (verification) => setIntegrityMessage(verification.verified
+        ? `Terverifikasi server · ${verification.byteSize} byte · SHA-256 cocok.`
+        : `HASH TIDAK COCOK · SHA-256 aktual tidak sama dengan metadata ekspor.`),
+      onError: () => setIntegrityMessage("Verifikasi server gagal. Byte ekspor tidak diterima sebagai artefak valid."),
+    });
+  };
+  const generateAndDownload = (format: "csv" | "pdf") => {
+    setIntegrityMessage(null);
+    setCopyMessage(null);
+    exportMutation.mutate({ ...input, format }, {
+      onSuccess: (artifact) => {
+        setLatestExport(artifact);
+        downloadGovernanceAuditIntegrityArtifact(artifact);
+        verifyLatestExport(artifact);
+      },
+      onError: () => setIntegrityMessage("Ekspor audit tidak dapat dibuat. Pastikan akses owner-admin masih aktif."),
+    });
+  };
+  const copyHash = async () => {
+    if (!latestExport) return;
+    try {
+      await navigator.clipboard.writeText(latestExport.sha256);
+      setCopyMessage("Hash disalin.");
+    } catch {
+      setCopyMessage("Hash tersedia untuk disalin dari kolom di bawah.");
+    }
+  };
   return <Panel className="governance-audit-export-panel" title="Ekspor Audit Governance" description="Ekspor read-only jejak lifecycle yang sudah tersimpan. Filter diproses di server dalam scope owner-admin dan tidak mencatat event lifecycle baru.">
     <div className="governance-audit-stack">
       <div className="governance-audit-filters" aria-label="Filter ekspor audit governance">
@@ -118,7 +161,8 @@ function GovernanceAuditExportPanel({ enabled, initialYear }: { enabled: boolean
         <label className="field"><span>Status artefak</span><select aria-label="Status artefak audit governance" className="form-input" value={auditScope} onChange={(event) => setAuditScope(event.target.value as "active" | "archived_or_retired" | "all")}><option value="all">Aktif, archived, dan retired</option><option value="active">Aktif saja</option><option value="archived_or_retired">Archived / retired</option></select></label>
       </div>
       {auditQuery.isLoading ? <div className="loading-state"><span className="loading-dot" /> Menyiapkan audit governance…</div> : auditQuery.isError ? <ErrorState message="Ekspor audit governance tidak tersedia atau akses owner-admin ditolak." /> : audit ? <>
-        <div className="governance-audit-summary"><div><span>Audit lifecycle</span><strong>{number(audit.recordCount)} record</strong><small>{governanceAuditFilterScope(audit)}</small></div><div><span>Dibuat pada</span><strong>{wibTime(audit.generatedAt)}</strong><small>Metadata ekspor deterministik · {audit.timezone}</small></div><div className="governance-audit-actions"><button type="button" className="button secondary compact-button" onClick={() => downloadGovernanceAuditCsv(audit)}><Download size={14} /> CSV Audit</button><button type="button" className="button ghost compact-button" onClick={() => printGovernanceAudit(audit)}><FileText size={14} /> PDF / Cetak</button></div></div>
+        <div className="governance-audit-summary"><div><span>Audit lifecycle</span><strong>{number(audit.recordCount)} record</strong><small>{governanceAuditFilterScope(audit)}</small></div><div><span>Dibuat pada</span><strong>{wibTime(audit.generatedAt)}</strong><small>Scope dan bytes ekspor dihitung server-side · {audit.timezone}</small></div><div className="governance-audit-actions"><button type="button" className="button secondary compact-button" onClick={() => generateAndDownload("csv")} disabled={exportMutation.isPending}><Download size={14} /> {exportMutation.isPending ? "Menyiapkan" : "CSV Audit"}</button><button type="button" className="button ghost compact-button" onClick={() => generateAndDownload("pdf")} disabled={exportMutation.isPending}><FileText size={14} /> PDF Audit</button></div></div>
+        {latestExport && <div className="governance-export-integrity" aria-label="Integritas ekspor audit governance"><div className="governance-section-heading"><ShieldCheck size={16} /><strong>Integritas ekspor terbaru</strong><span className="badge success">Server-hashed</span></div><div className="governance-export-integrity-grid"><div><span>Format · ukuran</span><strong>{latestExport.format.toUpperCase()} · {fileSize(latestExport.byteSize)}</strong></div><div><span>Dibuat pada</span><strong>{wibTime(latestExport.generatedAt)}</strong></div><div className="integrity-scope"><span>Scope</span><strong>{latestExport.scope}</strong></div></div><div className="integrity-hash-row"><label htmlFor="governance-export-hash">SHA-256</label><input id="governance-export-hash" readOnly value={latestExport.sha256} aria-label="SHA-256 ekspor audit governance" /><button type="button" className="button ghost compact-button" onClick={() => void copyHash()}><Copy size={13} /> Salin</button></div><div className="integrity-verification-row"><button type="button" className="button secondary compact-button" onClick={() => verifyLatestExport()} disabled={verifyMutation.isPending}><RefreshCw size={13} /> {verifyMutation.isPending ? "Memverifikasi" : "Verifikasi ulang"}</button><small>Id: {latestExport.exportId}</small>{copyMessage && <span className="integrity-success">{copyMessage}</span>}{integrityMessage && <span role="status" className={integrityMessage.startsWith("Terverifikasi") ? "integrity-success" : "integrity-error"}>{integrityMessage}</span>}</div></div>}
         {audit.records.length ? <div className="governance-audit-preview" aria-label="Pratinjau audit lifecycle"><div className="governance-section-heading"><History size={16} /><strong>Pratinjau event lifecycle</strong><small>{audit.recordCount} record sesuai filter</small></div><ul>{audit.records.map((record, index) => <li key={`${record.reportPeriod.year}-${record.reportPeriod.month}-${record.lifecycleStatus}-${record.occurredAt}-${record.artifactFormat}-${index}`}><div><strong>{months[record.reportPeriod.month - 1]} {record.reportPeriod.year}</strong><span className={`badge ${lifecycleClass[record.lifecycleStatus]}`}>{lifecycleLabel[record.lifecycleStatus]}</span><small>{wibTime(record.occurredAt)} · {record.source} · {record.actor}</small></div><div><span className="badge neutral">{record.artifactScope}</span><small>{record.artifactFormat.toUpperCase()} · {record.bytes === null ? "Snapshot tidak tersedia" : `${fileSize(record.bytes)} · SHA-256 ${record.sha256?.slice(0, 12)}…`}</small></div></li>)}</ul>{audit.recordCount > 5 && <p className="settings-help"><History size={14} /> Pratinjau menampilkan 5 event terbaru; CSV dan cetak memuat seluruh {audit.recordCount} record terfilter.</p>}</div> : <div className="empty-state artifact-empty"><div className="empty-icon"><History size={20} /></div><strong>Tidak ada event lifecycle untuk filter ini.</strong><p>CSV audit tetap dapat diunduh sebagai bukti filter, metadata, dan hasil kosong tanpa mengubah lifecycle artefak.</p></div>}
       </> : null}
     </div>

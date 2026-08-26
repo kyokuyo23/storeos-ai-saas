@@ -189,6 +189,32 @@ const governanceAuditExportFixture = {
   ],
 };
 
+const governanceAuditExactCsv = "\ufeff\"Tahun\",\"Bulan\",\"Lifecycle event\",\"Waktu event (WIB)\",\"Sumber\",\"Aktor\",\"Format event\",\"Format artefak\",\"Ukuran byte\",\"SHA-256\",\"Status snapshot integritas\",\"Scope artefak\",\"Lifecycle saat ini\",\"Eligible arsip (WIB)\",\"Diarsipkan (WIB)\",\"Diretir (WIB)\",\"Alasan arsip\",\"Scope filter\",\"Metadata transisi\"\r\n\"2024\",\"10\",\"archived\",\"25 Agu 2026 10.00 WIB\",\"owner_archive_action\",\"owner-1\",\"bundle\",\"pdf\",\"512\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"recorded\",\"archived\",\"archived\",\"24 Agu 2026 10.00 WIB\",\"25 Agu 2026 10.00 WIB\",\"25 Agu 2026 10.00 WIB\",\"owner_approved_archive\",\"periode=semua; lifecycle=archived; format=semua; status artefak=semua\",\"owner_approved_archive, checksum tervalidasi\"\r\n";
+const governanceAuditExactCsvBytes = Buffer.from(governanceAuditExactCsv, "utf8");
+const governanceAuditIntegrityCsvFixture = {
+  exportId: `storeos-governance-audit-csv-${"d".repeat(64)}`,
+  format: "csv",
+  filename: "storeos-governance-audit-all-archived-all-all.csv",
+  contentType: "text/csv;charset=utf-8",
+  bytesBase64: governanceAuditExactCsvBytes.toString("base64"),
+  byteSize: governanceAuditExactCsvBytes.byteLength,
+  sha256: "d".repeat(64),
+  generatedAt: "2026-08-25T03:15:00.000Z",
+  timezone: "Asia/Jakarta",
+  scope: "periode=semua; lifecycle=archived; format=semua; status artefak=semua",
+  recordCount: 2,
+};
+const governanceAuditIntegrityPdfFixture = {
+  ...governanceAuditIntegrityCsvFixture,
+  exportId: `storeos-governance-audit-pdf-${"e".repeat(64)}`,
+  format: "pdf",
+  filename: "storeos-governance-audit-all-archived-all-all.pdf",
+  contentType: "application/pdf",
+  bytesBase64: Buffer.from("%PDF-1.4\nStoreOS Governance Audit\n%%EOF", "utf8").toString("base64"),
+  byteSize: Buffer.byteLength("%PDF-1.4\nStoreOS Governance Audit\n%%EOF"),
+  sha256: "e".repeat(64),
+};
+
 async function installArtifactOwnerRoutes(
   page: import("@playwright/test").Page,
   artifacts: unknown[],
@@ -197,10 +223,13 @@ async function installArtifactOwnerRoutes(
   archiveResult: unknown = { outcome: "archived", artifact: { id: 42, year: 2024, month: 10, lifecycleStatus: "archived" }, availability: [], archivedAt: "2026-08-25T00:00:00.000Z" },
   onArchive?: () => void,
   governanceAuditExport: unknown = governanceAuditExportFixture,
+  governanceAuditVerification: unknown = { verified: true, status: "verified", byteSize: governanceAuditIntegrityCsvFixture.byteSize, expectedSha256: governanceAuditIntegrityCsvFixture.sha256, actualSha256: governanceAuditIntegrityCsvFixture.sha256 },
 ) {
   const owner = { id: 1, openId: "owner-1", name: "Pemilik", role: "admin" };
   await page.route("**/api/trpc/**", async (route) => {
     const procedures = new URL(route.request().url()).pathname.split("/").at(-1)?.split(",") ?? [];
+    const encodedRequest = decodeURIComponent(`${route.request().url()} ${route.request().postData() ?? ""}`);
+    const requestedAuditFormat = encodedRequest.includes('"format":"pdf"') ? "pdf" : "csv";
     const result = procedures.map((procedure) => {
       const data = procedure === "auth.me" ? owner
         : procedure === "reports.monthlySummary" ? reportFixture
@@ -208,7 +237,9 @@ async function installArtifactOwnerRoutes(
             : procedure === "reports.monthlyArtifactGovernance" ? governance
               : procedure === "reports.monthlyArtifactLifecycleHistory" ? lifecycleHistory
                 : procedure === "reports.monthlyArtifactGovernanceAuditExport" ? governanceAuditExport
-                : procedure === "reports.archiveMonthlyArtifact" ? (onArchive?.(), archiveResult)
+                  : procedure === "reports.generateMonthlyArtifactGovernanceAuditExport" ? (requestedAuditFormat === "pdf" ? governanceAuditIntegrityPdfFixture : governanceAuditIntegrityCsvFixture)
+                    : procedure === "reports.verifyMonthlyArtifactGovernanceAuditExport" ? governanceAuditVerification
+                    : procedure === "reports.archiveMonthlyArtifact" ? (onArchive?.(), archiveResult)
               : undefined;
       return data === undefined ? { error: { json: { message: `Unhandled test procedure: ${procedure}`, code: -32601, data: { code: "NOT_FOUND", httpStatus: 404 } } } } : { result: { data: { json: data } } };
     });
@@ -350,9 +381,6 @@ test("keeps the archive confirmation usable on a narrow mobile viewport", async 
 
 test("filters, downloads, and prints the owner-admin governance audit with scoped lifecycle metadata", async ({ page }, testInfo) => {
   const auditRequests: string[] = [];
-  await page.addInitScript(() => {
-    window.print = () => document.body.setAttribute("data-governance-audit-printed", "true");
-  });
   await installArtifactOwnerRoutes(page, [storedArtifactFixture]);
   page.on("request", (request) => {
     if (request.url().includes("reports.monthlyArtifactGovernanceAuditExport")) auditRequests.push(decodeURIComponent(request.url()));
@@ -372,20 +400,31 @@ test("filters, downloads, and prints the owner-admin governance audit with scope
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "CSV Audit" }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe("storeos-governance-audit-all-all-all-all-all.csv");
+  expect(download.suggestedFilename()).toBe(governanceAuditIntegrityCsvFixture.filename);
   const path = testInfo.outputPath(download.suggestedFilename());
   await download.saveAs(path);
+  expect(await readFile(path)).toEqual(governanceAuditExactCsvBytes);
   const csv = await readFile(path, "utf8");
   expect(csv.charCodeAt(0)).toBe(0xfeff);
   const parsed = parse(csv, { bom: true, columns: false, relax_column_count: false, skip_empty_lines: false }) as string[][];
   expect(parsed.every((row) => row.length === 19)).toBe(true);
   expect(parsed.find((row) => row[0] === "Tahun")).toContain("Metadata transisi");
-  expect(parsed.find((row) => row[0] === "2024" && row[3] === "archived")?.[18]).toBe("owner_approved_archive, checksum tervalidasi");
+  expect(parsed.find((row) => row[0] === "2024" && row[2] === "archived")?.[18]).toBe("owner_approved_archive, checksum tervalidasi");
+  const integrity = panel.getByLabel("Integritas ekspor audit governance");
+  await expect(integrity).toBeVisible();
+  await expect(integrity.getByLabel("SHA-256 ekspor audit governance")).toHaveValue("d".repeat(64));
+  await expect(integrity).toContainText(`${governanceAuditExactCsvBytes.byteLength} byte`);
+  await expect(integrity).toContainText("periode=semua; lifecycle=archived; format=semua; status artefak=semua");
+  await expect(integrity).toContainText("Terverifikasi server");
 
-  await panel.getByRole("button", { name: "PDF / Cetak" }).click();
-  await expect(page.locator("body")).toHaveAttribute("data-governance-audit-printed", "true");
-  await expect(page.locator("body")).not.toHaveClass(/printing-governance-audit/);
-  await expect(panel).toBeVisible();
+  const pdfDownloadPromise = page.waitForEvent("download");
+  await panel.getByRole("button", { name: "PDF Audit" }).click();
+  const pdfDownload = await pdfDownloadPromise;
+  expect(pdfDownload.suggestedFilename()).toBe(governanceAuditIntegrityPdfFixture.filename);
+  const pdfPath = testInfo.outputPath(pdfDownload.suggestedFilename());
+  await pdfDownload.saveAs(pdfPath);
+  expect((await readFile(pdfPath)).subarray(0, 5).toString()).toBe("%PDF-");
+  await expect(integrity.getByLabel("SHA-256 ekspor audit governance")).toHaveValue("e".repeat(64));
 });
 
 test("shows governance audit empty and error states without exposing raw artifact paths", async ({ page }) => {
@@ -407,6 +446,16 @@ test("shows governance audit empty and error states without exposing raw artifac
   await expect(page.getByText("Ekspor audit governance tidak tersedia atau akses owner-admin ditolak.")).toBeVisible();
 });
 
+test("shows an explicit integrity warning when server verification detects tampered audit export bytes", async ({ page }) => {
+  const mismatch = { verified: false, status: "hash_mismatch", byteSize: governanceAuditIntegrityCsvFixture.byteSize, expectedSha256: governanceAuditIntegrityCsvFixture.sha256, actualSha256: "f".repeat(64) };
+  await installArtifactOwnerRoutes(page, [storedArtifactFixture], governanceFixture, null, undefined, undefined, governanceAuditExportFixture, mismatch);
+  await page.goto("/reports");
+  await page.getByRole("button", { name: "CSV Audit" }).click();
+  const integrity = page.getByLabel("Integritas ekspor audit governance");
+  await expect(integrity.getByRole("status")).toContainText("HASH TIDAK COCOK");
+  await expect(integrity.getByRole("button", { name: "Verifikasi ulang" })).toBeVisible();
+});
+
 test("keeps governance audit filters and export actions readable on a narrow mobile viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await installArtifactOwnerRoutes(page, [storedArtifactFixture]);
@@ -415,7 +464,7 @@ test("keeps governance audit filters and export actions readable on a narrow mob
   const panel = page.locator(".governance-audit-export-panel");
   await expect(heading).toBeVisible();
   await expect(panel.getByRole("button", { name: "CSV Audit" })).toBeVisible();
-  await expect(panel.getByRole("button", { name: "PDF / Cetak" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "PDF Audit" })).toBeVisible();
   const box = await panel.boundingBox();
   expect(box?.width).toBeLessThanOrEqual(358);
 });

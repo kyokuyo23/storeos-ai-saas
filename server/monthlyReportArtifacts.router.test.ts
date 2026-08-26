@@ -7,6 +7,10 @@ const { archiveMonthlyReportArtifactWithOwnerApproval, getMonthlyReportArtifactG
   getMonthlyReportArtifactGovernanceSummary: vi.fn(async () => ({ retainedArtifactCount: 0 })),
   getMonthlyReportArtifactLifecycleHistory: vi.fn(async () => null),
 }));
+const { generateGovernanceAuditExportArtifact, verifyGovernanceAuditExportBytes } = vi.hoisted(() => ({
+  generateGovernanceAuditExportArtifact: vi.fn(async () => ({ exportId: `storeos-governance-audit-csv-${"a".repeat(64)}`, format: "csv", byteSize: 12, sha256: "a".repeat(64), bytesBase64: "77u/" })),
+  verifyGovernanceAuditExportBytes: vi.fn(() => ({ verified: true, status: "verified", byteSize: 3 })),
+}));
 vi.mock("./monthlyReportArtifacts", () => ({
   archiveMonthlyReportArtifactWithOwnerApproval,
   canAccessMonthlyReportArtifacts: (user: { openId: string; role: string } | null) => user?.openId === "owner-1" && user.role === "admin",
@@ -15,6 +19,7 @@ vi.mock("./monthlyReportArtifacts", () => ({
   getMonthlyReportArtifactLifecycleHistory,
   listMonthlyReportArtifacts,
 }));
+vi.mock("./governanceAuditExportIntegrity", () => ({ generateGovernanceAuditExportArtifact, verifyGovernanceAuditExportBytes }));
 
 import { appRouter } from "./routers";
 
@@ -76,5 +81,25 @@ describe("reports.monthlyArtifacts authorization", () => {
     const filters = { year: 2024, month: 1, lifecycleStatus: "archived" as const, artifactFormat: "pdf" as const, artifactScope: "archived_or_retired" as const };
     await expect(caller({ openId: "owner-1", role: "admin" }).reports.monthlyArtifactGovernanceAuditExport(filters)).resolves.toMatchObject({ kind: "storeos_governance_lifecycle_audit", recordCount: 0 });
     expect(getMonthlyReportArtifactGovernanceAuditExport).toHaveBeenCalledWith("owner-1", filters);
+  });
+
+  it("rejects anonymous, member, and cross-workspace exact-byte audit exports before bytes are generated", async () => {
+    const input = { year: 2024, month: 1, format: "csv" as const };
+    await expect(caller(null).reports.generateMonthlyArtifactGovernanceAuditExport(input)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller({ openId: "owner-1", role: "user" }).reports.generateMonthlyArtifactGovernanceAuditExport(input)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller({ openId: "other-workspace", role: "admin" }).reports.generateMonthlyArtifactGovernanceAuditExport(input)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(generateGovernanceAuditExportArtifact).not.toHaveBeenCalled();
+  });
+
+  it("generates only an owner-scoped exact-byte export and verifies only owner-admin supplied bytes", async () => {
+    const input = { year: 2024, lifecycleStatus: "archived" as const, artifactFormat: "pdf" as const, format: "pdf" as const };
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.generateMonthlyArtifactGovernanceAuditExport(input)).resolves.toMatchObject({ format: "csv", byteSize: 12 });
+    expect(generateGovernanceAuditExportArtifact).toHaveBeenCalledWith("owner-1", { year: 2024, lifecycleStatus: "archived", artifactFormat: "pdf" }, "pdf");
+
+    const verification = { exportId: `storeos-governance-audit-csv-${"a".repeat(64)}`, bytesBase64: "77u/" };
+    await expect(caller(null).reports.verifyMonthlyArtifactGovernanceAuditExport(verification)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller({ openId: "other-workspace", role: "admin" }).reports.verifyMonthlyArtifactGovernanceAuditExport(verification)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.verifyMonthlyArtifactGovernanceAuditExport(verification)).resolves.toMatchObject({ verified: true, status: "verified" });
+    expect(verifyGovernanceAuditExportBytes).toHaveBeenCalledWith(verification.exportId, verification.bytesBase64);
   });
 });

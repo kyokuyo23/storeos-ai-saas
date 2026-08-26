@@ -16,7 +16,10 @@ function decodeHtml(value: string) {
  * report metadata, financial/inventory values, and audit-note text remain in
  * one report representation.
  */
-export function printableMonthlyHtmlToPdf(printableHtml: string) {
+export function printableMonthlyHtmlToPdf(
+  printableHtml: string,
+  metadata: { title?: string; subject?: string; creationDate?: Date } = {},
+) {
   const plainText = decodeHtml(
     printableHtml
       .replace(/<style[\s\S]*?<\/style>/gi, "")
@@ -30,11 +33,12 @@ export function printableMonthlyHtmlToPdf(printableHtml: string) {
 
   const pdf = new jsPDF({ unit: "pt", format: "a4", compress: false });
   pdf.setProperties({
-    title: "StoreOS Monthly Management Report",
-    subject: "Read-only monthly financial and inventory management report",
+    title: metadata.title ?? "StoreOS Monthly Management Report",
+    subject: metadata.subject ?? "Read-only monthly financial and inventory management report",
     author: "StoreOS",
     creator: "StoreOS server-side report generator",
   });
+  if (metadata.creationDate) pdf.setCreationDate(metadata.creationDate);
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(10);
 

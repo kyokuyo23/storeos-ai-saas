@@ -349,3 +349,10 @@
 - [x] Add responsive governance audit export filters, download, print, loading, empty, authorization, and error UI states
 - [x] Add Phase 2.7 authorization, scope, filtering, integrity, CSV, printable, browser-download, and responsive regression coverage
 - [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.7
+
+- [x] Inspect the Phase 2.7 audit-export byte contract, protected router, print pipeline, and UI integration points for Phase 2.8
+- [x] Add owner-admin-only server generation of exact governance audit CSV and printable bytes with SHA-256, byte size, WIB metadata, scope, and deterministic identifiers
+- [x] Add protected server-side export-byte verification with explicit hash mismatch reporting and no lifecycle or domain mutation
+- [x] Show compact, copyable integrity metadata and verification status after CSV and printable/PDF audit exports
+- [x] Add Phase 2.8 exact-byte, BOM, Unicode, print/PDF, tamper, authorization, read-only, browser-download, and responsive coverage
+- [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.8

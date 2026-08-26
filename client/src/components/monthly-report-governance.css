@@ -122,6 +122,56 @@
   gap: 8px;
 }
 
+.governance-export-integrity {
+  display: grid;
+  gap: 11px;
+  padding: 14px;
+  border: 1px solid #b9dfd0;
+  border-radius: 12px;
+  background: #f4fbf8;
+}
+
+.governance-export-integrity .governance-section-heading { display: flex; align-items: center; gap: 7px; color: #2f6250; }
+.governance-export-integrity .governance-section-heading .badge { margin-left: auto; }
+
+.governance-export-integrity-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(160px, 1fr));
+  gap: 9px 16px;
+}
+
+.governance-export-integrity-grid > div { display: grid; gap: 3px; min-width: 0; }
+.governance-export-integrity-grid span,
+.integrity-hash-row label,
+.integrity-verification-row small { color: #607b72; font-size: 11px; line-height: 1.4; }
+.governance-export-integrity-grid strong { color: #295845; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
+.governance-export-integrity-grid .integrity-scope { grid-column: 1 / -1; }
+
+.integrity-hash-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.integrity-hash-row input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  color: #285440;
+  border: 1px solid #cae1d7;
+  border-radius: 8px;
+  background: #fff;
+  font: 600 11px/1.2 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.integrity-verification-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
+.integrity-verification-row small { overflow-wrap: anywhere; }
+.integrity-success,
+.integrity-error { padding: 5px 8px; border-radius: 8px; font-size: 11px; line-height: 1.4; }
+.integrity-success { color: #176144; background: #e4f5ec; }
+.integrity-error { color: #a33e39; background: #fff0ef; }
+
 .governance-audit-preview {
   overflow: hidden;
   border: 1px solid #e1ebe7;
@@ -174,6 +224,12 @@
   .governance-audit-summary { grid-template-columns: 1fr; }
   .governance-audit-actions { display: grid; grid-template-columns: 1fr; }
   .governance-audit-actions .button { width: 100%; }
+  .governance-export-integrity-grid { grid-template-columns: 1fr; }
+  .governance-export-integrity-grid .integrity-scope { grid-column: auto; }
+  .integrity-hash-row { grid-template-columns: 1fr; align-items: stretch; }
+  .integrity-hash-row .button { width: 100%; }
+  .integrity-verification-row { align-items: stretch; flex-direction: column; }
+  .integrity-verification-row .button { width: 100%; }
   .governance-audit-preview li { align-items: flex-start; flex-direction: column; }
   .governance-audit-preview li > div:last-child { justify-items: start; text-align: left; }
   .governance-audit-preview .governance-section-heading { align-items: flex-start; flex-wrap: wrap; }
