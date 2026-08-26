@@ -1,7 +1,7 @@
 import { and, count, desc, eq, gte, inArray, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { nanoid } from "nanoid";
-import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, governanceAuditQrExpiryPolicies, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, stockOpnameFollowUps, users } from "../drizzle/schema";
+import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, governanceAuditQrExpiryPolicies, governanceAuditQrRevocations, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, stockOpnameFollowUps, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import type { z } from "zod";
 import type { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput, stockOpnameFollowUpInput, stockOpnameFollowUpNoteInput, stockOpnameHistoryInput } from "./foundationSchemas";
@@ -11,6 +11,7 @@ import { summarizeFinancialSales, summarizeProductFinancialDetail, type Financia
 import { summarizeInventoryIntelligence } from "./inventoryIntelligence";
 import { applyStockOpnameFollowUpStatuses, summarizeOpenStockOpnameSessions, summarizeStockOpnameSessions } from "./opnameHistory";
 import { GOVERNANCE_AUDIT_QR_DEFAULT_VALIDITY_MINUTES, isValidGovernanceAuditQrValidityMinutes } from "./governanceAuditQrExpiry";
+import { normalizeGovernanceAuditQrRevocationReason } from "./governanceAuditQrRevocation";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
@@ -474,4 +475,52 @@ export async function updateGovernanceAuditQrExpiryPolicy(ownerOpenId: string, v
     await db.insert(governanceAuditQrExpiryPolicies).values({ ownerOpenId, validityMinutes });
   }
   return getGovernanceAuditQrExpiryPolicy(ownerOpenId);
+}
+
+export async function getGovernanceAuditQrRevocation(ownerOpenId: string, referenceId: string) {
+  const db = await requireDb();
+  return (await db.select().from(governanceAuditQrRevocations).where(and(
+    eq(governanceAuditQrRevocations.ownerOpenId, ownerOpenId),
+    eq(governanceAuditQrRevocations.referenceId, referenceId),
+  )).limit(1))[0] ?? null;
+}
+
+export async function revokeGovernanceAuditQrReference(input: {
+  ownerOpenId: string;
+  referenceId: string;
+  exportId: string;
+  receiptId: string;
+  actorOpenId: string;
+  reason?: string | null;
+  previousStatus: "verified" | "expired";
+  revokedAt?: Date;
+}) {
+  const db = await requireDb();
+  const existing = await getGovernanceAuditQrRevocation(input.ownerOpenId, input.referenceId);
+  if (existing) return { outcome: "already_revoked" as const, revocation: existing };
+  const reason = normalizeGovernanceAuditQrRevocationReason(input.reason);
+  const revokedAt = input.revokedAt ?? new Date();
+  try {
+    await db.insert(governanceAuditQrRevocations).values({
+      ownerOpenId: input.ownerOpenId,
+      referenceId: input.referenceId,
+      exportId: input.exportId,
+      receiptId: input.receiptId,
+      revokedAt,
+      actorOpenId: input.actorOpenId,
+      reason,
+      previousStatus: input.previousStatus,
+      resultingStatus: "revoked",
+    });
+  } catch (error) {
+    const candidate = error as { code?: string; message?: string };
+    if (candidate.code === "ER_DUP_ENTRY" || candidate.message?.includes("Duplicate entry")) {
+      const duplicate = await getGovernanceAuditQrRevocation(input.ownerOpenId, input.referenceId);
+      if (duplicate) return { outcome: "already_revoked" as const, revocation: duplicate };
+    }
+    throw error;
+  }
+  const revocation = await getGovernanceAuditQrRevocation(input.ownerOpenId, input.referenceId);
+  if (!revocation) throw new Error("Catatan pencabutan QR tidak dapat dibaca kembali.");
+  return { outcome: "revoked" as const, revocation };
 }

@@ -4,11 +4,13 @@ const { getGeneratedGovernanceAuditExportForOwner, verifyGovernanceAuditExportBy
   getGeneratedGovernanceAuditExportForOwner: vi.fn(),
   verifyGovernanceAuditExportBytes: vi.fn(),
 }));
+const { getGovernanceAuditQrRevocation } = vi.hoisted(() => ({ getGovernanceAuditQrRevocation: vi.fn() }));
 
 vi.mock("./governanceAuditExportIntegrity", () => ({
   getGeneratedGovernanceAuditExportForOwner,
   verifyGovernanceAuditExportBytes,
 }));
+vi.mock("./db", () => ({ getGovernanceAuditQrRevocation }));
 
 import {
   createGovernanceAuditVerificationQr,
@@ -37,6 +39,7 @@ describe("Phase 2.10 governance audit verification QR", () => {
     vi.clearAllMocks();
     getGeneratedGovernanceAuditExportForOwner.mockReturnValue(artifact);
     verifyGovernanceAuditExportBytes.mockReturnValue({ verified: true, actualSha256: artifact.sha256, byteSize: artifact.byteSize });
+    getGovernanceAuditQrRevocation.mockResolvedValue(null);
   });
 
   it("issues a deterministic, non-sensitive QR payload for a verified export reference", async () => {
@@ -65,9 +68,9 @@ describe("Phase 2.10 governance audit verification QR", () => {
     expect(configuredQr.expiresAt).toEqual(new Date(issuedAt.getTime() + 90 * 60_000));
     expect(maximumQr.expiresAt).toEqual(new Date(issuedAt.getTime() + 10_080 * 60_000));
 
-    const validBeforeBoundary = resolveGovernanceAuditVerificationQr("owner-1", { referenceId: minimumQr.referenceId, exportId: artifact.exportId, receiptId: minimumQr.receiptId }, new Date(minimumQr.expiresAt.getTime() - 1));
+    const validBeforeBoundary = await resolveGovernanceAuditVerificationQr("owner-1", { referenceId: minimumQr.referenceId, exportId: artifact.exportId, receiptId: minimumQr.receiptId }, new Date(minimumQr.expiresAt.getTime() - 1));
     expect(validBeforeBoundary).toMatchObject({ status: "verified", issuedAt, expiresAt: minimumQr.expiresAt });
-    const expiredAtBoundary = resolveGovernanceAuditVerificationQr("owner-1", { referenceId: minimumQr.referenceId, exportId: artifact.exportId, receiptId: minimumQr.receiptId }, minimumQr.expiresAt);
+    const expiredAtBoundary = await resolveGovernanceAuditVerificationQr("owner-1", { referenceId: minimumQr.referenceId, exportId: artifact.exportId, receiptId: minimumQr.receiptId }, minimumQr.expiresAt);
     expect(expiredAtBoundary).toMatchObject({ status: "expired", issuedAt, expiresAt: minimumQr.expiresAt });
   });
 
@@ -90,31 +93,60 @@ describe("Phase 2.10 governance audit verification QR", () => {
 
   it("recomputes the exact cached export bytes before resolving an owner-scoped QR as verified", async () => {
     const qr = await createGovernanceAuditVerificationQr("owner-1", artifact, `storeos-governance-audit-receipt-${artifact.exportId}`, issuedAt);
-    const result = resolveGovernanceAuditVerificationQr("owner-1", { referenceId: qr.referenceId, exportId: artifact.exportId, receiptId: qr.receiptId }, new Date("2026-08-26T01:21:00.000Z"));
+    const result = await resolveGovernanceAuditVerificationQr("owner-1", { referenceId: qr.referenceId, exportId: artifact.exportId, receiptId: qr.receiptId }, new Date("2026-08-26T01:21:00.000Z"));
 
     expect(result).toMatchObject({ status: "verified", exportId: artifact.exportId, receiptId: qr.receiptId, sha256: artifact.sha256, byteSize: artifact.byteSize, verificationStatus: "verified" });
     expect(getGeneratedGovernanceAuditExportForOwner).toHaveBeenCalledWith("owner-1", artifact.exportId);
     expect(verifyGovernanceAuditExportBytes).toHaveBeenCalledWith(artifact.exportId, artifact.bytesBase64);
   });
 
+  it("returns persisted revoked state before expiry or checksum evaluation and retains audit metadata", async () => {
+    const qr = await createGovernanceAuditVerificationQr("owner-1", artifact, `storeos-governance-audit-receipt-${artifact.exportId}-persisted-revocation`, issuedAt, 90);
+    const revokedAt = new Date("2026-08-26T01:25:00.000Z");
+    getGovernanceAuditQrRevocation.mockResolvedValueOnce({
+      referenceId: qr.referenceId,
+      revokedAt,
+      actorOpenId: "owner-1",
+      reason: "Distribusi referensi dibatalkan",
+      previousStatus: "verified",
+    });
+    verifyGovernanceAuditExportBytes.mockReturnValueOnce({ verified: false, actualSha256: "c".repeat(64), byteSize: artifact.byteSize });
+
+    const result = await resolveGovernanceAuditVerificationQr("owner-1", { referenceId: qr.referenceId, exportId: artifact.exportId, receiptId: qr.receiptId }, qr.expiresAt);
+
+    expect(result).toMatchObject({
+      status: "revoked",
+      verificationStatus: "revoked",
+      referenceId: qr.referenceId,
+      exportId: artifact.exportId,
+      issuedAt,
+      expiresAt: qr.expiresAt,
+      revokedAt,
+      actorOpenId: "owner-1",
+      reason: "Distribusi referensi dibatalkan",
+      previousStatus: "verified",
+    });
+    expect(verifyGovernanceAuditExportBytes).not.toHaveBeenCalled();
+  });
+
   it("rejects cross-owner, altered, expired, revoked, missing, and mismatched QR references without offering artifact access", async () => {
     const qr = await createGovernanceAuditVerificationQr("owner-1", artifact, `storeos-governance-audit-receipt-${artifact.exportId}`, issuedAt);
     const input = { referenceId: qr.referenceId, exportId: artifact.exportId, receiptId: qr.receiptId };
 
-    expect(resolveGovernanceAuditVerificationQr("owner-2", input, new Date("2026-08-26T01:21:00.000Z"))).toMatchObject({ status: "invalid_reference" });
-    expect(resolveGovernanceAuditVerificationQr("owner-1", { ...input, exportId: `${artifact.exportId}-altered` }, new Date("2026-08-26T01:21:00.000Z"))).toMatchObject({ status: "invalid_reference" });
-    expect(resolveGovernanceAuditVerificationQr("owner-1", input, new Date(issuedAt.getTime() + 30 * 60 * 1000))).toMatchObject({ status: "expired", issuedAt, expiresAt: new Date(issuedAt.getTime() + 30 * 60 * 1000) });
+    await expect(resolveGovernanceAuditVerificationQr("owner-2", input, new Date("2026-08-26T01:21:00.000Z"))).resolves.toMatchObject({ status: "invalid_reference" });
+    await expect(resolveGovernanceAuditVerificationQr("owner-1", { ...input, exportId: `${artifact.exportId}-altered` }, new Date("2026-08-26T01:21:00.000Z"))).resolves.toMatchObject({ status: "invalid_reference" });
+    await expect(resolveGovernanceAuditVerificationQr("owner-1", input, new Date(issuedAt.getTime() + 30 * 60 * 1000))).resolves.toMatchObject({ status: "expired", issuedAt, expiresAt: new Date(issuedAt.getTime() + 30 * 60 * 1000) });
 
     const revocable = await createGovernanceAuditVerificationQr("owner-1", artifact, `storeos-governance-audit-receipt-${artifact.exportId}-revoked`, issuedAt);
     revokeGovernanceAuditVerificationQrReference(revocable.referenceId);
-    expect(resolveGovernanceAuditVerificationQr("owner-1", { referenceId: revocable.referenceId, exportId: artifact.exportId, receiptId: revocable.receiptId }, new Date("2026-08-26T01:21:00.000Z"))).toMatchObject({ status: "revoked" });
+    await expect(resolveGovernanceAuditVerificationQr("owner-1", { referenceId: revocable.referenceId, exportId: artifact.exportId, receiptId: revocable.receiptId }, new Date("2026-08-26T01:21:00.000Z"))).resolves.toMatchObject({ status: "revoked" });
 
     const missing = await createGovernanceAuditVerificationQr("owner-1", artifact, `storeos-governance-audit-receipt-${artifact.exportId}-missing`, issuedAt);
     getGeneratedGovernanceAuditExportForOwner.mockReturnValueOnce(null);
-    expect(resolveGovernanceAuditVerificationQr("owner-1", { referenceId: missing.referenceId, exportId: artifact.exportId, receiptId: missing.receiptId }, new Date("2026-08-26T01:21:00.000Z"))).toMatchObject({ status: "artifact_missing" });
+    await expect(resolveGovernanceAuditVerificationQr("owner-1", { referenceId: missing.referenceId, exportId: artifact.exportId, receiptId: missing.receiptId }, new Date("2026-08-26T01:21:00.000Z"))).resolves.toMatchObject({ status: "artifact_missing" });
 
     const corrupted = await createGovernanceAuditVerificationQr("owner-1", artifact, `storeos-governance-audit-receipt-${artifact.exportId}-corrupt`, issuedAt);
     verifyGovernanceAuditExportBytes.mockReturnValueOnce({ verified: false, actualSha256: "c".repeat(64), byteSize: artifact.byteSize });
-    expect(resolveGovernanceAuditVerificationQr("owner-1", { referenceId: corrupted.referenceId, exportId: artifact.exportId, receiptId: corrupted.receiptId }, new Date("2026-08-26T01:21:00.000Z"))).toMatchObject({ status: "verification_failed" });
+    await expect(resolveGovernanceAuditVerificationQr("owner-1", { referenceId: corrupted.referenceId, exportId: artifact.exportId, receiptId: corrupted.receiptId }, new Date("2026-08-26T01:21:00.000Z"))).resolves.toMatchObject({ status: "verification_failed" });
   });
 });

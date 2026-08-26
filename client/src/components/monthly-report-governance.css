@@ -219,6 +219,15 @@
 .governance-qr-reference p, .governance-qr-reference small { margin: 0; color: #52675a; }
 .governance-qr-reference code, .qr-hash { overflow-wrap: anywhere; color: #214c35; }
 .governance-qr-reference a { width: fit-content; text-decoration: none; }
+.governance-qr-revoked, .governance-qr-revoke-confirmation { display: grid; gap: .55rem; padding: .75rem; border-radius: .7rem; }
+.governance-qr-revoked { border: 1px solid #e6b9b5; background: #fff3f2; color: #85362f; }
+.governance-qr-revoked strong, .governance-qr-revoked small { color: #85362f; }
+.governance-qr-inactive { color: #66756b !important; }
+.governance-qr-revoke-confirmation { margin-top: .25rem; border: 1px solid #e6c3ba; background: #fffaf8; }
+.governance-qr-revoke-confirmation p { line-height: 1.45; }
+.governance-qr-revoke-confirmation .field { display: grid; gap: .35rem; }
+.governance-qr-revoke-confirmation textarea { min-height: 72px; resize: vertical; }
+.governance-qr-revoke-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
 
 .qr-verification-page { min-height: 100vh; padding: clamp(1.25rem, 4vw, 3rem); background: #f5faf6; color: #173324; }
 .qr-verification-card { max-width: 760px; margin: 0 auto; padding: clamp(1.25rem, 4vw, 2.5rem); background: white; border: 1px solid #d5e4db; border-radius: 1.25rem; box-shadow: 0 18px 44px rgba(33, 76, 53, .08); }
@@ -298,6 +307,8 @@
   .verification-receipt-actions > div:nth-child(2) { display: grid; grid-template-columns: 1fr; justify-content: stretch; }
   .verification-receipt-actions .button { width: 100%; }
   .governance-qr-reference { align-items: flex-start; flex-direction: column; }
+  .governance-qr-revoke-actions { display: grid; grid-template-columns: 1fr; }
+  .governance-qr-revoke-actions .button, .governance-qr-reference > div > .button { width: 100%; }
   .qr-verification-result dl { grid-template-columns: 1fr; }
   .governance-audit-preview li { align-items: flex-start; flex-direction: column; }
   .governance-audit-preview li > div:last-child { justify-items: start; text-align: left; }

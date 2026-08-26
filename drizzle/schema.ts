@@ -259,6 +259,23 @@ export const governanceAuditQrExpiryPolicies = mysqlTable("governanceAuditQrExpi
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (table) => [uniqueIndex("governance_audit_qr_expiry_owner_unique").on(table.ownerOpenId)]);
 
+/** Immutable governance state for a single opaque QR verification reference. */
+export const governanceAuditQrRevocations = mysqlTable("governanceAuditQrRevocations", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerOpenId: varchar("ownerOpenId", { length: 64 }).notNull(),
+  referenceId: varchar("referenceId", { length: 40 }).notNull(),
+  exportId: varchar("exportId", { length: 128 }).notNull(),
+  receiptId: varchar("receiptId", { length: 160 }).notNull(),
+  revokedAt: timestamp("revokedAt").notNull(),
+  actorOpenId: varchar("actorOpenId", { length: 64 }).notNull(),
+  reason: text("reason"),
+  previousStatus: varchar("previousStatus", { length: 24 }).notNull(),
+  resultingStatus: varchar("resultingStatus", { length: 24 }).default("revoked").notNull(),
+}, (table) => [
+  uniqueIndex("governance_audit_qr_revocation_owner_reference_unique").on(table.ownerOpenId, table.referenceId),
+  index("governance_audit_qr_revocation_owner_revoked_idx").on(table.ownerOpenId, table.revokedAt),
+]);
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Category = typeof categories.$inferSelect;

@@ -7,6 +7,7 @@ import {
   type GovernanceAuditGeneratedArtifact,
 } from "./governanceAuditExportIntegrity";
 import { GOVERNANCE_AUDIT_QR_DEFAULT_VALIDITY_MINUTES, isValidGovernanceAuditQrValidityMinutes } from "./governanceAuditQrExpiry";
+import { getGovernanceAuditQrRevocation } from "./db";
 
 const VERIFY_BASE_URL = "https://storeosai-53f6p9i9.manus.space";
 
@@ -98,7 +99,25 @@ export type GovernanceAuditQrVerificationResult =
       sha256: string;
       verificationStatus: "verified";
     }
-  | { status: "invalid_reference" | "revoked" | "not_found" | "artifact_missing" | "verification_failed"; message: string }
+  | {
+      status: "revoked";
+      message: string;
+      referenceId: string;
+      exportId: string;
+      receiptId: string;
+      issuedAt: Date;
+      issuedAtWib: string;
+      expiresAt: Date;
+      expiresAtWib: string;
+      revokedAt?: Date;
+      revokedAtWib?: string;
+      actorOpenId?: string;
+      reason?: string | null;
+      previousStatus?: string;
+      resultingStatus: "revoked";
+      verificationStatus: "revoked";
+    }
+  | { status: "invalid_reference" | "not_found" | "artifact_missing" | "verification_failed"; message: string }
   | { status: "expired"; message: string; issuedAt: Date; issuedAtWib: string; expiresAt: Date; expiresAtWib: string };
 
 function wibTime(value: Date) {
@@ -110,17 +129,60 @@ export function revokeGovernanceAuditVerificationQrReference(referenceId: string
   if (reference) reference.revoked = true;
 }
 
-export function resolveGovernanceAuditVerificationQr(
+export function getGovernanceAuditVerificationQrReference(
   ownerOpenId: string,
   input: { referenceId: string; exportId: string; receiptId: string },
   now = new Date(),
-): GovernanceAuditQrVerificationResult {
+) {
   const reference = qrReferenceCache.get(input.referenceId);
-  if (!reference) return { status: "not_found", message: "Referensi QR verifikasi tidak ditemukan pada konteks server ini." };
+  if (!reference) return { status: "not_found" as const, message: "Referensi QR verifikasi tidak ditemukan pada konteks server ini." };
   if (reference.ownerOpenId !== ownerOpenId || reference.exportId !== input.exportId || reference.receiptId !== input.receiptId) {
-    return { status: "invalid_reference", message: "Referensi QR tidak cocok dengan ekspor atau bukti verifikasi yang diminta." };
+    return { status: "invalid_reference" as const, message: "Referensi QR tidak cocok dengan ekspor atau bukti verifikasi yang diminta." };
   }
-  if (reference.revoked) return { status: "revoked", message: "Referensi QR verifikasi telah dicabut." };
+  return {
+    status: reference.expiresAt.getTime() <= now.getTime() ? "expired" as const : "verified" as const,
+    reference,
+  };
+}
+
+function revokedResult(reference: CachedQrReference, input: { referenceId: string }, revocation?: {
+  revokedAt: Date;
+  actorOpenId: string;
+  reason: string | null;
+  previousStatus: string;
+}) {
+  return {
+    status: "revoked" as const,
+    message: "Referensi QR verifikasi telah dicabut dan tidak dapat divalidasi kembali.",
+    referenceId: input.referenceId,
+    exportId: reference.exportId,
+    receiptId: reference.receiptId,
+    issuedAt: reference.issuedAt,
+    issuedAtWib: wibTime(reference.issuedAt),
+    expiresAt: reference.expiresAt,
+    expiresAtWib: wibTime(reference.expiresAt),
+    ...(revocation ? {
+      revokedAt: revocation.revokedAt,
+      revokedAtWib: wibTime(revocation.revokedAt),
+      actorOpenId: revocation.actorOpenId,
+      reason: revocation.reason,
+      previousStatus: revocation.previousStatus,
+    } : {}),
+    resultingStatus: "revoked" as const,
+    verificationStatus: "revoked" as const,
+  };
+}
+
+export async function resolveGovernanceAuditVerificationQr(
+  ownerOpenId: string,
+  input: { referenceId: string; exportId: string; receiptId: string },
+  now = new Date(),
+): Promise<GovernanceAuditQrVerificationResult> {
+  const resolvedReference = getGovernanceAuditVerificationQrReference(ownerOpenId, input, now);
+  if (resolvedReference.status === "not_found" || resolvedReference.status === "invalid_reference") return resolvedReference;
+  const reference = resolvedReference.reference;
+  const revocation = await getGovernanceAuditQrRevocation(ownerOpenId, input.referenceId);
+  if (reference.revoked || revocation) return revokedResult(reference, input, revocation ?? undefined);
   if (reference.expiresAt.getTime() <= now.getTime()) return {
     status: "expired",
     message: "Referensi QR verifikasi telah kedaluwarsa. Buat dan verifikasi ulang ekspor audit.",

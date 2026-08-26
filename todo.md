@@ -377,3 +377,11 @@
 - [x] Add compact owner-admin QR expiry controls and issued/expiration state to receipt and verification interfaces
 - [x] Add Phase 2.11 default/bounds/configured expiry, timestamp, expiry boundary, failure, authorization, integrity, browser, printable, and responsive regression coverage
 - [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.11
+
+- [x] Inspect the released QR reference, receipt, resolver, persistence, and audit integration points for Phase 2.12 revocation reuse
+- [x] Add append-only owner-scoped QR revocation persistence with bounded optional reason validation and idempotent state transitions
+- [x] Add protected owner-admin revocation and audit-read procedures with member and cross-scope denial
+- [x] Enforce revoked precedence in the resolver without weakening exact-byte SHA-256, expiry, or no-download constraints
+- [x] Add responsive owner-admin revoke confirmation, status, reason, actor, timestamp, and audit-history UI for eligible QR references
+- [x] Add Phase 2.12 authorization, idempotency, invalid/expired/revoked resolver, integrity precedence, append-only, domain-isolation, browser, and responsive regression coverage
+- [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.12
