@@ -2,3 +2,8 @@
 "Export ID","storeos-governance-audit-csv-dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
 "SHA-256 export","dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
 "Status verifikasi","verified"
+"Masa berlaku QR (menit)","90"
+"Masa berlaku sebelumnya (menit)","30"
+"Perubahan kebijakan","increase"
+"Perbedaan (menit)","60"
+"Referensi event kebijakan","qrph_browser_increase"

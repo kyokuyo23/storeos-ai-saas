@@ -18,3 +18,44 @@ export function resolveGovernanceAuditQrExpiryPolicyChange(previousValidityMinut
     resultingValidityMinutes: requestedValidityMinutes,
   };
 }
+
+export type GovernanceAuditQrExpiryPolicyHistoryContext = {
+  eventId: string;
+  previousValidityMinutes: number;
+  resultingValidityMinutes: number;
+};
+
+export type GovernanceAuditQrReceiptPolicyContext = {
+  validityMinutes: number;
+  policyEventId: string | null;
+  previousValidityMinutes: number | null;
+  change: "initial" | "increase" | "decrease" | "unchanged";
+  differenceMinutes: number;
+};
+
+export function deriveGovernanceAuditQrReceiptPolicyContext(
+  validityMinutes: number,
+  history: GovernanceAuditQrExpiryPolicyHistoryContext[] = [],
+): GovernanceAuditQrReceiptPolicyContext {
+  if (!isValidGovernanceAuditQrValidityMinutes(validityMinutes)) {
+    throw new Error("Masa berlaku QR harus berada dalam batas yang diizinkan.");
+  }
+  const latestEffectiveEvent = history.find((event) => event.resultingValidityMinutes === validityMinutes);
+  if (!latestEffectiveEvent) {
+    return {
+      validityMinutes,
+      policyEventId: null,
+      previousValidityMinutes: null,
+      change: "initial",
+      differenceMinutes: 0,
+    };
+  }
+  const differenceMinutes = validityMinutes - latestEffectiveEvent.previousValidityMinutes;
+  return {
+    validityMinutes,
+    policyEventId: latestEffectiveEvent.eventId,
+    previousValidityMinutes: latestEffectiveEvent.previousValidityMinutes,
+    change: differenceMinutes === 0 ? "unchanged" : differenceMinutes > 0 ? "increase" : "decrease",
+    differenceMinutes,
+  };
+}

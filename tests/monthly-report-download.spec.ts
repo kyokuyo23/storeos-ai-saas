@@ -214,7 +214,16 @@ const governanceAuditIntegrityPdfFixture = {
   byteSize: Buffer.byteLength("%PDF-1.4\nStoreOS Governance Audit\n%%EOF"),
   sha256: "e".repeat(64),
 };
-const governanceAuditReceiptCsvBytes = Buffer.from(`\ufeff"StoreOS Governance Audit Verification Receipt","v1"\r\n"Export ID","${governanceAuditIntegrityCsvFixture.exportId}"\r\n"SHA-256 export","${governanceAuditIntegrityCsvFixture.sha256}"\r\n"Status verifikasi","verified"\r\n`, "utf8");
+const governanceAuditReceiptPolicyFixture = {
+  validityMinutes: 90,
+  previousValidityMinutes: 30,
+  differenceMinutes: 60,
+  change: "increase",
+  policyEventId: "qrph_browser_increase",
+  issuedAt: "2026-08-26T01:20:00.000Z",
+  expiresAt: "2026-08-26T02:50:00.000Z",
+};
+const governanceAuditReceiptCsvBytes = Buffer.from(`\ufeff"StoreOS Governance Audit Verification Receipt","v1"\r\n"Export ID","${governanceAuditIntegrityCsvFixture.exportId}"\r\n"SHA-256 export","${governanceAuditIntegrityCsvFixture.sha256}"\r\n"Status verifikasi","verified"\r\n"Masa berlaku QR (menit)","90"\r\n"Masa berlaku sebelumnya (menit)","30"\r\n"Perubahan kebijakan","increase"\r\n"Perbedaan (menit)","60"\r\n"Referensi event kebijakan","qrph_browser_increase"\r\n`, "utf8");
 const governanceAuditQrFixture = {
   version: 1,
   referenceId: `qr_${"9".repeat(32)}`,
@@ -238,6 +247,7 @@ const governanceAuditReceiptCsvFixture = {
   receiptByteSize: governanceAuditReceiptCsvBytes.byteLength,
   receiptSha256: "c".repeat(64),
   qr: governanceAuditQrFixture,
+  policy: governanceAuditReceiptPolicyFixture,
   bytesBase64: governanceAuditReceiptCsvBytes.toString("base64"),
 };
 const governanceAuditReceiptPdfFixture = {
@@ -546,7 +556,15 @@ test("downloads owner-admin verification receipts only after the exact export by
   expect(receipt.charCodeAt(0)).toBe(0xfeff);
   expect(receipt).toContain(governanceAuditIntegrityCsvFixture.exportId);
   expect(receipt).toContain(governanceAuditIntegrityCsvFixture.sha256);
+  expect(receipt).toContain("Masa berlaku QR (menit)");
+  expect(receipt).toContain("qrph_browser_increase");
   await expect(integrity.getByText(/^Bukti verifikasi CSV diunduh/)).toBeVisible();
+
+  const receiptPolicy = page.getByLabel("Snapshot kebijakan QR pada receipt");
+  await expect(receiptPolicy).toContainText("90 menit");
+  await expect(receiptPolicy).toContainText("30 menit");
+  await expect(receiptPolicy).toContainText("Meningkat · +60 menit");
+  await expect(receiptPolicy).toContainText("qrph_browser_increase");
 
   const pdfReceiptPromise = page.waitForEvent("download");
   await integrity.getByRole("button", { name: "Bukti PDF" }).click();

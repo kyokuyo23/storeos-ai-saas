@@ -1,6 +1,10 @@
 import { createHash } from "crypto";
 import { printableMonthlyHtmlToPdf } from "./monthlyReportPdf";
 import {
+  deriveGovernanceAuditQrReceiptPolicyContext,
+  type GovernanceAuditQrReceiptPolicyContext,
+} from "./governanceAuditQrExpiry";
+import {
   getGeneratedGovernanceAuditExportForOwner,
   verifyGovernanceAuditExportBytes,
   type GovernanceAuditExportFormat,
@@ -20,7 +24,7 @@ export type GovernanceAuditVerificationReceipt = {
   receiptSha256: string;
   verificationAt: Date;
   verificationAtWib: string;
-  applicationVersion: "StoreOS Governance Audit v2.11";
+  applicationVersion: "StoreOS Governance Audit v2.14";
   export: {
     exportId: string;
     format: GovernanceAuditExportFormat;
@@ -40,6 +44,10 @@ export type GovernanceAuditVerificationReceipt = {
     byteSize: number;
   };
   qr: GovernanceAuditVerificationQr;
+  policy: GovernanceAuditQrReceiptPolicyContext & {
+    issuedAt: Date;
+    expiresAt: Date;
+  };
   bytesBase64: string;
 };
 
@@ -61,6 +69,13 @@ function escapeCell(value: string | number) {
 }
 
 function receiptRows(receipt: Omit<GovernanceAuditVerificationReceipt, "bytesBase64" | "receiptByteSize" | "receiptSha256">) {
+  const policyChangeLabel = receipt.policy.change === "initial"
+    ? "Initial policy — no previous policy."
+    : receipt.policy.change === "increase"
+      ? "Meningkat"
+      : receipt.policy.change === "decrease"
+        ? "Menurun"
+        : "Tidak berubah";
   return [
     ["StoreOS Governance Audit Verification Receipt", "v1"],
     ["Application version", receipt.applicationVersion],
@@ -82,6 +97,14 @@ function receiptRows(receipt: Omit<GovernanceAuditVerificationReceipt, "bytesBas
     ["QR issuedAt (Asia/Jakarta)", wibTime(receipt.qr.issuedAt)],
     ["QR expiresAt (Asia/Jakarta)", wibTime(receipt.qr.expiresAt)],
     ["QR verification payload", receipt.qr.payload],
+    ["Masa berlaku QR (menit)", receipt.policy.validityMinutes],
+    ["Kebijakan sebelumnya (menit)", receipt.policy.previousValidityMinutes ?? "Initial policy — no previous policy."],
+    ["Kebijakan saat diterbitkan (menit)", receipt.policy.validityMinutes],
+    ["Perubahan", policyChangeLabel],
+    ["Perbedaan (menit)", receipt.policy.differenceMinutes],
+    ["Referensi event kebijakan", receipt.policy.policyEventId ?? "Initial policy — no previous policy."],
+    ["Diterbitkan kebijakan QR (Asia/Jakarta)", wibTime(receipt.policy.issuedAt)],
+    ["Berakhir kebijakan QR (Asia/Jakarta)", wibTime(receipt.policy.expiresAt)],
   ];
 }
 
@@ -110,7 +133,13 @@ function buildReceiptPdfBytes(receipt: Omit<GovernanceAuditVerificationReceipt, 
 
 export async function issueGovernanceAuditVerificationReceipt(
   ownerOpenId: string,
-  input: { exportId: string; bytesBase64: string; receiptFormat: GovernanceAuditReceiptFormat; qrValidityMinutes?: number },
+  input: {
+    exportId: string;
+    bytesBase64: string;
+    receiptFormat: GovernanceAuditReceiptFormat;
+    qrValidityMinutes?: number;
+    qrPolicyContext?: GovernanceAuditQrReceiptPolicyContext;
+  },
   verificationAt = new Date(),
 ): Promise<GovernanceAuditVerificationReceiptResult> {
   const artifact = getGeneratedGovernanceAuditExportForOwner(ownerOpenId, input.exportId);
@@ -136,6 +165,10 @@ export async function issueGovernanceAuditVerificationReceipt(
 
   const receiptId = `storeos-governance-audit-receipt-${artifact.exportId}`;
   const qr = await createGovernanceAuditVerificationQr(ownerOpenId, artifact, receiptId, verificationAt, input.qrValidityMinutes);
+  const qrValidityMinutes = Math.round((qr.expiresAt.getTime() - qr.issuedAt.getTime()) / 60_000);
+  const policyContext = input.qrPolicyContext?.validityMinutes === qrValidityMinutes
+    ? input.qrPolicyContext
+    : deriveGovernanceAuditQrReceiptPolicyContext(qrValidityMinutes);
   const baseReceipt = {
     kind: "storeos_governance_audit_verification_receipt" as const,
     version: 1 as const,
@@ -145,7 +178,7 @@ export async function issueGovernanceAuditVerificationReceipt(
     contentType: (input.receiptFormat === "csv" ? "text/csv;charset=utf-8" : "application/pdf") as GovernanceAuditVerificationReceipt["contentType"],
     verificationAt,
     verificationAtWib: wibTime(verificationAt),
-    applicationVersion: "StoreOS Governance Audit v2.11" as const,
+    applicationVersion: "StoreOS Governance Audit v2.14" as const,
     export: {
       exportId: artifact.exportId,
       format: artifact.format,
@@ -165,6 +198,11 @@ export async function issueGovernanceAuditVerificationReceipt(
       byteSize: verification.byteSize,
     },
     qr,
+    policy: {
+      ...policyContext,
+      issuedAt: qr.issuedAt,
+      expiresAt: qr.expiresAt,
+    },
   };
   const bytes = input.receiptFormat === "csv" ? buildReceiptCsvBytes(baseReceipt) : buildReceiptPdfBytes(baseReceipt);
   return {

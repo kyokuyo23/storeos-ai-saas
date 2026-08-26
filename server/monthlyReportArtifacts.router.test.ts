@@ -144,7 +144,18 @@ describe("reports.monthlyArtifacts authorization", () => {
     const receiptInput = { exportId: `storeos-governance-audit-csv-${"a".repeat(64)}`, bytesBase64: "77u/", receiptFormat: "pdf" as const };
     await expect(caller({ openId: "owner-1", role: "admin" }).reports.issueMonthlyArtifactGovernanceAuditVerificationReceipt(receiptInput)).resolves.toMatchObject({ status: "issued", receipt: { receiptFormat: "csv" } });
     expect(getGovernanceAuditQrExpiryPolicy).toHaveBeenCalledWith("owner-1");
-    expect(issueGovernanceAuditVerificationReceipt).toHaveBeenCalledWith("owner-1", { ...receiptInput, qrValidityMinutes: 30 });
+    expect(listGovernanceAuditQrExpiryPolicyHistory).toHaveBeenCalledWith("owner-1");
+    expect(issueGovernanceAuditVerificationReceipt).toHaveBeenCalledWith("owner-1", {
+      ...receiptInput,
+      qrValidityMinutes: 30,
+      qrPolicyContext: {
+        validityMinutes: 30,
+        policyEventId: null,
+        previousValidityMinutes: null,
+        change: "initial",
+        differenceMinutes: 0,
+      },
+    });
   });
 
   it("restricts persisted QR expiry policy reads and updates to the authenticated owner-admin scope", async () => {

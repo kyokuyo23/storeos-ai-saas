@@ -3,6 +3,7 @@ import {
   GOVERNANCE_AUDIT_QR_DEFAULT_VALIDITY_MINUTES,
   GOVERNANCE_AUDIT_QR_MAX_VALIDITY_MINUTES,
   GOVERNANCE_AUDIT_QR_MIN_VALIDITY_MINUTES,
+  deriveGovernanceAuditQrReceiptPolicyContext,
   isValidGovernanceAuditQrValidityMinutes,
   resolveGovernanceAuditQrExpiryPolicyChange,
 } from "./governanceAuditQrExpiry";
@@ -27,5 +28,36 @@ describe("Phase 2.11 governance audit QR expiry policy bounds", () => {
     expect(resolveGovernanceAuditQrExpiryPolicyChange(30, 30)).toEqual({ outcome: "unchanged", previousValidityMinutes: 30, resultingValidityMinutes: 30 });
     expect(resolveGovernanceAuditQrExpiryPolicyChange(30, 90)).toEqual({ outcome: "updated", previousValidityMinutes: 30, resultingValidityMinutes: 90 });
     expect(() => resolveGovernanceAuditQrExpiryPolicyChange(4, 30)).toThrow("batas yang diizinkan");
+  });
+});
+
+describe("Governance Audit QR receipt policy context", () => {
+  it("derives deterministic initial, increase, decrease, and no-op-compatible policy context from append-only history", () => {
+    expect(deriveGovernanceAuditQrReceiptPolicyContext(30)).toMatchObject({
+      validityMinutes: 30,
+      policyEventId: null,
+      previousValidityMinutes: null,
+      change: "initial",
+      differenceMinutes: 0,
+    });
+    expect(deriveGovernanceAuditQrReceiptPolicyContext(90, [{ eventId: "qrph_inc", previousValidityMinutes: 30, resultingValidityMinutes: 90 }])).toMatchObject({
+      policyEventId: "qrph_inc",
+      previousValidityMinutes: 30,
+      change: "increase",
+      differenceMinutes: 60,
+    });
+    expect(deriveGovernanceAuditQrReceiptPolicyContext(45, [
+      { eventId: "qrph_dec", previousValidityMinutes: 90, resultingValidityMinutes: 45 },
+      { eventId: "qrph_inc", previousValidityMinutes: 30, resultingValidityMinutes: 90 },
+    ])).toMatchObject({
+      policyEventId: "qrph_dec",
+      previousValidityMinutes: 90,
+      change: "decrease",
+      differenceMinutes: -45,
+    });
+    expect(deriveGovernanceAuditQrReceiptPolicyContext(90, [{ eventId: "qrph_noop", previousValidityMinutes: 90, resultingValidityMinutes: 90 }])).toMatchObject({
+      change: "unchanged",
+      differenceMinutes: 0,
+    });
   });
 });

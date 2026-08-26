@@ -12,6 +12,7 @@ import { archiveMonthlyReportArtifactWithOwnerApproval, canAccessMonthlyReportAr
 import { generateGovernanceAuditExportArtifact, registerGeneratedGovernanceAuditExport, verifyGovernanceAuditExportBytes } from "./governanceAuditExportIntegrity";
 import { issueGovernanceAuditVerificationReceipt } from "./governanceAuditVerificationReceipts";
 import { getGovernanceAuditVerificationQrReference, resolveGovernanceAuditVerificationQr, revokeGovernanceAuditVerificationQrReference } from "./governanceAuditVerificationQr";
+import { deriveGovernanceAuditQrReceiptPolicyContext } from "./governanceAuditQrExpiry";
 import { GOVERNANCE_AUDIT_QR_REVOCATION_REASON_MAX_LENGTH } from "./governanceAuditQrRevocation";
 
 const idInput = z.object({ id: z.number().int().positive() });
@@ -113,8 +114,12 @@ export const appRouter = router({
     })).mutation(({ ctx, input }) => {
       if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Bukti verifikasi ekspor audit dibatasi untuk pemilik StoreOS." });
       return runMutation("Bukti verifikasi ekspor audit", async () => {
-        const policy = await db.getGovernanceAuditQrExpiryPolicy(ctx.user.openId);
-        return issueGovernanceAuditVerificationReceipt(ctx.user.openId, { ...input, qrValidityMinutes: policy.validityMinutes });
+        const [policy, history] = await Promise.all([
+          db.getGovernanceAuditQrExpiryPolicy(ctx.user.openId),
+          db.listGovernanceAuditQrExpiryPolicyHistory(ctx.user.openId),
+        ]);
+        const qrPolicyContext = deriveGovernanceAuditQrReceiptPolicyContext(policy.validityMinutes, history);
+        return issueGovernanceAuditVerificationReceipt(ctx.user.openId, { ...input, qrValidityMinutes: policy.validityMinutes, qrPolicyContext });
       });
     }),
     getMonthlyArtifactGovernanceAuditQrExpiryPolicy: protectedProcedure.query(({ ctx }) => {

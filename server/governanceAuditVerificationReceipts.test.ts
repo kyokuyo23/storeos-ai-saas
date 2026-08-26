@@ -8,6 +8,7 @@ const { getMonthlyReportArtifactGovernanceAuditExport } = vi.hoisted(() => ({
 vi.mock("./monthlyReportArtifacts", () => ({ getMonthlyReportArtifactGovernanceAuditExport }));
 
 import { generateGovernanceAuditExportArtifact, registerGeneratedGovernanceAuditExport } from "./governanceAuditExportIntegrity";
+import { deriveGovernanceAuditQrReceiptPolicyContext } from "./governanceAuditQrExpiry";
 import { issueGovernanceAuditVerificationReceipt } from "./governanceAuditVerificationReceipts";
 
 const generatedAt = new Date("2026-08-26T01:15:00.000Z");
@@ -54,7 +55,7 @@ async function registeredExport(ownerOpenId = "owner-1") {
 describe("Phase 2.9 governance audit verification receipts", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("issues a deterministic BOM CSV receipt only for the exact verified bytes and includes WIB, scope, size, hashes, and QR expiry metadata", async () => {
+  it("issues a deterministic BOM CSV receipt only for the exact verified bytes and includes WIB, scope, size, hashes, QR expiry, and initial policy context", async () => {
     const { artifact, audit } = await registeredExport();
     const snapshot = JSON.stringify(audit);
     const result = await issueGovernanceAuditVerificationReceipt("owner-1", { exportId: artifact.exportId, bytesBase64: artifact.bytesBase64, receiptFormat: "csv", qrValidityMinutes: 90 }, verificationAt);
@@ -69,6 +70,8 @@ describe("Phase 2.9 governance audit verification receipts", () => {
     expect(text).toContain(artifact.sha256);
     expect(text).toContain("QR issuedAt (Asia/Jakarta)");
     expect(text).toContain("QR expiresAt (Asia/Jakarta)");
+    expect(text).toContain("Masa berlaku QR (menit)");
+    expect(text).toContain("Initial policy — no previous policy.");
     expect(result.receipt).toMatchObject({
       receiptId: `storeos-governance-audit-receipt-${artifact.exportId}`,
       receiptFormat: "csv",
@@ -76,6 +79,15 @@ describe("Phase 2.9 governance audit verification receipts", () => {
       export: { exportId: artifact.exportId, byteSize: artifact.byteSize, sha256: artifact.sha256, scope: artifact.scope, timezone: "Asia/Jakarta" },
       verification: { verified: true, status: "verified", actualSha256: artifact.sha256 },
       qr: { issuedAt: verificationAt, expiresAt: new Date(verificationAt.getTime() + 90 * 60_000) },
+      policy: {
+        validityMinutes: 90,
+        policyEventId: null,
+        previousValidityMinutes: null,
+        change: "initial",
+        differenceMinutes: 0,
+        issuedAt: verificationAt,
+        expiresAt: new Date(verificationAt.getTime() + 90 * 60_000),
+      },
     });
     expect(result.receipt.receiptByteSize).toBe(bytes.byteLength);
     expect(result.receipt.receiptSha256).toBe(createHash("sha256").update(bytes).digest("hex"));
@@ -93,6 +105,42 @@ describe("Phase 2.9 governance audit verification receipts", () => {
     expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
     expect(result.receipt.receiptByteSize).toBe(bytes.byteLength);
     expect(result.receipt.receiptSha256).toBe(createHash("sha256").update(bytes).digest("hex"));
+  });
+
+  it("records initial, increase, decrease, and sequential policy diff context on only newly issued receipts without mutating prior QR expiry", async () => {
+    const { artifact } = await registeredExport();
+    const initial = await issueGovernanceAuditVerificationReceipt("owner-1", {
+      exportId: artifact.exportId,
+      bytesBase64: artifact.bytesBase64,
+      receiptFormat: "csv",
+      qrValidityMinutes: 30,
+      qrPolicyContext: deriveGovernanceAuditQrReceiptPolicyContext(30),
+    }, verificationAt);
+    const increased = await issueGovernanceAuditVerificationReceipt("owner-1", {
+      exportId: artifact.exportId,
+      bytesBase64: artifact.bytesBase64,
+      receiptFormat: "csv",
+      qrValidityMinutes: 90,
+      qrPolicyContext: deriveGovernanceAuditQrReceiptPolicyContext(90, [{ eventId: "qrph_increase", previousValidityMinutes: 30, resultingValidityMinutes: 90 }]),
+    }, new Date("2026-08-26T02:20:00.000Z"));
+    const decreased = await issueGovernanceAuditVerificationReceipt("owner-1", {
+      exportId: artifact.exportId,
+      bytesBase64: artifact.bytesBase64,
+      receiptFormat: "pdf",
+      qrValidityMinutes: 45,
+      qrPolicyContext: deriveGovernanceAuditQrReceiptPolicyContext(45, [
+        { eventId: "qrph_decrease", previousValidityMinutes: 90, resultingValidityMinutes: 45 },
+        { eventId: "qrph_increase", previousValidityMinutes: 30, resultingValidityMinutes: 90 },
+      ]),
+    }, new Date("2026-08-26T03:20:00.000Z"));
+    if (initial.status !== "issued" || increased.status !== "issued" || decreased.status !== "issued") throw new Error("Expected all receipt issuances");
+
+    expect(initial.receipt.policy).toMatchObject({ change: "initial", previousValidityMinutes: null, differenceMinutes: 0, policyEventId: null });
+    expect(increased.receipt.policy).toMatchObject({ change: "increase", previousValidityMinutes: 30, validityMinutes: 90, differenceMinutes: 60, policyEventId: "qrph_increase" });
+    expect(decreased.receipt.policy).toMatchObject({ change: "decrease", previousValidityMinutes: 90, validityMinutes: 45, differenceMinutes: -45, policyEventId: "qrph_decrease" });
+    expect(initial.receipt.qr.expiresAt).toEqual(new Date(verificationAt.getTime() + 30 * 60_000));
+    expect(increased.receipt.qr.expiresAt).toEqual(new Date("2026-08-26T03:50:00.000Z"));
+    expect(Buffer.from(decreased.receipt.bytesBase64, "base64").toString("latin1")).toContain("Masa berlaku QR");
   });
 
   it("refuses receipts for tampered bytes, missing export context, and a different owner scope without mutating lifecycle data", async () => {

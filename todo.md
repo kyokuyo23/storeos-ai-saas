@@ -393,3 +393,11 @@
 - [x] Add responsive Riwayat Kebijakan QR UI with current state, chronological history, empty/loading/error states, and no operational-domain mutations
 - [x] Add Phase 2.13 policy change, no-op, ordering, actor/WIB, authorization, QR-isolation, append-only, browser, and responsive regression coverage
 - [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.13
+
+- [x] Inspect receipt issuance, QR metadata, persisted policy history, and owner-admin receipt presentation for Phase 2.14 reuse
+- [x] Add deterministic server-side policy snapshot and previous/current diff metadata only to newly issued verification receipts
+- [x] Preserve initial, increase, decrease, unchanged, and sequential policy-history accuracy without mutating policy or lifecycle events
+- [x] Include clear Indonesian policy context in receipt CSV, printable/PDF, and responsive owner-admin receipt UI
+- [x] Preserve existing QR expiry, revocation, HMAC, owner authorization, and exact-byte SHA-256 verification behavior
+- [x] Add Phase 2.14 snapshot/diff, policy-history, receipt output, non-mutation, authorization, browser, and responsive regression coverage
+- [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.14
