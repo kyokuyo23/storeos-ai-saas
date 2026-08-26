@@ -50,7 +50,8 @@ const MAX_VERIFICATION_BYTES = 10 * 1024 * 1024;
 const MAX_CACHED_AUDIT_EXPORTS = 100;
 const generatedAuditExportCache = new Map<string, CachedGovernanceAuditExport>();
 
-function sha256(bytes: Buffer) {
+/** Shared Phase 2.8 exact-byte hashing primitive for governance exports. */
+export function hashExactGovernanceAuditBytes(bytes: Buffer) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
@@ -177,7 +178,7 @@ export async function generateGovernanceAuditExportArtifact(
       subject: "Read-only owner-admin governance lifecycle audit export",
       creationDate: audit.generatedAt,
     });
-  const checksum = sha256(bytes);
+  const checksum = hashExactGovernanceAuditBytes(bytes);
   return {
     kind: "storeos_governance_lifecycle_audit_export",
     version: 1,
@@ -217,7 +218,8 @@ export function getGeneratedGovernanceAuditExportForOwner(ownerOpenId: string, e
   return cached.artifact;
 }
 
-function decodeBase64Strict(value: string) {
+/** Shared strict decoder used by protected governance exact-byte verification. */
+export function decodeExactGovernanceAuditBytes(value: string) {
   if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
     throw new Error("Invalid governance audit export bytes");
   }
@@ -231,8 +233,8 @@ function decodeBase64Strict(value: string) {
 export function verifyGovernanceAuditExportBytes(exportId: string, bytesBase64: string): GovernanceAuditExportVerification {
   const match = /^storeos-governance-audit-(csv|pdf)-([a-f0-9]{64})$/.exec(exportId);
   if (!match) throw new Error("Invalid governance audit export identifier");
-  const bytes = decodeBase64Strict(bytesBase64);
-  const actualSha256 = sha256(bytes);
+  const bytes = decodeExactGovernanceAuditBytes(bytesBase64);
+  const actualSha256 = hashExactGovernanceAuditBytes(bytes);
   const expectedSha256 = match[2];
   return {
     exportId,

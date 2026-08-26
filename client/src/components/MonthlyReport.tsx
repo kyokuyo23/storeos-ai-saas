@@ -70,6 +70,70 @@ function GovernanceAuditQrReceiptPolicy({ policy }: { policy: { validityMinutes:
   </section>;
 }
 
+type QrPolicyAuditDirection = "increase" | "decrease" | "initial" | "no_op";
+
+function GovernanceAuditQrPolicyExportPanel({ enabled }: { enabled: boolean }) {
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [direction, setDirection] = useState<QrPolicyAuditDirection | "all">("all");
+  const [actorOpenId, setActorOpenId] = useState("");
+  const [latestArtifact, setLatestArtifact] = useState<(GovernanceAuditIntegrityArtifact & { generatedAt: Date | string; timezone: "Asia/Jakarta"; scope: string; recordCount: number; byteSize: number; sha256: string }) | null>(null);
+  const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
+  const [verificationStatus, setVerificationStatus] = useState<"unknown" | "verified" | "failed">("unknown");
+  const input = useMemo(() => ({
+    ...(startDate ? { startDate } : {}),
+    ...(endDate ? { endDate } : {}),
+    ...(direction === "all" ? {} : { direction }),
+    ...(actorOpenId.trim() ? { actorOpenId: actorOpenId.trim() } : {}),
+    scope: "governance_audit_qr_expiry" as const,
+  }), [actorOpenId, direction, endDate, startDate]);
+  const policyAuditQuery = trpc.reports.monthlyArtifactGovernanceAuditQrPolicyExport.useQuery(input, { enabled, retry: false, refetchOnWindowFocus: false });
+  const exportMutation = trpc.reports.generateMonthlyArtifactGovernanceAuditQrPolicyExport.useMutation();
+  const verifyMutation = trpc.reports.verifyMonthlyArtifactGovernanceAuditQrPolicyExport.useMutation();
+  if (!enabled) return null;
+  const audit = policyAuditQuery.data;
+  const verify = (artifact = latestArtifact) => {
+    if (!artifact) return;
+    setVerificationMessage(null);
+    verifyMutation.mutate({ exportId: artifact.exportId, bytesBase64: artifact.bytesBase64 }, {
+      onSuccess: (result) => {
+        setVerificationStatus(result.verified ? "verified" : "failed");
+        setVerificationMessage(result.verified ? `Terverifikasi server · ${result.byteSize} byte · SHA-256 cocok.` : "HASH TIDAK COCOK · byte yang diberikan berbeda dari ekspor server.");
+      },
+      onError: () => {
+        setVerificationStatus("failed");
+        setVerificationMessage("Verifikasi server gagal. Byte ekspor tidak diterima sebagai artefak valid.");
+      },
+    });
+  };
+  const generate = (format: "csv" | "pdf") => {
+    setVerificationMessage(null);
+    exportMutation.mutate({ ...input, format }, {
+      onSuccess: (artifact) => {
+        setLatestArtifact(artifact);
+        setVerificationStatus("unknown");
+        downloadGovernanceAuditIntegrityArtifact(artifact);
+        verify(artifact);
+      },
+      onError: () => setVerificationMessage("Ekspor audit kebijakan QR tidak dapat dibuat. Pastikan filter dan akses owner-admin valid."),
+    });
+  };
+  return <section className="governance-qr-policy-audit" aria-label="Ekspor Audit Kebijakan QR">
+    <div className="governance-section-heading"><FileText size={16} /><div><strong>Ekspor Audit Kebijakan QR</strong><small>Snapshot read-only dari riwayat append-only. Batas tanggal diproses server-side di Jakarta/WIB; akhir tanggal bersifat eksklusif setelah hari yang dipilih.</small></div></div>
+    <div className="governance-qr-policy-audit-filters">
+      <label className="field"><span>Mulai (WIB)</span><input className="form-input" aria-label="Tanggal mulai audit kebijakan QR" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label>
+      <label className="field"><span>Akhir (WIB)</span><input className="form-input" aria-label="Tanggal akhir audit kebijakan QR" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label>
+      <label className="field"><span>Arah perubahan</span><select className="form-input" aria-label="Arah audit kebijakan QR" value={direction} onChange={(event) => setDirection(event.target.value as QrPolicyAuditDirection | "all")}><option value="all">Semua arah</option><option value="initial">Initial</option><option value="increase">Meningkat</option><option value="decrease">Menurun</option><option value="no_op">Tidak berubah</option></select></label>
+      <label className="field"><span>Aktor owner-admin</span><input className="form-input" aria-label="Aktor audit kebijakan QR" maxLength={64} value={actorOpenId} placeholder="Semua aktor" onChange={(event) => setActorOpenId(event.target.value)} /></label>
+    </div>
+    {policyAuditQuery.isLoading ? <div className="loading-state compact-loading"><span className="loading-dot" /> Memuat snapshot audit kebijakan QR…</div> : policyAuditQuery.isError ? <p role="alert" className="integrity-error">Audit kebijakan QR tidak tersedia atau akses owner-admin ditolak.</p> : audit ? <>
+      <div className="governance-qr-policy-audit-summary"><div><span>Riwayat tersaring</span><strong>{number(audit.recordCount)} event</strong><small>Scope: governance_audit_qr_expiry</small></div><div><span>Dibuat pada</span><strong>{wibTime(audit.generatedAt)}</strong><small>{audit.filters.dateBoundary.replaceAll("_", " ")}</small></div><div className="governance-audit-actions"><button type="button" className="button secondary compact-button" onClick={() => generate("csv")} disabled={exportMutation.isPending}><Download size={14} /> {exportMutation.isPending ? "Menyiapkan" : "CSV Kebijakan"}</button><button type="button" className="button ghost compact-button" onClick={() => generate("pdf")} disabled={exportMutation.isPending}><FileText size={14} /> PDF Kebijakan</button></div></div>
+      {audit.recordCount === 0 ? <div className="governance-qr-policy-history-empty"><History size={15} /><span>Tidak ada event kebijakan yang sesuai dengan filter saat ini. Ekspor tetap dapat dibuat sebagai snapshot kosong yang tervalidasi.</span></div> : <ol className="governance-qr-policy-history-list governance-qr-policy-audit-list">{audit.records.slice(0, 5).map((event) => <li key={event.eventId}><div><strong>{event.previousValidityMinutes ?? "Initial"} → {event.newValidityMinutes} menit · {event.direction}</strong><small>{wibTime(event.changedAt)} · oleh {event.actorOpenId} · {event.result}</small></div><code title={event.eventId}>{event.eventId}</code></li>)}</ol>}
+      {latestArtifact && <div className="governance-export-integrity" aria-label="Integritas ekspor audit kebijakan QR"><div className="governance-section-heading"><ShieldCheck size={16} /><strong>Integritas ekspor kebijakan terbaru</strong><span className="badge success">Server-hashed</span></div><div className="governance-export-integrity-grid"><div><span>Format · ukuran</span><strong>{latestArtifact.format.toUpperCase()} · {fileSize(latestArtifact.byteSize)}</strong></div><div><span>Dibuat pada</span><strong>{wibTime(latestArtifact.generatedAt)}</strong></div><div className="integrity-scope"><span>Scope</span><strong>{latestArtifact.scope}</strong></div></div><div className="integrity-hash-row"><label htmlFor="qr-policy-audit-export-hash">SHA-256</label><input id="qr-policy-audit-export-hash" readOnly value={latestArtifact.sha256} aria-label="SHA-256 ekspor audit kebijakan QR" /><button type="button" className="button ghost compact-button" onClick={() => void navigator.clipboard.writeText(latestArtifact.sha256).catch(() => undefined)}><Copy size={13} /> Salin</button></div><div className="integrity-verification-row"><button type="button" className="button secondary compact-button" onClick={() => verify()} disabled={verifyMutation.isPending}><RefreshCw size={13} /> {verifyMutation.isPending ? "Memverifikasi" : "Verifikasi ulang"}</button><small>Id: {latestArtifact.exportId}</small>{verificationMessage && <span role="status" className={verificationStatus === "verified" ? "integrity-success" : "integrity-error"}>{verificationMessage}</span>}</div></div>}
+    </> : null}
+  </section>;
+}
+
 function ArtifactDownload({ year, month, kind, status }: { year: number; month: number; kind: "csv" | "html" | "pdf"; status: IntegrityStatus }) {
   const extension = kind === "html" ? "HTML" : kind.toUpperCase();
   const [isDownloading, setIsDownloading] = useState(false);
@@ -283,6 +347,7 @@ function GovernanceAuditExportPanel({ enabled, initialYear }: { enabled: boolean
   return <Panel className="governance-audit-export-panel" title="Ekspor Audit Governance" description="Ekspor read-only jejak lifecycle yang sudah tersimpan. Filter diproses di server dalam scope owner-admin dan tidak mencatat event lifecycle baru.">
     <div className="governance-audit-stack">
       <QrExpiryPolicyHistory history={qrExpiryPolicyHistoryQuery.data} isLoading={qrExpiryPolicyHistoryQuery.isLoading} isError={qrExpiryPolicyHistoryQuery.isError} currentValidityMinutes={qrExpiryPolicyQuery.data?.validityMinutes ?? 30} />
+      <GovernanceAuditQrPolicyExportPanel enabled={enabled} />
       <div className="governance-audit-filters" aria-label="Filter ekspor audit governance">
         <label className="field"><span>Tahun periode</span><select aria-label="Tahun audit governance" className="form-input" value={auditYear} onChange={(event) => setAuditYear(event.target.value === "all" ? "all" : Number(event.target.value))}><option value="all">Semua tahun</option>{Array.from({ length: 8 }, (_, index) => initialYear - 5 + index).map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
         <label className="field"><span>Bulan periode</span><select aria-label="Bulan audit governance" className="form-input" value={auditMonth} onChange={(event) => setAuditMonth(event.target.value === "all" ? "all" : Number(event.target.value))}><option value="all">Semua bulan</option>{months.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}</select></label>

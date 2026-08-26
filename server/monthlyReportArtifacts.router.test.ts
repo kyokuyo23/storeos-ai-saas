@@ -20,6 +20,11 @@ const { getGovernanceAuditVerificationQrReference, resolveGovernanceAuditVerific
   resolveGovernanceAuditVerificationQr: vi.fn(() => ({ status: "verified", exportId: `storeos-governance-audit-csv-${"a".repeat(64)}`, verificationStatus: "verified" })),
   revokeGovernanceAuditVerificationQrReference: vi.fn(),
 }));
+const { generateGovernanceAuditQrPolicyAuditArtifact, getGovernanceAuditQrPolicyAuditExport, verifyGovernanceAuditQrPolicyAuditBytes } = vi.hoisted(() => ({
+  generateGovernanceAuditQrPolicyAuditArtifact: vi.fn(),
+  getGovernanceAuditQrPolicyAuditExport: vi.fn(),
+  verifyGovernanceAuditQrPolicyAuditBytes: vi.fn(),
+}));
 const { getGovernanceAuditQrExpiryPolicy, getGovernanceAuditQrRevocation, listGovernanceAuditQrExpiryPolicyHistory, revokeGovernanceAuditQrReference, updateGovernanceAuditQrExpiryPolicy } = vi.hoisted(() => ({
   getGovernanceAuditQrExpiryPolicy: vi.fn(),
   getGovernanceAuditQrRevocation: vi.fn(),
@@ -38,6 +43,7 @@ vi.mock("./monthlyReportArtifacts", () => ({
 vi.mock("./governanceAuditExportIntegrity", () => ({ generateGovernanceAuditExportArtifact, registerGeneratedGovernanceAuditExport, verifyGovernanceAuditExportBytes }));
 vi.mock("./governanceAuditVerificationReceipts", () => ({ issueGovernanceAuditVerificationReceipt }));
 vi.mock("./governanceAuditVerificationQr", () => ({ getGovernanceAuditVerificationQrReference, resolveGovernanceAuditVerificationQr, revokeGovernanceAuditVerificationQrReference }));
+vi.mock("./governanceAuditQrPolicyAuditExport", () => ({ generateGovernanceAuditQrPolicyAuditArtifact, getGovernanceAuditQrPolicyAuditExport, verifyGovernanceAuditQrPolicyAuditBytes }));
 vi.mock("./db", () => ({ getGovernanceAuditQrExpiryPolicy, getGovernanceAuditQrRevocation, listGovernanceAuditQrExpiryPolicyHistory, revokeGovernanceAuditQrReference, updateGovernanceAuditQrExpiryPolicy }));
 
 import { appRouter } from "./routers";
@@ -55,6 +61,9 @@ describe("reports.monthlyArtifacts authorization", () => {
     getGovernanceAuditVerificationQrReference.mockReturnValue({ status: "verified", reference: {} });
     revokeGovernanceAuditQrReference.mockResolvedValue({ outcome: "revoked", revocation: { referenceId: `qr_${"a".repeat(32)}`, actorOpenId: "owner-1" } });
     getGovernanceAuditQrRevocation.mockResolvedValue(null);
+    getGovernanceAuditQrPolicyAuditExport.mockResolvedValue({ kind: "storeos_governance_qr_policy_audit", version: 1, timezone: "Asia/Jakarta", generatedAt: new Date("2026-08-26T00:00:00.000Z"), filters: {}, recordCount: 0, records: [] });
+    generateGovernanceAuditQrPolicyAuditArtifact.mockResolvedValue({ exportId: `storeos-qr-policy-audit-csv-${"c".repeat(64)}`, format: "csv", filename: "audit.csv", contentType: "text/csv;charset=utf-8", generatedAt: new Date("2026-08-26T00:00:00.000Z"), timezone: "Asia/Jakarta", filters: {}, scope: "scope", recordCount: 0, byteSize: 12, sha256: "c".repeat(64), bytesBase64: "77u/" });
+    verifyGovernanceAuditQrPolicyAuditBytes.mockReturnValue({ verified: true, status: "verified", byteSize: 3 });
   });
 
   it("rejects anonymous artifact access", async () => {
@@ -130,6 +139,25 @@ describe("reports.monthlyArtifacts authorization", () => {
     await expect(caller({ openId: "other-workspace", role: "admin" }).reports.verifyMonthlyArtifactGovernanceAuditExport(verification)).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(caller({ openId: "owner-1", role: "admin" }).reports.verifyMonthlyArtifactGovernanceAuditExport(verification)).resolves.toMatchObject({ verified: true, status: "verified" });
     expect(verifyGovernanceAuditExportBytes).toHaveBeenCalledWith(verification.exportId, verification.bytesBase64);
+  });
+
+  it("restricts policy audit queries, generation, and exact-byte verification to the authenticated owner-admin", async () => {
+    const filters = { startDate: "2026-08-01", endDate: "2026-08-31", direction: "increase" as const, actorOpenId: "owner-1", scope: "governance_audit_qr_expiry" as const };
+    const generation = { ...filters, format: "csv" as const };
+    const verification = { exportId: `storeos-qr-policy-audit-csv-${"c".repeat(64)}`, bytesBase64: "77u/" };
+    await expect(caller(null).reports.monthlyArtifactGovernanceAuditQrPolicyExport(filters)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller({ openId: "owner-1", role: "user" }).reports.generateMonthlyArtifactGovernanceAuditQrPolicyExport(generation)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller({ openId: "other-workspace", role: "admin" }).reports.verifyMonthlyArtifactGovernanceAuditQrPolicyExport(verification)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(getGovernanceAuditQrPolicyAuditExport).not.toHaveBeenCalled();
+    expect(generateGovernanceAuditQrPolicyAuditArtifact).not.toHaveBeenCalled();
+    expect(verifyGovernanceAuditQrPolicyAuditBytes).not.toHaveBeenCalled();
+
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.monthlyArtifactGovernanceAuditQrPolicyExport(filters)).resolves.toMatchObject({ kind: "storeos_governance_qr_policy_audit", recordCount: 0 });
+    expect(getGovernanceAuditQrPolicyAuditExport).toHaveBeenCalledWith("owner-1", filters);
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.generateMonthlyArtifactGovernanceAuditQrPolicyExport(generation)).resolves.toMatchObject({ format: "csv", byteSize: 12 });
+    expect(generateGovernanceAuditQrPolicyAuditArtifact).toHaveBeenCalledWith("owner-1", filters, "csv");
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.verifyMonthlyArtifactGovernanceAuditQrPolicyExport(verification)).resolves.toMatchObject({ verified: true, status: "verified" });
+    expect(verifyGovernanceAuditQrPolicyAuditBytes).toHaveBeenCalledWith(verification.exportId, verification.bytesBase64);
   });
 
   it("rejects anonymous, member, and cross-workspace verification receipt requests before receipt issuance", async () => {

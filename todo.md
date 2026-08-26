@@ -401,3 +401,12 @@
 - [x] Preserve existing QR expiry, revocation, HMAC, owner authorization, and exact-byte SHA-256 verification behavior
 - [x] Add Phase 2.14 snapshot/diff, policy-history, receipt output, non-mutation, authorization, browser, and responsive regression coverage
 - [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.14
+
+- [x] Inspect QR policy-history, governance audit export integrity, owner authorization, and Reports UI integration points for Phase 2.15 reuse
+- [x] Add a server-filtered owner-admin QR policy audit dataset with deterministic Jakarta/WIB boundaries, direction, actor, and scope filters
+- [x] Generate BOM CSV and printable/PDF policy audit exports as exact server-side bytes with selected scope, WIB metadata, export ID, SHA-256, and byte size
+- [x] Add protected exact-byte policy audit verification with tamper mismatch reporting and no regeneration on mismatch
+- [x] Add responsive owner-admin Ekspor Audit Kebijakan QR controls, result states, downloads, and integrity presentation
+- [x] Preserve append-only policy history, QR expiry/revocation/HMAC/SHA enforcement, report artifacts, lifecycle, retention, scheduler, and operational-domain immutability
+- [x] Add Phase 2.15 filter, integrity, authorization, read-only, CSV/PDF, browser-download, and responsive regression coverage
+- [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.15

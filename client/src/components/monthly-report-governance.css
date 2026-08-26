@@ -162,6 +162,48 @@
 .governance-qr-policy-history-list code { max-width: min(240px, 42%); overflow: hidden; color: #607b72; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .governance-qr-policy-history-empty { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
 
+.governance-qr-policy-audit {
+  display: grid;
+  gap: 10px;
+  padding: 13px 14px;
+  border: 1px solid #c9dfd5;
+  border-radius: 12px;
+  background: #f3faf6;
+}
+
+.governance-qr-policy-audit .governance-section-heading { display: flex; align-items: flex-start; gap: 7px; color: #2d5948; }
+.governance-qr-policy-audit .governance-section-heading > div { display: grid; gap: 3px; }
+.governance-qr-policy-audit .governance-section-heading strong { font-size: 12px; }
+.governance-qr-policy-audit .governance-section-heading small { color: #607b72; font-size: 11px; line-height: 1.4; }
+
+.governance-qr-policy-audit-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(128px, 1fr));
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid #dbeae3;
+  border-radius: 9px;
+  background: #fff;
+}
+.governance-qr-policy-audit-filters .field { display: grid; gap: 5px; }
+.governance-qr-policy-audit-filters .field span { color: #607b72; font-size: 11px; font-weight: 700; }
+
+.governance-qr-policy-audit-summary {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(170px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid #dbeae3;
+  border-radius: 9px;
+  background: #fff;
+}
+.governance-qr-policy-audit-summary > div { display: grid; gap: 2px; min-width: 0; }
+.governance-qr-policy-audit-summary span,
+.governance-qr-policy-audit-summary small { color: #607b72; font-size: 11px; line-height: 1.4; }
+.governance-qr-policy-audit-summary strong { color: #295845; font-size: 12px; }
+.governance-qr-policy-audit-list li strong { text-transform: capitalize; }
+
 .governance-qr-receipt-policy {
   display: grid;
   gap: 10px;
@@ -323,6 +365,8 @@
 @media (max-width: 1020px) {
   .governance-audit-filters { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
   .governance-audit-summary { grid-template-columns: 1fr 1fr; }
+  .governance-qr-policy-audit-filters { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+  .governance-qr-policy-audit-summary { grid-template-columns: 1fr 1fr; }
   .governance-audit-actions { justify-content: flex-start; }
 }
 
@@ -333,7 +377,9 @@
   .archive-confirmation-heading .button,
   .archive-confirmation-actions .button { width: 100%; }
   .governance-audit-filters,
-  .governance-audit-summary { grid-template-columns: 1fr; }
+  .governance-audit-summary,
+  .governance-qr-policy-audit-filters,
+  .governance-qr-policy-audit-summary { grid-template-columns: 1fr; }
   .governance-qr-expiry-policy { grid-template-columns: 1fr; align-items: stretch; }
   .governance-qr-expiry-policy .button { width: 100%; }
   .governance-qr-policy-history-list li { align-items: flex-start; flex-direction: column; }

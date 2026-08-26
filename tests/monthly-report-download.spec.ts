@@ -259,6 +259,31 @@ const governanceAuditReceiptPdfFixture = {
   receiptSha256: "f".repeat(64),
   bytesBase64: Buffer.from("%PDF-1.4\nStoreOS Governance Audit Verification Receipt\n%%EOF", "utf8").toString("base64"),
 };
+const governanceAuditQrPolicyAuditFixture = {
+  kind: "storeos_governance_qr_policy_audit",
+  version: 1,
+  generatedAt: "2026-08-26T01:15:00.000Z",
+  timezone: "Asia/Jakarta",
+  filters: { startDate: null, endDate: null, direction: null, actorOpenId: null, scope: "governance_audit_qr_expiry", dateBoundary: "start_inclusive_end_exclusive_wib" },
+  recordCount: 2,
+  records: [
+    { eventId: "qrph_browser_90", previousValidityMinutes: 30, newValidityMinutes: 90, deltaMinutes: 60, direction: "increase", result: "updated", changedAt: "2026-08-26T02:10:00.000Z", actorOpenId: "owner-1", scope: "governance_audit_qr_expiry" },
+    { eventId: "qrph_browser_45", previousValidityMinutes: 90, newValidityMinutes: 45, deltaMinutes: -45, direction: "decrease", result: "updated", changedAt: "2026-08-25T17:30:00.000Z", actorOpenId: "owner-1", scope: "governance_audit_qr_expiry" },
+  ],
+};
+const governanceAuditQrPolicyAuditCsvBytes = Buffer.from("\ufeff\"StoreOS QR Policy Audit Snapshot Export\",\"v1\"\r\n\"ID event kebijakan\",\"Arah\"\r\n\"qrph_browser_90\",\"increase\"\r\n", "utf8");
+const governanceAuditQrPolicyAuditCsvFixture = {
+  kind: "storeos_governance_qr_policy_audit_export", version: 1,
+  exportId: `storeos-qr-policy-audit-csv-${"a".repeat(64)}`,
+  format: "csv", filename: "storeos-qr-policy-audit-all-all-all.csv", contentType: "text/csv;charset=utf-8",
+  generatedAt: governanceAuditQrPolicyAuditFixture.generatedAt, timezone: "Asia/Jakarta", filters: governanceAuditQrPolicyAuditFixture.filters,
+  scope: "tanggal=semua s.d. semua WIB; arah=semua; aktor=semua; scope=governance_audit_qr_expiry", recordCount: 2,
+  byteSize: governanceAuditQrPolicyAuditCsvBytes.byteLength, sha256: "a".repeat(64), bytesBase64: governanceAuditQrPolicyAuditCsvBytes.toString("base64"),
+};
+const governanceAuditQrPolicyAuditPdfFixture = {
+  ...governanceAuditQrPolicyAuditCsvFixture, exportId: `storeos-qr-policy-audit-pdf-${"b".repeat(64)}`, format: "pdf", filename: "storeos-qr-policy-audit-all-all-all.pdf", contentType: "application/pdf",
+  bytesBase64: Buffer.from("%PDF-1.4\nStoreOS QR Policy Audit Snapshot\n%%EOF", "utf8").toString("base64"), byteSize: Buffer.byteLength("%PDF-1.4\nStoreOS QR Policy Audit Snapshot\n%%EOF"), sha256: "b".repeat(64),
+};
 
 async function installArtifactOwnerRoutes(
   page: import("@playwright/test").Page,
@@ -275,6 +300,8 @@ async function installArtifactOwnerRoutes(
   onQrExpiryPolicyUpdate?: (validityMinutes: number) => void,
   qrRevocationWorkflow?: { issuedAt?: string; revocation?: unknown; onRevoke?: (reason: string | null) => void },
   qrExpiryPolicyHistory: Array<{ eventId: string; previousValidityMinutes: number; newValidityMinutes: number; resultingValidityMinutes: number; changedAt: string; actorOpenId: string }> = [],
+  governanceAuditQrPolicyAudit: unknown = governanceAuditQrPolicyAuditFixture,
+  governanceAuditQrPolicyAuditVerification: unknown = { verified: true, status: "verified", byteSize: governanceAuditQrPolicyAuditCsvFixture.byteSize, expectedSha256: governanceAuditQrPolicyAuditCsvFixture.sha256, actualSha256: governanceAuditQrPolicyAuditCsvFixture.sha256 },
 ) {
   const owner = { id: 1, openId: "owner-1", name: "Pemilik", role: "admin" };
   let qrExpiryValidityMinutes = governanceAuditQrExpiryPolicy.validityMinutes;
@@ -318,6 +345,9 @@ async function installArtifactOwnerRoutes(
                               : procedure === "reports.getMonthlyArtifactGovernanceAuditQrExpiryPolicy" ? { ownerOpenId: "owner-1", validityMinutes: qrExpiryValidityMinutes }
                               : procedure === "reports.listMonthlyArtifactGovernanceAuditQrExpiryPolicyHistory" ? qrExpiryHistory
                               : procedure === "reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy" ? { ownerOpenId: "owner-1", validityMinutes: qrExpiryValidityMinutes, outcome: qrExpiryChanged ? "updated" : "unchanged" }
+                              : procedure === "reports.monthlyArtifactGovernanceAuditQrPolicyExport" ? governanceAuditQrPolicyAudit
+                              : procedure === "reports.generateMonthlyArtifactGovernanceAuditQrPolicyExport" ? (requestedAuditFormat === "pdf" ? governanceAuditQrPolicyAuditPdfFixture : governanceAuditQrPolicyAuditCsvFixture)
+                              : procedure === "reports.verifyMonthlyArtifactGovernanceAuditQrPolicyExport" ? governanceAuditQrPolicyAuditVerification
                             : procedure === "reports.archiveMonthlyArtifact" ? (onArchive?.(), archiveResult)
               : undefined;
       return data === undefined ? { error: { json: { message: `Unhandled test procedure: ${procedure}`, code: -32601, data: { code: "NOT_FOUND", httpStatus: 404 } } } } : { result: { data: { json: data } } };
@@ -604,6 +634,31 @@ test("issues a safe QR reference only from a verified receipt and resolves check
   await expect(result).toContainText("Berlaku sampai");
   await expect(result.getByRole("button", { name: /Unduh/ })).toHaveCount(0);
   await expect(page.locator("body")).not.toContainText("monthly-management-reports/");
+});
+
+test("filters, downloads, and re-verifies an owner-admin QR policy audit export from exact server bytes", async ({ page }, testInfo) => {
+  await installArtifactOwnerRoutes(page, [storedArtifactFixture]);
+  await page.goto("/reports");
+  const audit = page.getByLabel("Ekspor Audit Kebijakan QR");
+  await expect(audit).toContainText("Riwayat tersaring");
+  await expect(audit).toContainText("2 event");
+  await audit.getByLabel("Arah audit kebijakan QR").selectOption("increase");
+  await audit.getByLabel("Aktor audit kebijakan QR").fill("owner-1");
+  await expect(audit).toContainText("qrph_browser_90");
+  const downloadPromise = page.waitForEvent("download");
+  await audit.getByRole("button", { name: "CSV Kebijakan" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe(governanceAuditQrPolicyAuditCsvFixture.filename);
+  const path = testInfo.outputPath(download.suggestedFilename());
+  await download.saveAs(path);
+  const bytes = await readFile(path);
+  expect(bytes.subarray(0, 3)).toEqual(Buffer.from([0xef, 0xbb, 0xbf]));
+  expect(bytes.toString("utf8")).toContain("qrph_browser_90");
+  const integrity = page.getByLabel("Integritas ekspor audit kebijakan QR");
+  await expect(integrity.getByLabel("SHA-256 ekspor audit kebijakan QR")).toHaveValue("a".repeat(64));
+  await expect(integrity.getByRole("status")).toContainText("Terverifikasi server");
+  await integrity.getByRole("button", { name: "Verifikasi ulang" }).click();
+  await expect(integrity.getByRole("status")).toContainText("SHA-256 cocok");
 });
 
 test("allows the owner-admin to persist a bounded QR expiry policy and applies it only to the newly issued receipt", async ({ page }) => {
