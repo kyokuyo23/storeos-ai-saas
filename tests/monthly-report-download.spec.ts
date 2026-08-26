@@ -215,6 +215,18 @@ const governanceAuditIntegrityPdfFixture = {
   sha256: "e".repeat(64),
 };
 const governanceAuditReceiptCsvBytes = Buffer.from(`\ufeff"StoreOS Governance Audit Verification Receipt","v1"\r\n"Export ID","${governanceAuditIntegrityCsvFixture.exportId}"\r\n"SHA-256 export","${governanceAuditIntegrityCsvFixture.sha256}"\r\n"Status verifikasi","verified"\r\n`, "utf8");
+const governanceAuditQrFixture = {
+  version: 1,
+  referenceId: `qr_${"9".repeat(32)}`,
+  exportId: governanceAuditIntegrityCsvFixture.exportId,
+  receiptId: `storeos-governance-audit-receipt-${governanceAuditIntegrityCsvFixture.exportId}`,
+  verificationStatus: "verified",
+  issuedAt: "2026-08-26T01:20:00.000Z",
+  expiresAt: "2026-08-26T01:50:00.000Z",
+  payload: JSON.stringify({ version: 1, referenceId: `qr_${"9".repeat(32)}`, exportId: governanceAuditIntegrityCsvFixture.exportId, receiptId: `storeos-governance-audit-receipt-${governanceAuditIntegrityCsvFixture.exportId}`, verificationStatus: "verified" }),
+  verificationUrl: `/verify?ref=qr_${"9".repeat(32)}&export=${governanceAuditIntegrityCsvFixture.exportId}&receipt=storeos-governance-audit-receipt-${governanceAuditIntegrityCsvFixture.exportId}&status=verified`,
+  imageDataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Jr0sAAAAASUVORK5CYII=",
+};
 const governanceAuditReceiptCsvFixture = {
   receiptId: `storeos-governance-audit-receipt-${governanceAuditIntegrityCsvFixture.exportId}`,
   receiptFormat: "csv",
@@ -225,6 +237,7 @@ const governanceAuditReceiptCsvFixture = {
   verification: { verified: true, status: "verified", expectedSha256: governanceAuditIntegrityCsvFixture.sha256, actualSha256: governanceAuditIntegrityCsvFixture.sha256, byteSize: governanceAuditIntegrityCsvFixture.byteSize },
   receiptByteSize: governanceAuditReceiptCsvBytes.byteLength,
   receiptSha256: "c".repeat(64),
+  qr: governanceAuditQrFixture,
   bytesBase64: governanceAuditReceiptCsvBytes.toString("base64"),
 };
 const governanceAuditReceiptPdfFixture = {
@@ -247,6 +260,7 @@ async function installArtifactOwnerRoutes(
   governanceAuditExport: unknown = governanceAuditExportFixture,
   governanceAuditVerification: unknown = { verified: true, status: "verified", byteSize: governanceAuditIntegrityCsvFixture.byteSize, expectedSha256: governanceAuditIntegrityCsvFixture.sha256, actualSha256: governanceAuditIntegrityCsvFixture.sha256 },
   governanceAuditReceipt: unknown = { status: "issued", receipt: governanceAuditReceiptCsvFixture },
+  governanceAuditQrVerification: unknown = { status: "verified", exportId: governanceAuditIntegrityCsvFixture.exportId, receiptId: governanceAuditQrFixture.receiptId, scope: governanceAuditIntegrityCsvFixture.scope, format: "csv", generatedAt: governanceAuditIntegrityCsvFixture.generatedAt, generatedAtWib: "25 Agu 2026 10.15 WIB", verifiedAt: "2026-08-26T01:20:00.000Z", verifiedAtWib: "26 Agu 2026 08.20 WIB", byteSize: governanceAuditIntegrityCsvFixture.byteSize, sha256: governanceAuditIntegrityCsvFixture.sha256, verificationStatus: "verified" },
 ) {
   const owner = { id: 1, openId: "owner-1", name: "Pemilik", role: "admin" };
   await page.route("**/api/trpc/**", async (route) => {
@@ -262,9 +276,10 @@ async function installArtifactOwnerRoutes(
               : procedure === "reports.monthlyArtifactLifecycleHistory" ? lifecycleHistory
                 : procedure === "reports.monthlyArtifactGovernanceAuditExport" ? governanceAuditExport
                     : procedure === "reports.generateMonthlyArtifactGovernanceAuditExport" ? (requestedAuditFormat === "pdf" ? governanceAuditIntegrityPdfFixture : governanceAuditIntegrityCsvFixture)
-                      : procedure === "reports.verifyMonthlyArtifactGovernanceAuditExport" ? governanceAuditVerification
-                        : procedure === "reports.issueMonthlyArtifactGovernanceAuditVerificationReceipt" ? (requestedReceiptFormat === "pdf" && typeof governanceAuditReceipt === "object" && governanceAuditReceipt && "status" in governanceAuditReceipt && (governanceAuditReceipt as { status?: string }).status === "issued" ? { status: "issued", receipt: governanceAuditReceiptPdfFixture } : governanceAuditReceipt)
-                        : procedure === "reports.archiveMonthlyArtifact" ? (onArchive?.(), archiveResult)
+                        : procedure === "reports.verifyMonthlyArtifactGovernanceAuditExport" ? governanceAuditVerification
+                          : procedure === "reports.issueMonthlyArtifactGovernanceAuditVerificationReceipt" ? (requestedReceiptFormat === "pdf" && typeof governanceAuditReceipt === "object" && governanceAuditReceipt && "status" in governanceAuditReceipt && (governanceAuditReceipt as { status?: string }).status === "issued" ? { status: "issued", receipt: governanceAuditReceiptPdfFixture } : governanceAuditReceipt)
+                            : procedure === "reports.resolveMonthlyArtifactGovernanceAuditVerificationQr" ? governanceAuditQrVerification
+                            : procedure === "reports.archiveMonthlyArtifact" ? (onArchive?.(), archiveResult)
               : undefined;
       return data === undefined ? { error: { json: { message: `Unhandled test procedure: ${procedure}`, code: -32601, data: { code: "NOT_FOUND", httpStatus: 404 } } } } : { result: { data: { json: data } } };
     });
@@ -481,6 +496,7 @@ test("shows an explicit integrity warning when server verification detects tampe
   await expect(integrity.getByRole("button", { name: "Verifikasi ulang" })).toBeVisible();
   await expect(integrity.getByRole("button", { name: "Bukti CSV" })).toBeDisabled();
   await expect(integrity.getByRole("button", { name: "Bukti PDF" })).toBeDisabled();
+  await expect(page.getByLabel("Referensi QR verifikasi audit")).toHaveCount(0);
 });
 
 test("downloads owner-admin verification receipts only after the exact export bytes are server-verified", async ({ page }, testInfo) => {
@@ -510,6 +526,35 @@ test("downloads owner-admin verification receipts only after the exact export by
   const pdfReceiptPath = testInfo.outputPath(pdfReceipt.suggestedFilename());
   await pdfReceipt.saveAs(pdfReceiptPath);
   expect((await readFile(pdfReceiptPath)).subarray(0, 5).toString()).toBe("%PDF-");
+});
+
+test("issues a safe QR reference only from a verified receipt and resolves checksum metadata without artifact download", async ({ page }) => {
+  await installArtifactOwnerRoutes(page, [storedArtifactFixture]);
+  await page.goto("/reports");
+  const integrity = page.getByLabel("Integritas ekspor audit governance");
+
+  await page.getByRole("button", { name: "CSV Audit" }).click();
+  await expect(integrity.getByRole("status")).toContainText("Terverifikasi server");
+  const receiptDownloadPromise = page.waitForEvent("download");
+  await integrity.getByRole("button", { name: "Bukti CSV" }).click();
+  await receiptDownloadPromise;
+
+  const qr = page.getByLabel("Referensi QR verifikasi audit");
+  await expect(qr).toBeVisible();
+  await expect(qr.getByText("Referensi QR terverifikasi")).toBeVisible();
+  await expect(qr.getByText(governanceAuditQrFixture.referenceId, { exact: true })).toBeVisible();
+  await expect(qr.getByRole("img", { name: "QR untuk referensi verifikasi audit" })).toHaveAttribute("src", /^data:image\/png;base64,/);
+  const verifyLink = qr.getByRole("link", { name: "Buka hasil verifikasi QR" });
+  await expect(verifyLink).toHaveAttribute("href", /\/verify\?ref=qr_[a-f0-9]{32}&export=storeos-governance-audit-csv-/);
+
+  await verifyLink.click();
+  await expect(page.getByRole("heading", { name: "Verifikasi referensi QR" })).toBeVisible();
+  const result = page.getByLabel("Verifikasi QR Governance Audit");
+  await expect(result.getByText("Checksum ekspor terverifikasi")).toBeVisible();
+  await expect(result).toContainText(governanceAuditIntegrityCsvFixture.exportId);
+  await expect(result).toContainText(governanceAuditIntegrityCsvFixture.sha256);
+  await expect(result.getByRole("button", { name: /Unduh/ })).toHaveCount(0);
+  await expect(page.locator("body")).not.toContainText("monthly-management-reports/");
 });
 
 test("keeps governance audit filters and export actions readable on a narrow mobile viewport", async ({ page }) => {

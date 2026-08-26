@@ -363,3 +363,10 @@
 - [x] Add responsive verified receipt download controls, status, timestamp, and error states beside governance export integrity metadata
 - [x] Add Phase 2.9 receipt-content, authorization, read-only, parsing, printable, browser-download, and responsive regression coverage
 - [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.9
+
+- [x] Inspect the Phase 2.9 receipt, export-integrity, authorization, and printable-report architecture for Phase 2.10 QR reference reuse
+- [x] Add protected, non-sensitive, non-guessable QR reference issuance and exact-byte checksum verification with explicit failure outcomes
+- [x] Add minimal protected QR verification resolution that never bypasses existing artifact download authorization or mutates lifecycle/domain records
+- [x] Integrate QR references into printable/PDF verification receipts and responsive owner-admin verification UI
+- [x] Add Phase 2.10 QR payload safety, deterministic reference, checksum, missing/corrupt/mismatch, authorization, browser, printable, and responsive coverage
+- [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.10

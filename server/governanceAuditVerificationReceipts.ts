@@ -5,6 +5,7 @@ import {
   verifyGovernanceAuditExportBytes,
   type GovernanceAuditExportFormat,
 } from "./governanceAuditExportIntegrity";
+import { createGovernanceAuditVerificationQr, type GovernanceAuditVerificationQr } from "./governanceAuditVerificationQr";
 
 export type GovernanceAuditReceiptFormat = "csv" | "pdf";
 
@@ -38,6 +39,7 @@ export type GovernanceAuditVerificationReceipt = {
     actualSha256: string;
     byteSize: number;
   };
+  qr: GovernanceAuditVerificationQr;
   bytesBase64: string;
 };
 
@@ -75,6 +77,9 @@ function receiptRows(receipt: Omit<GovernanceAuditVerificationReceipt, "bytesBas
     ["Export byte size", receipt.export.byteSize],
     ["Export SHA-256", receipt.export.sha256],
     ["Verified SHA-256", receipt.verification.actualSha256],
+    ["QR verification reference", receipt.qr.referenceId],
+    ["QR verification status", receipt.qr.verificationStatus],
+    ["QR verification payload", receipt.qr.payload],
   ];
 }
 
@@ -93,7 +98,7 @@ function escapeHtml(value: string | number) {
 
 function buildReceiptPdfBytes(receipt: Omit<GovernanceAuditVerificationReceipt, "bytesBase64" | "receiptByteSize" | "receiptSha256">) {
   const lines = receiptRows(receipt).map(([label, value]) => `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`).join("");
-  const html = `<!doctype html><html lang="id"><head><meta charset="utf-8"><title>StoreOS Verification Receipt</title><style>body{font-family:Arial,sans-serif;color:#17251f;font-size:12px;padding:28px}h1{font-size:19px;margin:0 0 8px}p{margin:0 0 16px;color:#436052}table{border-collapse:collapse;width:100%}th,td{border:1px solid #cbd8d0;padding:8px;vertical-align:top;text-align:left;word-break:break-word}th{background:#edf6f0;width:38%}</style></head><body><h1>StoreOS Governance Audit Verification Receipt</h1><p>Read-only receipt for an exact verified governance audit export.</p><table>${lines}</table></body></html>`;
+  const html = `<!doctype html><html lang="id"><head><meta charset="utf-8"><title>StoreOS Verification Receipt</title><style>body{font-family:Arial,sans-serif;color:#17251f;font-size:12px;padding:28px}h1{font-size:19px;margin:0 0 8px}p{margin:0 0 16px;color:#436052}table{border-collapse:collapse;width:100%}th,td{border:1px solid #cbd8d0;padding:8px;vertical-align:top;text-align:left;word-break:break-word}th{background:#edf6f0;width:38%}.qr{margin:20px 0;display:flex;gap:14px;align-items:center}.qr img{width:132px;height:132px}.qr code{word-break:break-all;color:#436052}</style></head><body><h1>StoreOS Governance Audit Verification Receipt</h1><p>Read-only receipt for an exact verified governance audit export.</p><div class="qr"><img src="${receipt.qr.imageDataUrl}" alt="QR verification reference" /><div><strong>QR verification reference</strong><br /><code>${escapeHtml(receipt.qr.referenceId)}</code><br /><small>QR contains only the safe verification reference, export ID, receipt ID, and verified status.</small></div></div><table>${lines}</table></body></html>`;
   return printableMonthlyHtmlToPdf(html, {
     title: "StoreOS Governance Audit Verification Receipt",
     subject: "Verified exact-byte governance audit export receipt",
@@ -101,11 +106,11 @@ function buildReceiptPdfBytes(receipt: Omit<GovernanceAuditVerificationReceipt, 
   });
 }
 
-export function issueGovernanceAuditVerificationReceipt(
+export async function issueGovernanceAuditVerificationReceipt(
   ownerOpenId: string,
   input: { exportId: string; bytesBase64: string; receiptFormat: GovernanceAuditReceiptFormat },
   verificationAt = new Date(),
-): GovernanceAuditVerificationReceiptResult {
+): Promise<GovernanceAuditVerificationReceiptResult> {
   const artifact = getGeneratedGovernanceAuditExportForOwner(ownerOpenId, input.exportId);
   if (!artifact) {
     return { status: "export_not_available", message: "Ekspor audit tidak tersedia pada konteks server ini. Buat dan verifikasi ulang ekspor sebelum mengunduh bukti." };
@@ -128,6 +133,7 @@ export function issueGovernanceAuditVerificationReceipt(
   }
 
   const receiptId = `storeos-governance-audit-receipt-${artifact.exportId}`;
+  const qr = await createGovernanceAuditVerificationQr(ownerOpenId, artifact, receiptId, verificationAt);
   const baseReceipt = {
     kind: "storeos_governance_audit_verification_receipt" as const,
     version: 1 as const,
@@ -156,6 +162,7 @@ export function issueGovernanceAuditVerificationReceipt(
       actualSha256: verification.actualSha256,
       byteSize: verification.byteSize,
     },
+    qr,
   };
   const bytes = input.receiptFormat === "csv" ? buildReceiptCsvBytes(baseReceipt) : buildReceiptPdfBytes(baseReceipt);
   return {

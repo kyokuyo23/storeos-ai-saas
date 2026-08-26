@@ -11,6 +11,7 @@ import { getMonthlyManagementReport } from "./monthlyReports";
 import { archiveMonthlyReportArtifactWithOwnerApproval, canAccessMonthlyReportArtifacts, getMonthlyReportArtifactGovernanceAuditExport, getMonthlyReportArtifactGovernanceSummary, getMonthlyReportArtifactLifecycleHistory, listMonthlyReportArtifacts } from "./monthlyReportArtifacts";
 import { generateGovernanceAuditExportArtifact, registerGeneratedGovernanceAuditExport, verifyGovernanceAuditExportBytes } from "./governanceAuditExportIntegrity";
 import { issueGovernanceAuditVerificationReceipt } from "./governanceAuditVerificationReceipts";
+import { resolveGovernanceAuditVerificationQr } from "./governanceAuditVerificationQr";
 
 const idInput = z.object({ id: z.number().int().positive() });
 const runMutation = async <T>(entity: string, operation: () => Promise<T>) => {
@@ -110,7 +111,15 @@ export const appRouter = router({
       receiptFormat: z.enum(["csv", "pdf"]),
     })).mutation(({ ctx, input }) => {
       if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Bukti verifikasi ekspor audit dibatasi untuk pemilik StoreOS." });
-      return runMutation("Bukti verifikasi ekspor audit", () => Promise.resolve(issueGovernanceAuditVerificationReceipt(ctx.user.openId, input)));
+      return runMutation("Bukti verifikasi ekspor audit", () => issueGovernanceAuditVerificationReceipt(ctx.user.openId, input));
+    }),
+    resolveMonthlyArtifactGovernanceAuditVerificationQr: protectedProcedure.input(z.object({
+      referenceId: z.string().regex(/^qr_[a-f0-9]{32}$/),
+      exportId: z.string().min(32).max(128),
+      receiptId: z.string().min(32).max(160),
+    })).query(({ ctx, input }) => {
+      if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Verifikasi QR ekspor audit dibatasi untuk pemilik StoreOS." });
+      return runMutation("Verifikasi QR ekspor audit", () => Promise.resolve(resolveGovernanceAuditVerificationQr(ctx.user.openId, input)));
     }),
     archiveMonthlyArtifact: protectedProcedure.input(z.object({ year: z.number().int().min(2000).max(2200), month: z.number().int().min(1).max(12) })).mutation(({ ctx, input }) => {
       if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Arsip laporan dibatasi untuk pemilik StoreOS." });

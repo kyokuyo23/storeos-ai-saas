@@ -57,7 +57,7 @@ describe("Phase 2.9 governance audit verification receipts", () => {
   it("issues a deterministic BOM CSV receipt only for the exact verified bytes and includes WIB, scope, size, and hashes", async () => {
     const { artifact, audit } = await registeredExport();
     const snapshot = JSON.stringify(audit);
-    const result = issueGovernanceAuditVerificationReceipt("owner-1", { exportId: artifact.exportId, bytesBase64: artifact.bytesBase64, receiptFormat: "csv" }, verificationAt);
+    const result = await issueGovernanceAuditVerificationReceipt("owner-1", { exportId: artifact.exportId, bytesBase64: artifact.bytesBase64, receiptFormat: "csv" }, verificationAt);
 
     expect(result.status).toBe("issued");
     if (result.status !== "issued") throw new Error("Expected receipt issuance");
@@ -81,7 +81,7 @@ describe("Phase 2.9 governance audit verification receipts", () => {
 
   it("issues a PDF receipt from the verified export context with exact receipt-byte metadata", async () => {
     const { artifact } = await registeredExport();
-    const result = issueGovernanceAuditVerificationReceipt("owner-1", { exportId: artifact.exportId, bytesBase64: artifact.bytesBase64, receiptFormat: "pdf" }, verificationAt);
+    const result = await issueGovernanceAuditVerificationReceipt("owner-1", { exportId: artifact.exportId, bytesBase64: artifact.bytesBase64, receiptFormat: "pdf" }, verificationAt);
 
     expect(result.status).toBe("issued");
     if (result.status !== "issued") throw new Error("Expected receipt issuance");
@@ -98,11 +98,11 @@ describe("Phase 2.9 governance audit verification receipts", () => {
     const tampered = Buffer.from(artifact.bytesBase64, "base64");
     tampered[tampered.byteLength - 1] ^= 0x01;
 
-    const mismatch = issueGovernanceAuditVerificationReceipt("owner-1", { exportId: artifact.exportId, bytesBase64: tampered.toString("base64"), receiptFormat: "csv" }, verificationAt);
+    const mismatch = await issueGovernanceAuditVerificationReceipt("owner-1", { exportId: artifact.exportId, bytesBase64: tampered.toString("base64"), receiptFormat: "csv" }, verificationAt);
     expect(mismatch).toMatchObject({ status: "verification_failed", expectedSha256: artifact.sha256 });
     expect(mismatch.status === "verification_failed" && mismatch.actualSha256).not.toBe(artifact.sha256);
-    expect(issueGovernanceAuditVerificationReceipt("other-owner", { exportId: artifact.exportId, bytesBase64: artifact.bytesBase64, receiptFormat: "csv" }, verificationAt)).toMatchObject({ status: "export_not_available" });
-    expect(issueGovernanceAuditVerificationReceipt("owner-1", { exportId: "storeos-governance-audit-csv-" + "f".repeat(64), bytesBase64: artifact.bytesBase64, receiptFormat: "csv" }, verificationAt)).toMatchObject({ status: "export_not_available" });
+    await expect(issueGovernanceAuditVerificationReceipt("other-owner", { exportId: artifact.exportId, bytesBase64: artifact.bytesBase64, receiptFormat: "csv" }, verificationAt)).resolves.toMatchObject({ status: "export_not_available" });
+    await expect(issueGovernanceAuditVerificationReceipt("owner-1", { exportId: "storeos-governance-audit-csv-" + "f".repeat(64), bytesBase64: artifact.bytesBase64, receiptFormat: "csv" }, verificationAt)).resolves.toMatchObject({ status: "export_not_available" });
     expect(JSON.stringify(audit)).toBe(snapshot);
   });
 });

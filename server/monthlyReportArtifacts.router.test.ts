@@ -15,6 +15,9 @@ const { generateGovernanceAuditExportArtifact, registerGeneratedGovernanceAuditE
 const { issueGovernanceAuditVerificationReceipt } = vi.hoisted(() => ({
   issueGovernanceAuditVerificationReceipt: vi.fn(() => ({ status: "issued", receipt: { receiptId: "storeos-governance-audit-receipt-test", receiptFormat: "csv", filename: "receipt.csv", contentType: "text/csv;charset=utf-8", receiptByteSize: 12, receiptSha256: "b".repeat(64), bytesBase64: "77u/" } })),
 }));
+const { resolveGovernanceAuditVerificationQr } = vi.hoisted(() => ({
+  resolveGovernanceAuditVerificationQr: vi.fn(() => ({ status: "verified", exportId: `storeos-governance-audit-csv-${"a".repeat(64)}`, verificationStatus: "verified" })),
+}));
 vi.mock("./monthlyReportArtifacts", () => ({
   archiveMonthlyReportArtifactWithOwnerApproval,
   canAccessMonthlyReportArtifacts: (user: { openId: string; role: string } | null) => user?.openId === "owner-1" && user.role === "admin",
@@ -25,6 +28,7 @@ vi.mock("./monthlyReportArtifacts", () => ({
 }));
 vi.mock("./governanceAuditExportIntegrity", () => ({ generateGovernanceAuditExportArtifact, registerGeneratedGovernanceAuditExport, verifyGovernanceAuditExportBytes }));
 vi.mock("./governanceAuditVerificationReceipts", () => ({ issueGovernanceAuditVerificationReceipt }));
+vi.mock("./governanceAuditVerificationQr", () => ({ resolveGovernanceAuditVerificationQr }));
 
 import { appRouter } from "./routers";
 
@@ -120,5 +124,19 @@ describe("reports.monthlyArtifacts authorization", () => {
     const receiptInput = { exportId: `storeos-governance-audit-csv-${"a".repeat(64)}`, bytesBase64: "77u/", receiptFormat: "pdf" as const };
     await expect(caller({ openId: "owner-1", role: "admin" }).reports.issueMonthlyArtifactGovernanceAuditVerificationReceipt(receiptInput)).resolves.toMatchObject({ status: "issued", receipt: { receiptFormat: "csv" } });
     expect(issueGovernanceAuditVerificationReceipt).toHaveBeenCalledWith("owner-1", receiptInput);
+  });
+
+  it("rejects anonymous, member, and cross-workspace QR verification resolution before the resolver is called", async () => {
+    const qrInput = { referenceId: `qr_${"a".repeat(32)}`, exportId: `storeos-governance-audit-csv-${"a".repeat(64)}`, receiptId: `storeos-governance-audit-receipt-${"a".repeat(64)}` };
+    await expect(caller(null).reports.resolveMonthlyArtifactGovernanceAuditVerificationQr(qrInput)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller({ openId: "owner-1", role: "user" }).reports.resolveMonthlyArtifactGovernanceAuditVerificationQr(qrInput)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller({ openId: "other-workspace", role: "admin" }).reports.resolveMonthlyArtifactGovernanceAuditVerificationQr(qrInput)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(resolveGovernanceAuditVerificationQr).not.toHaveBeenCalled();
+  });
+
+  it("resolves a QR reference only in the authenticated owner-admin scope", async () => {
+    const qrInput = { referenceId: `qr_${"a".repeat(32)}`, exportId: `storeos-governance-audit-csv-${"a".repeat(64)}`, receiptId: `storeos-governance-audit-receipt-${"a".repeat(64)}` };
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.resolveMonthlyArtifactGovernanceAuditVerificationQr(qrInput)).resolves.toMatchObject({ status: "verified", verificationStatus: "verified" });
+    expect(resolveGovernanceAuditVerificationQr).toHaveBeenCalledWith("owner-1", qrInput);
   });
 });
