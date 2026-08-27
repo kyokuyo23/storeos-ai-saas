@@ -448,3 +448,10 @@
 - [x] Preserve artifact scope and metadata, owner-admin authorization, cross-scope denial, export integrity, and all protected financial, inventory, scheduler, artifact lifecycle, and QR domains
 - [x] Add Phase 2.19 unit, router, and browser coverage for presets, boundaries, custom precedence, state restoration, reset, empty state, authorization/isolation, artifact compatibility, and responsive layouts
 - [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.19
+
+- [x] Inspect released artifact, governance, review-period, and authorization infrastructure for Phase 2.20 reuse
+- [x] Add an owner-admin-only, read-only active-artifact summary scoped by the existing Jakarta/WIB review range
+- [x] Reuse existing server-side artifact verification to exclude retired, archived, corrupt, missing, non-production, and cross-scope entries from active counts
+- [x] Render responsive Ringkasan Artefak Aktif states for selected context, loading, empty, integrity warning, and authorization/error conditions
+- [x] Add unit, router, and browser coverage for deterministic counts, scope boundaries, integrity exclusions, read-only behavior, and access isolation
+- [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.20

@@ -355,6 +355,31 @@ async function installArtifactOwnerRoutes(
     const policyAuditForReview = requestedReviewPreset && reviewRanges[requestedReviewPreset]
       ? { ...governanceAuditQrPolicyAudit, filters: { ...governanceAuditQrPolicyAudit.filters, ...reviewRanges[requestedReviewPreset], datePreset: requestedReviewPreset, datePresetLabel: reviewRanges[requestedReviewPreset].label } }
       : governanceAuditQrPolicyAudit;
+    const activeSummaryRange = requestedReviewPreset && reviewRanges[requestedReviewPreset]
+      ? { ...reviewRanges[requestedReviewPreset], datePreset: requestedReviewPreset, datePresetLabel: reviewRanges[requestedReviewPreset].label }
+      : { label: "Pilihan bulan manual", startDate: reportFixture.period.startDate, endDate: reportFixture.period.endDate, startWib: `${reportFixture.period.startDate} 00:00:00 WIB`, endWib: "2026-02-01 00:00:00 WIB", datePreset: null, datePresetLabel: null };
+    const summaryArtifacts = artifacts as Array<{ year: number; month: number; generatedAt: string; lifecycleStatus?: string; csv?: { status?: string }; printableHtml?: { status?: string }; pdf?: { status?: string } }>;
+    const activeSummaryBundles = summaryArtifacts.filter((artifact) => artifact.lifecycleStatus !== "archived" && [artifact.csv, artifact.printableHtml, artifact.pdf].every((entry) => entry?.status === "available"));
+    const availabilityCounts = summaryArtifacts.reduce((counts, artifact) => {
+      [artifact.csv, artifact.printableHtml, artifact.pdf].forEach((entry) => {
+        const status = entry?.status ?? "missing";
+        counts[status] = (counts[status] ?? 0) + 1;
+      });
+      return counts;
+    }, { available: 0, missing: 0, corrupt: 0, retired: 0, archived: 0 } as Record<string, number>);
+    const chronologicalActiveBundles = [...activeSummaryBundles].sort((left, right) => left.year - right.year || left.month - right.month);
+    const oldestActiveArtifact = chronologicalActiveBundles[0];
+    const newestActiveArtifact = chronologicalActiveBundles.at(-1);
+    const activeArtifactSummary = {
+      timezone: "Asia/Jakarta",
+      range: activeSummaryRange,
+      calendarPeriodCount: requestedReviewPreset === "current_year" ? 12 : requestedReviewPreset === "last_3_months" || requestedReviewPreset?.includes("quarter") ? 3 : 1,
+      activeArtifactCount: activeSummaryBundles.length * 3,
+      artifactTypeCounts: { csv: activeSummaryBundles.length, html: activeSummaryBundles.length, pdf: activeSummaryBundles.length },
+      oldestActiveArtifact: oldestActiveArtifact ? { year: oldestActiveArtifact.year, month: oldestActiveArtifact.month, generatedAt: oldestActiveArtifact.generatedAt } : null,
+      newestActiveArtifact: newestActiveArtifact ? { year: newestActiveArtifact.year, month: newestActiveArtifact.month, generatedAt: newestActiveArtifact.generatedAt } : null,
+      integrity: { verifiedBundleCount: activeSummaryBundles.length, excludedBundleCount: summaryArtifacts.length - activeSummaryBundles.length, availabilityCounts },
+    };
     const qrExpiryChanged = procedures.includes("reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy") && Number.isInteger(requestedQrExpiry) && requestedQrExpiry !== qrExpiryValidityMinutes;
     if (procedures.includes("reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy") && Number.isInteger(requestedQrExpiry)) {
       if (qrExpiryChanged) qrExpiryHistory.unshift({ eventId: `qrph_browser_${requestedQrExpiry}`, previousValidityMinutes: qrExpiryValidityMinutes, newValidityMinutes: requestedQrExpiry, resultingValidityMinutes: requestedQrExpiry, changedAt: "2026-08-26T02:10:00.000Z", actorOpenId: "owner-1" });
@@ -375,7 +400,8 @@ async function installArtifactOwnerRoutes(
         : procedure === "reports.monthlySummary" ? reportFixture
           : procedure === "reports.monthlyArtifacts" ? artifacts
             : procedure === "reports.monthlyArtifactGovernance" ? governance
-              : procedure === "reports.monthlyArtifactLifecycleHistory" ? lifecycleHistory
+              : procedure === "reports.monthlyActiveArtifactSummary" ? activeArtifactSummary
+                : procedure === "reports.monthlyArtifactLifecycleHistory" ? lifecycleHistory
                 : procedure === "reports.monthlyArtifactGovernanceAuditExport" ? governanceAuditExport
                     : procedure === "reports.generateMonthlyArtifactGovernanceAuditExport" ? (requestedAuditFormat === "pdf" ? governanceAuditIntegrityPdfFixture : governanceAuditIntegrityCsvFixture)
                         : procedure === "reports.verifyMonthlyArtifactGovernanceAuditExport" ? governanceAuditVerification
@@ -404,13 +430,14 @@ test("restores a review preset from the Reports URL and shows an authoritative J
   await installArtifactOwnerRoutes(page, []);
   await page.goto("/reports?reportPreset=current_quarter&reportYear=2026&reportMonth=9");
 
-  await expect(page.getByLabel("Preset periode review laporan")).toHaveValue("current_quarter");
-  await expect(page.getByText("2026-07-01 00:00:00 WIB sampai sebelum 2026-10-01 00:00:00 WIB")).toBeVisible();
-  await expect(page.getByText("Asia/Jakarta (WIB)", { exact: true })).toBeVisible();
-  await expect(page.getByText("Mulai inklusif · akhir eksklusif", { exact: true })).toBeVisible();
+  const review = page.getByLabel("Periode review laporan");
+  await expect(review.getByLabel("Preset periode review laporan")).toHaveValue("current_quarter");
+  await expect(review.getByText("2026-07-01 00:00:00 WIB sampai sebelum 2026-10-01 00:00:00 WIB")).toBeVisible();
+  await expect(review.getByText("Asia/Jakarta (WIB)", { exact: true })).toBeVisible();
+  await expect(review.getByText("Mulai inklusif · akhir eksklusif", { exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByLabel("Preset periode review laporan")).toHaveValue("current_quarter");
-  await expect(page.getByText("2026-07-01 00:00:00 WIB sampai sebelum 2026-10-01 00:00:00 WIB")).toBeVisible();
+  await expect(review.getByLabel("Preset periode review laporan")).toHaveValue("current_quarter");
+  await expect(review.getByText("2026-07-01 00:00:00 WIB sampai sebelum 2026-10-01 00:00:00 WIB")).toBeVisible();
   const policyAudit = page.getByLabel("Ekspor Audit Kebijakan QR");
   const policyDatePreset = policyAudit.getByLabel("Preset rentang audit kebijakan QR");
   await expect(policyDatePreset).toHaveValue("all");
@@ -429,7 +456,7 @@ test("uses all requested review presets, keeps manual selection authoritative, a
   }
 
   await expect(preset).toHaveValue("current_year");
-  await expect(page.getByText("2026-01-01 00:00:00 WIB sampai sebelum 2027-01-01 00:00:00 WIB")).toBeVisible();
+  await expect(page.getByLabel("Periode review laporan").getByText("2026-01-01 00:00:00 WIB sampai sebelum 2027-01-01 00:00:00 WIB")).toBeVisible();
   await page.locator(".report-period-controls").getByLabel("Tahun").selectOption("2026");
   await page.locator(".report-period-controls").getByLabel("Bulan").selectOption("1");
   await expect(preset).toHaveValue("custom");
@@ -451,6 +478,34 @@ test("keeps the read-only review context and explicit audit apply action respons
   await expect(review.getByText("2026-04-01 00:00:00 WIB sampai sebelum 2026-07-01 00:00:00 WIB")).toBeVisible();
   await expect(page.getByRole("button", { name: "Gunakan periode review" }).first()).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("summarizes only verified active artifacts within the Jakarta/WIB review context", async ({ page }) => {
+  await installArtifactOwnerRoutes(page, [storedArtifactFixture]);
+  await page.goto("/reports?reportPreset=current_year&reportYear=2026&reportMonth=1");
+
+  const summary = page.getByLabel("Ringkasan Artefak Aktif");
+  await expect(summary).toBeVisible();
+  await expect(summary.getByText("Tahun berjalan", { exact: true })).toBeVisible();
+  await expect(summary.getByText("2026-01-01 00:00:00 WIB sampai sebelum 2027-01-01 00:00:00 WIB")).toBeVisible();
+  await expect(summary.getByText(/12 periode kalender/)).toBeVisible();
+  await expect(summary.getByText("3 file", { exact: true })).toBeVisible();
+  await expect(summary.getByText("CSV", { exact: true })).toBeVisible();
+  await expect(summary.getByText("HTML", { exact: true })).toBeVisible();
+  await expect(summary.getByText("PDF", { exact: true })).toBeVisible();
+  await expect(summary.getByText("Januari 2026", { exact: true })).toHaveCount(2);
+  await expect(summary.getByText("1 bundle tervalidasi", { exact: true })).toBeVisible();
+});
+
+test("shows an empty read-only active summary and warns when a candidate fails integrity", async ({ page }) => {
+  const corruptArtifact = { ...storedArtifactFixture, csv: { ...storedArtifactFixture.csv, status: "corrupt" } };
+  await installArtifactOwnerRoutes(page, [corruptArtifact]);
+  await page.goto("/reports?reportPreset=current_quarter&reportYear=2026&reportMonth=9");
+
+  const summary = page.getByLabel("Ringkasan Artefak Aktif");
+  await expect(summary.getByText("Belum ada artefak aktif pada periode review ini.")).toBeVisible();
+  await expect(summary.getByText("1 bundle pada scope tidak ditampilkan sebagai aktif karena verifikasi artefak tidak lengkap. Tidak ada metadata atau lifecycle yang diubah.")).toBeVisible();
+  await expect(summary.getByText("0 file", { exact: true })).toBeVisible();
 });
 
 test("shows the owner-visible stored-artifact empty state", async ({ page }) => {

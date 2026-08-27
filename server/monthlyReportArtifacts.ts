@@ -5,6 +5,7 @@ import { getDb } from "./db";
 import { storageGetBytes, storagePut } from "./storage";
 import { ENV } from "./_core/env";
 import type { AutomatedMonthlyReportArtifacts } from "./automatedMonthlyReports";
+import { governanceAuditWibStart, resolveGovernanceAuditDateRange, type GovernanceAuditDateSearchFilters, type GovernanceAuditResolvedDateRange } from "./governanceAuditDateSearch";
 
 export type MonthlyReport = AutomatedMonthlyReportArtifacts;
 export const LEGACY_ARTIFACT_SCOPE = "legacy-single-store";
@@ -78,6 +79,23 @@ export type MonthlyReportArtifactGovernanceSummary = {
   approachingArchive: Array<{ year: number; month: number; generatedAt: Date; lifecycleStatus: ArtifactLifecycleStatus; daysUntilArchive: number }>;
   lifecycleCounts: Record<ArtifactLifecycleStatus, number>;
   integrityCounts: Record<ArtifactIntegrityStatus, number>;
+};
+
+export type MonthlyReportActiveArtifactSummaryInput = Pick<GovernanceAuditDateSearchFilters, "startDate" | "endDate" | "datePreset">;
+
+export type MonthlyReportActiveArtifactSummary = {
+  timezone: "Asia/Jakarta";
+  range: GovernanceAuditResolvedDateRange;
+  calendarPeriodCount: number;
+  activeArtifactCount: number;
+  artifactTypeCounts: Record<ArtifactKind, number>;
+  oldestActiveArtifact: { year: number; month: number; generatedAt: Date } | null;
+  newestActiveArtifact: { year: number; month: number; generatedAt: Date } | null;
+  integrity: {
+    verifiedBundleCount: number;
+    excludedBundleCount: number;
+    availabilityCounts: Record<ArtifactIntegrityStatus, number>;
+  };
 };
 
 export type OwnerApprovedArchiveResult = {
@@ -197,6 +215,27 @@ function isProductionArtifact(artifact: StoredMonthlyReportArtifact) {
   const prefix = `monthly-management-reports/${artifact.year}/${String(artifact.month).padStart(2, "0")}/`;
   return [artifact.csv.key, artifact.printableHtml.key, artifact.pdf.key]
     .every((key) => typeof key === "string" && key.startsWith(prefix) && !key.includes("nonproduction-e2e/") && !key.includes(".."));
+}
+
+function isRangeInputComplete(input: MonthlyReportActiveArtifactSummaryInput) {
+  if (input.datePreset) return !input.startDate && !input.endDate;
+  return Boolean(input.startDate && input.endDate);
+}
+
+function countCalendarMonths(range: GovernanceAuditResolvedDateRange) {
+  if (!range.startDate || !range.endDate) return 0;
+  const [startYear, startMonth] = range.startDate.split("-").map(Number);
+  const [endYear, endMonth] = range.endDate.split("-").map(Number);
+  return (endYear - startYear) * 12 + endMonth - startMonth + 1;
+}
+
+/** Includes only report periods whose Jakarta/WIB start is within the resolved inclusive/exclusive range. */
+function isArtifactInResolvedRange(artifact: StoredMonthlyReportArtifact, range: GovernanceAuditResolvedDateRange) {
+  if (!range.startDate || !range.endWib) return false;
+  const artifactStart = governanceAuditWibStart(artifact.periodStartDate).getTime();
+  const rangeStart = governanceAuditWibStart(range.startDate).getTime();
+  const rangeEnd = new Date(range.endWib.replace(" WIB", "+07:00")).getTime();
+  return artifactStart >= rangeStart && artifactStart < rangeEnd;
 }
 
 function integritySnapshotFor(artifact: Pick<StoredMonthlyReportArtifact, "csv" | "printableHtml" | "pdf">): Array<{ kind: ArtifactKind; sha256: string; bytes: number }> {
@@ -423,6 +462,42 @@ export async function listMonthlyReportArtifacts(ownerOpenId = defaultArtifactSc
     printableHtml: await verifyMonthlyReportArtifact(artifact, "html"),
     pdf: await verifyMonthlyReportArtifact(artifact, "pdf"),
   })));
+}
+
+/**
+ * Read-only report-period aggregate. Existing per-file verification remains the sole
+ * authority: a report bundle is counted active only when all retrievable formats verify.
+ */
+export async function getMonthlyReportActiveArtifactSummary(ownerOpenId = defaultArtifactScope(), input: MonthlyReportActiveArtifactSummaryInput, referenceNow = new Date()): Promise<MonthlyReportActiveArtifactSummary> {
+  if (!isAuthorizedOwnerScope(ownerOpenId)) throw new Error("Akses artefak laporan dibatasi untuk pemilik StoreOS.");
+  if (!isRangeInputComplete(input)) throw new Error("Ringkasan artefak memerlukan preset review atau rentang Jakarta/WIB lengkap.");
+  const range = resolveGovernanceAuditDateRange(input, referenceNow);
+  const db = await getDb();
+  if (!db) throw new Error("Database tidak tersedia. Silakan coba lagi.");
+  const rows = await db.select().from(monthlyReportArtifacts).where(and(isNull(monthlyReportArtifacts.retiredAt), isNull(monthlyReportArtifacts.archivedAt)));
+  const candidates = rows
+    .map(mapArtifact)
+    .filter((artifact) => !artifact.retiredAt && !artifact.archivedAt && artifact.lifecycleStatus !== "archived" && belongsToOwnerScope(artifact, ownerOpenId) && isProductionArtifact(artifact) && isArtifactInResolvedRange(artifact, range))
+    .sort((left, right) => left.generatedAt.getTime() - right.generatedAt.getTime() || left.year - right.year || left.month - right.month);
+  const availabilityCounts: Record<ArtifactIntegrityStatus, number> = { available: 0, missing: 0, corrupt: 0, retired: 0, archived: 0 };
+  const verified: StoredMonthlyReportArtifact[] = [];
+  for (const artifact of candidates) {
+    const availability = await Promise.all(["csv", "html", "pdf"].map((kind) => verifyMonthlyReportArtifact(artifact, kind as ArtifactKind)));
+    availability.forEach((entry) => { availabilityCounts[entry.status] += 1; });
+    if (availability.every((entry) => entry.status === "available")) verified.push(artifact);
+  }
+  const oldest = verified[0] ?? null;
+  const newest = verified.at(-1) ?? null;
+  return {
+    timezone: "Asia/Jakarta",
+    range,
+    calendarPeriodCount: countCalendarMonths(range),
+    activeArtifactCount: verified.length * 3,
+    artifactTypeCounts: { csv: verified.length, html: verified.length, pdf: verified.length },
+    oldestActiveArtifact: oldest ? { year: oldest.year, month: oldest.month, generatedAt: oldest.generatedAt } : null,
+    newestActiveArtifact: newest ? { year: newest.year, month: newest.month, generatedAt: newest.generatedAt } : null,
+    integrity: { verifiedBundleCount: verified.length, excludedBundleCount: candidates.length - verified.length, availabilityCounts },
+  };
 }
 
 const lifecycleOrder: Record<ArtifactLifecycleStatus, number> = { generated: 0, verified: 1, retained: 2, eligible_for_archive: 3, archived: 4 };

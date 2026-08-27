@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { archiveMonthlyReportArtifactWithOwnerApproval, getMonthlyReportArtifactGovernanceAuditExport, getMonthlyReportArtifactGovernanceSummary, getMonthlyReportArtifactLifecycleHistory, listMonthlyReportArtifacts } = vi.hoisted(() => ({
+const { archiveMonthlyReportArtifactWithOwnerApproval, getMonthlyReportActiveArtifactSummary, getMonthlyReportArtifactGovernanceAuditExport, getMonthlyReportArtifactGovernanceSummary, getMonthlyReportArtifactLifecycleHistory, listMonthlyReportArtifacts } = vi.hoisted(() => ({
   archiveMonthlyReportArtifactWithOwnerApproval: vi.fn(async () => ({ outcome: "archived", artifact: { id: 7, year: 2024, month: 1, lifecycleStatus: "archived" }, availability: [], archivedAt: new Date("2026-02-02T00:00:00.000Z") })),
+  getMonthlyReportActiveArtifactSummary: vi.fn(async () => ({ activeArtifactCount: 0, artifactTypeCounts: { csv: 0, html: 0, pdf: 0 }, integrity: { verifiedBundleCount: 0, excludedBundleCount: 0 } })),
   getMonthlyReportArtifactGovernanceAuditExport: vi.fn(async () => ({ kind: "storeos_governance_lifecycle_audit", version: 1, recordCount: 0, records: [] })),
   listMonthlyReportArtifacts: vi.fn(async () => []),
   getMonthlyReportArtifactGovernanceSummary: vi.fn(async () => ({ retainedArtifactCount: 0 })),
@@ -40,6 +41,7 @@ const { getGovernanceAuditQrExpiryPolicy, getGovernanceAuditQrRevocation, listGo
 vi.mock("./monthlyReportArtifacts", () => ({
   archiveMonthlyReportArtifactWithOwnerApproval,
   canAccessMonthlyReportArtifacts: (user: { openId: string; role: string } | null) => user?.openId === "owner-1" && user.role === "admin",
+  getMonthlyReportActiveArtifactSummary,
   getMonthlyReportArtifactGovernanceAuditExport,
   getMonthlyReportArtifactGovernanceSummary,
   getMonthlyReportArtifactLifecycleHistory,
@@ -95,6 +97,19 @@ describe("reports.monthlyArtifacts authorization", () => {
     expect(getMonthlyReportArtifactGovernanceSummary).not.toHaveBeenCalled();
     await expect(caller({ openId: "owner-1", role: "admin" }).reports.monthlyArtifactGovernance()).resolves.toEqual({ retainedArtifactCount: 0 });
     expect(getMonthlyReportArtifactGovernanceSummary).toHaveBeenCalledWith("owner-1");
+  });
+
+  it("limits active-artifact summaries to the current owner-admin, forwards only a Jakarta/WIB review scope, and invokes no mutation", async () => {
+    const range = { startDate: "2026-01-01", endDate: "2026-03-31" };
+    await expect(caller(null).reports.monthlyActiveArtifactSummary(range)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller({ openId: "owner-1", role: "user" }).reports.monthlyActiveArtifactSummary(range)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller({ openId: "other-workspace", role: "admin" }).reports.monthlyActiveArtifactSummary(range)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(getMonthlyReportActiveArtifactSummary).not.toHaveBeenCalled();
+    expect(archiveMonthlyReportArtifactWithOwnerApproval).not.toHaveBeenCalled();
+
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.monthlyActiveArtifactSummary({ datePreset: "previous_quarter" })).resolves.toMatchObject({ activeArtifactCount: 0 });
+    expect(getMonthlyReportActiveArtifactSummary).toHaveBeenCalledWith("owner-1", { datePreset: "previous_quarter" });
+    expect(archiveMonthlyReportArtifactWithOwnerApproval).not.toHaveBeenCalled();
   });
 
   it("limits lifecycle-history access to the owner-admin scope and forwards only the requested period", async () => {

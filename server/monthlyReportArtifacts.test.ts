@@ -74,6 +74,7 @@ import {
   getMonthlyReportArtifact,
   getMonthlyReportArtifactGovernanceAuditExport,
   getMonthlyReportArtifactGovernanceSummary,
+  getMonthlyReportActiveArtifactSummary,
   getMonthlyReportArtifactLifecycleEvents,
   getMonthlyReportArtifactLifecycleHistory,
   listMonthlyReportArtifacts,
@@ -180,6 +181,83 @@ describe("Phase 2.4 monthly report artifact governance", () => {
     const summary = await getMonthlyReportArtifactGovernanceSummary("owner-1", new Date("2026-05-01T00:00:00.000Z"));
     expect(summary).toMatchObject({ retainedArtifactCount: 2, artifactTypeCounts: { csv: 2, html: 2, pdf: 2 }, oldestRetainedReport: { year: 2024, month: 6 }, lifecycleCounts: { retained: 2 } });
     expect(summary.approachingArchive).toEqual(expect.arrayContaining([expect.objectContaining({ year: 2024, month: 6 })]));
+  });
+
+  it("returns an empty deterministic active-artifact summary for a Jakarta/WIB review period with no retained artifacts", async () => {
+    const summary = await getMonthlyReportActiveArtifactSummary("owner-1", { datePreset: "current_month" }, new Date("2026-05-15T06:00:00.000Z"));
+    expect(summary).toMatchObject({
+      timezone: "Asia/Jakarta",
+      range: { startDate: "2026-05-01", endDate: "2026-05-31" },
+      calendarPeriodCount: 1,
+      activeArtifactCount: 0,
+      artifactTypeCounts: { csv: 0, html: 0, pdf: 0 },
+      oldestActiveArtifact: null,
+      newestActiveArtifact: null,
+      integrity: { verifiedBundleCount: 0, excludedBundleCount: 0 },
+    });
+    expect(updateWhere).not.toHaveBeenCalled();
+    expect(lifecycleEvents).toEqual([]);
+  });
+
+  it("summarizes one fully verified retained report as three active format artifacts without lifecycle mutation", async () => {
+    await persistMonthlyReportArtifacts(generatedReport({ year: 2026, month: 1, generatedAt: "2026-02-01T00:15:00.000Z" }));
+    const lifecycleCount = lifecycleEvents.length;
+    const summary = await getMonthlyReportActiveArtifactSummary("owner-1", { startDate: "2026-01-01", endDate: "2026-01-31" }, new Date("2026-03-01T00:00:00.000Z"));
+    expect(summary).toMatchObject({
+      activeArtifactCount: 3,
+      artifactTypeCounts: { csv: 1, html: 1, pdf: 1 },
+      oldestActiveArtifact: { year: 2026, month: 1 },
+      newestActiveArtifact: { year: 2026, month: 1 },
+      integrity: { verifiedBundleCount: 1, excludedBundleCount: 0, availabilityCounts: { available: 3 } },
+    });
+    expect(lifecycleEvents).toHaveLength(lifecycleCount);
+    expect(updateWhere).not.toHaveBeenCalled();
+  });
+
+  it("uses inclusive-start/exclusive-end Jakarta/WIB boundaries across month and year rollover with deterministic oldest/newest ordering", async () => {
+    await persistMonthlyReportArtifacts(generatedReport({ year: 2025, month: 12, generatedAt: "2026-01-01T00:15:00.000Z" }));
+    await persistMonthlyReportArtifacts(generatedReport({ year: 2026, month: 1, generatedAt: "2026-02-01T00:15:00.000Z" }));
+    await persistMonthlyReportArtifacts(generatedReport({ year: 2026, month: 2, generatedAt: "2026-03-01T00:15:00.000Z" }));
+    const summary = await getMonthlyReportActiveArtifactSummary("owner-1", { startDate: "2025-12-01", endDate: "2026-01-31" }, new Date("2026-03-01T00:00:00.000Z"));
+    expect(summary).toMatchObject({
+      range: { startDate: "2025-12-01", endDate: "2026-01-31" },
+      calendarPeriodCount: 2,
+      activeArtifactCount: 6,
+      artifactTypeCounts: { csv: 2, html: 2, pdf: 2 },
+      oldestActiveArtifact: { year: 2025, month: 12 },
+      newestActiveArtifact: { year: 2026, month: 1 },
+    });
+  });
+
+  it("excludes archived, retired, corrupt, non-production, and cross-scope bundles while reporting the integrity warning deterministically", async () => {
+    await persistMonthlyReportArtifacts(generatedReport({ year: 2026, month: 1 }));
+    await persistMonthlyReportArtifacts(generatedReport({ year: 2026, month: 2 }));
+    await persistMonthlyReportArtifacts(generatedReport({ year: 2026, month: 3 }));
+    await persistMonthlyReportArtifacts(generatedReport({ year: 2026, month: 4 }));
+    artifactRows[2].lifecycleStatus = "archived";
+    artifactRows[2].archivedAt = new Date("2026-05-01T00:00:00.000Z");
+    artifactRows[3].retiredAt = new Date("2026-05-01T00:00:00.000Z");
+    objects.set(artifactRows[1].csvKey, Buffer.from("tampered"));
+    artifactRows.push({ ...artifactRows[0], id: 88, year: 2026, month: 5, ownerOpenId: "other-workspace" });
+    artifactRows.push({ ...artifactRows[0], id: 89, year: 2026, month: 6, csvKey: "nonproduction-e2e/summary.csv", htmlKey: "nonproduction-e2e/summary.html", pdfKey: "nonproduction-e2e/summary.pdf" });
+    const summary = await getMonthlyReportActiveArtifactSummary("owner-1", { startDate: "2026-01-01", endDate: "2026-06-30" });
+    expect(summary).toMatchObject({
+      activeArtifactCount: 3,
+      artifactTypeCounts: { csv: 1, html: 1, pdf: 1 },
+      oldestActiveArtifact: { year: 2026, month: 1 },
+      newestActiveArtifact: { year: 2026, month: 1 },
+      integrity: { verifiedBundleCount: 1, excludedBundleCount: 1, availabilityCounts: { available: 5, corrupt: 1 } },
+    });
+    expect(updateWhere).not.toHaveBeenCalled();
+    expect(lifecycleEvents).toHaveLength(12);
+  });
+
+  it("supports released review presets and rejects unauthorized scopes without exposing cross-workspace rows", async () => {
+    await persistMonthlyReportArtifacts(generatedReport({ year: 2026, month: 1 }));
+    const summary = await getMonthlyReportActiveArtifactSummary("owner-1", { datePreset: "previous_quarter" }, new Date("2026-05-15T06:00:00.000Z"));
+    expect(summary.range).toMatchObject({ startDate: "2026-01-01", endDate: "2026-03-31" });
+    expect(summary.activeArtifactCount).toBe(3);
+    await expect(getMonthlyReportActiveArtifactSummary("other-workspace", { datePreset: "current_year" })).rejects.toThrow("dibatasi");
   });
 
   it("keeps lifecycle transitions traceable, enforces owner-admin access, and denies cross-scope governance", async () => {
