@@ -112,6 +112,8 @@ export const appRouter = router({
     monthlyArtifactGovernanceAuditQrPolicyExport: protectedProcedure.input(z.object({
       startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
       endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      datePreset: z.enum(["today", "last_7_days", "last_30_days", "current_month", "previous_month", "last_3_months", "last_12_months"]).optional(),
+      searchTerm: z.string().min(1).max(160).optional(),
       direction: z.enum(["increase", "decrease", "initial", "no_op"]).optional(),
       actorOpenId: z.string().min(1).max(64).optional(),
       scope: z.literal("governance_audit_qr_expiry").optional(),
@@ -122,6 +124,8 @@ export const appRouter = router({
     generateMonthlyArtifactGovernanceAuditQrPolicyExport: protectedProcedure.input(z.object({
       startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
       endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      datePreset: z.enum(["today", "last_7_days", "last_30_days", "current_month", "previous_month", "last_3_months", "last_12_months"]).optional(),
+      searchTerm: z.string().min(1).max(160).optional(),
       direction: z.enum(["increase", "decrease", "initial", "no_op"]).optional(),
       actorOpenId: z.string().min(1).max(64).optional(),
       scope: z.literal("governance_audit_qr_expiry").optional(),
@@ -141,6 +145,8 @@ export const appRouter = router({
     monthlyArtifactGovernanceAuditQrPolicyReceiptExport: protectedProcedure.input(z.object({
       startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
       endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      datePreset: z.enum(["today", "last_7_days", "last_30_days", "current_month", "previous_month", "last_3_months", "last_12_months"]).optional(),
+      searchTerm: z.string().min(1).max(160).optional(),
       direction: z.enum(["increase", "decrease", "initial", "unchanged"]).optional(),
       actorOpenId: z.string().min(1).max(64).optional(),
       verificationStatus: z.literal("verified").optional(),
@@ -154,6 +160,8 @@ export const appRouter = router({
     generateMonthlyArtifactGovernanceAuditQrPolicyReceiptExport: protectedProcedure.input(z.object({
       startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
       endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      datePreset: z.enum(["today", "last_7_days", "last_30_days", "current_month", "previous_month", "last_3_months", "last_12_months"]).optional(),
+      searchTerm: z.string().min(1).max(160).optional(),
       direction: z.enum(["increase", "decrease", "initial", "unchanged"]).optional(),
       actorOpenId: z.string().min(1).max(64).optional(),
       verificationStatus: z.literal("verified").optional(),

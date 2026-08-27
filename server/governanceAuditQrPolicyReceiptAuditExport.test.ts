@@ -99,6 +99,17 @@ describe("Phase 2.16 combined QR policy and receipt audit export", () => {
     expect(getGovernanceAuditQrRevocation).toHaveBeenCalledWith("owner-1", `qr_${"e".repeat(32)}`);
   });
 
+  it("applies the same server-side preset and literal receipt, export, policy, actor, or opaque QR searches deterministically", async () => {
+    const byPreset = await getGovernanceAuditQrPolicyReceiptAuditExport("owner-1", { datePreset: "last_7_days", searchTerm: "receipt", scope: "governance_audit_qr_policy_receipt" }, generatedAt);
+    expect(byPreset.filters).toMatchObject({ datePreset: "last_7_days", datePresetLabel: "7 hari terakhir", startDate: "2026-08-21", endDate: "2026-08-27", startWib: "2026-08-21 00:00:00 WIB", endWib: "2026-08-28 00:00:00 WIB", searchTerm: "receipt" });
+    expect(byPreset.records.map((record) => record.receiptId)).toEqual(["receipt-active", "receipt-revoked", "receipt-decrease", "receipt-invalid", "receipt-increase", "receipt-initial"]);
+    await expect(getGovernanceAuditQrPolicyReceiptAuditExport("owner-1", { searchTerm: "receipt-decrease" })).resolves.toMatchObject({ recordCount: 1, records: [expect.objectContaining({ receiptId: "receipt-decrease" })] });
+    await expect(getGovernanceAuditQrPolicyReceiptAuditExport("owner-1", { searchTerm: "export-b" })).resolves.toMatchObject({ recordCount: 1, records: [expect.objectContaining({ receiptId: "receipt-increase" })] });
+    await expect(getGovernanceAuditQrPolicyReceiptAuditExport("owner-1", { searchTerm: "qrph_decrease" })).resolves.toMatchObject({ recordCount: 2 });
+    await expect(getGovernanceAuditQrPolicyReceiptAuditExport("owner-1", { searchTerm: "admin-café" })).resolves.toMatchObject({ recordCount: 2, records: expect.arrayContaining([expect.objectContaining({ receiptId: "receipt-decrease" })]) });
+    await expect(getGovernanceAuditQrPolicyReceiptAuditExport("owner-1", { searchTerm: "cccccccc" })).resolves.toMatchObject({ records: [expect.objectContaining({ receiptId: "receipt-decrease" })] });
+  });
+
   it("generates BOM CSV exact bytes with audit scope and Unicode actor context", async () => {
     const artifact = await generateGovernanceAuditQrPolicyReceiptAuditArtifact("owner-1", { scope: "governance_audit_qr_policy_receipt" }, "csv", generatedAt);
     const bytes = Buffer.from(artifact.bytesBase64, "base64");

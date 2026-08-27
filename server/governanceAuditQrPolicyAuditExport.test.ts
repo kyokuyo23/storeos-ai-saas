@@ -53,6 +53,14 @@ describe("Phase 2.15 QR policy audit export", () => {
     expect(audit.records[0]).toMatchObject({ eventId: "qrph_gamma", previousValidityMinutes: 90, newValidityMinutes: 45, deltaMinutes: -45, direction: "decrease", result: "updated", actorOpenId: "admin-café" });
   });
 
+  it("accepts the shared Jakarta preset and literal policy event or actor searches without changing deterministic ordering", async () => {
+    const byPreset = await getGovernanceAuditQrPolicyAuditExport("owner-1", { datePreset: "last_7_days", searchTerm: "admin", scope: "governance_audit_qr_expiry" }, generatedAt);
+    expect(byPreset.filters).toMatchObject({ datePreset: "last_7_days", datePresetLabel: "7 hari terakhir", startDate: "2026-08-20", endDate: "2026-08-26", startWib: "2026-08-20 00:00:00 WIB", endWib: "2026-08-27 00:00:00 WIB", searchTerm: "admin" });
+    expect(byPreset.records.map((record) => record.eventId)).toEqual(["qrph_gamma", "qrph_beta", "qrph_alpha"]);
+    const byEvent = await getGovernanceAuditQrPolicyAuditExport("owner-1", { searchTerm: "qrph_beta" }, generatedAt);
+    expect(byEvent.records.map((record) => record.eventId)).toEqual(["qrph_beta"]);
+  });
+
   it("generates quoted Unicode UTF-8 BOM CSV exact bytes with deterministic headers and protected integrity metadata", async () => {
     const artifact = await generateGovernanceAuditQrPolicyAuditArtifact("owner-1", { scope: "governance_audit_qr_expiry" }, "csv", generatedAt);
     const bytes = Buffer.from(artifact.bytesBase64, "base64");

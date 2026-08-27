@@ -428,3 +428,14 @@
 - [x] Add a minimal persisted/unavailable/integrity-failure receipt evidence indicator to the existing owner-admin combined audit UI when required
 - [x] Add Phase 2.17 cross-restart, multiple-receipt, policy-change, status, missing/corrupt, initial-policy, ordering, WIB, integrity, authorization, isolation, and no-mutation coverage
 - [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.17
+
+- [x] Review the authorized Phase instructions in pasted_content_14.txt and identify only the permitted StoreOS scope
+- [x] Implement the approved Phase requirements without modifying protected domains outside that scope
+- [x] Add focused regression coverage for all approved behavior and run full validation before release
+- [x] Inspect existing governance policy and combined receipt audit filter contracts, router guards, and Reports filter components for Phase 2.18 reuse
+- [x] Add deterministic server-side Asia/Jakarta resolver for Hari ini, 7 hari terakhir, 30 hari terakhir, Bulan berjalan, Bulan sebelumnya, 3 bulan terakhir, and 12 bulan terakhir
+- [x] Add owner-admin scoped server-side governance search for receipt ID, export ID, policy event ID, actor, and safely usable opaque QR reference identifier
+- [x] Reuse a single resolved filter state for policy and combined audit exports without changing their byte, hash, persistence, QR, or receipt contracts
+- [x] Add concise Indonesian governance filter controls showing effective WIB range, search, scope, active filters, clear action, loading, empty, error, unauthorized, integrity, and unavailable-metadata states
+- [x] Add Phase 2.18 preset-boundary, Jakarta midnight, rollover, February, search, deterministic ordering, authorization, isolation, no-mutation, router, export-propagation, and responsive browser coverage
+- [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.18

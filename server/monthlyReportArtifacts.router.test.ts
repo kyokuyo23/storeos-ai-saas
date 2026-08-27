@@ -151,7 +151,7 @@ describe("reports.monthlyArtifacts authorization", () => {
   });
 
   it("restricts policy audit queries, generation, and exact-byte verification to the authenticated owner-admin", async () => {
-    const filters = { startDate: "2026-08-01", endDate: "2026-08-31", direction: "increase" as const, actorOpenId: "owner-1", scope: "governance_audit_qr_expiry" as const };
+    const filters = { startDate: "2026-08-01", endDate: "2026-08-31", datePreset: "previous_month" as const, searchTerm: "qrph_policy_12", direction: "increase" as const, actorOpenId: "owner-1", scope: "governance_audit_qr_expiry" as const };
     const generation = { ...filters, format: "csv" as const };
     const verification = { exportId: `storeos-qr-policy-audit-csv-${"c".repeat(64)}`, bytesBase64: "77u/" };
     await expect(caller(null).reports.monthlyArtifactGovernanceAuditQrPolicyExport(filters)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
@@ -170,7 +170,7 @@ describe("reports.monthlyArtifacts authorization", () => {
   });
 
   it("restricts combined QR policy and receipt audit query, generation, and exact-byte verification before service calls", async () => {
-    const filters = { startDate: "2026-08-01", endDate: "2026-08-31", direction: "increase" as const, actorOpenId: "owner-1", verificationStatus: "verified" as const, qrStatus: "active" as const, receiptFormat: "csv" as const, scope: "governance_audit_qr_policy_receipt" as const };
+    const filters = { startDate: "2026-08-01", endDate: "2026-08-31", datePreset: "previous_month" as const, searchTerm: "receipt-001", direction: "increase" as const, actorOpenId: "owner-1", verificationStatus: "verified" as const, qrStatus: "active" as const, receiptFormat: "csv" as const, scope: "governance_audit_qr_policy_receipt" as const };
     const generation = { ...filters, format: "csv" as const };
     const verification = { exportId: `storeos-qr-policy-receipt-audit-csv-${"d".repeat(64)}`, bytesBase64: "77u/" };
     await expect(caller(null).reports.monthlyArtifactGovernanceAuditQrPolicyReceiptExport(filters)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
@@ -182,7 +182,7 @@ describe("reports.monthlyArtifacts authorization", () => {
   });
 
   it("forwards all validated combined filters only in the authenticated owner-admin scope", async () => {
-    const filters = { startDate: "2026-08-01", endDate: "2026-08-31", direction: "decrease" as const, actorOpenId: "owner-1", verificationStatus: "verified" as const, qrStatus: "revoked" as const, receiptFormat: "pdf" as const, scope: "governance_audit_qr_policy_receipt" as const };
+    const filters = { startDate: "2026-08-01", endDate: "2026-08-31", datePreset: "last_30_days" as const, searchTerm: "export-2026-08", direction: "decrease" as const, actorOpenId: "owner-1", verificationStatus: "verified" as const, qrStatus: "revoked" as const, receiptFormat: "pdf" as const, scope: "governance_audit_qr_policy_receipt" as const };
     const generation = { ...filters, format: "pdf" as const };
     const verification = { exportId: `storeos-qr-policy-receipt-audit-csv-${"d".repeat(64)}`, bytesBase64: "77u/" };
     await expect(caller({ openId: "owner-1", role: "admin" }).reports.monthlyArtifactGovernanceAuditQrPolicyReceiptExport(filters)).resolves.toMatchObject({ kind: "storeos_governance_qr_policy_receipt_audit", recordCount: 0 });

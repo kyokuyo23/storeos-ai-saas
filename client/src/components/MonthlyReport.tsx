@@ -71,10 +71,27 @@ function GovernanceAuditQrReceiptPolicy({ policy }: { policy: { validityMinutes:
 }
 
 type QrPolicyAuditDirection = "increase" | "decrease" | "initial" | "no_op";
+type GovernanceAuditDatePreset = "today" | "last_7_days" | "last_30_days" | "current_month" | "previous_month" | "last_3_months" | "last_12_months";
+
+const governanceAuditDatePresetOptions: Array<{ value: GovernanceAuditDatePreset; label: string }> = [
+  { value: "today", label: "Hari ini" }, { value: "last_7_days", label: "7 hari terakhir" }, { value: "last_30_days", label: "30 hari terakhir" }, { value: "current_month", label: "Bulan berjalan" }, { value: "previous_month", label: "Bulan sebelumnya" }, { value: "last_3_months", label: "3 bulan terakhir" }, { value: "last_12_months", label: "12 bulan terakhir" },
+];
+
+function GovernanceAuditDateSearchFields({ ariaPrefix, datePreset, startDate, endDate, searchTerm, onDatePresetChange, onStartDateChange, onEndDateChange, onSearchTermChange, onClear }: { ariaPrefix: string; datePreset: GovernanceAuditDatePreset | "all"; startDate: string; endDate: string; searchTerm: string; onDatePresetChange: (value: GovernanceAuditDatePreset | "all") => void; onStartDateChange: (value: string) => void; onEndDateChange: (value: string) => void; onSearchTermChange: (value: string) => void; onClear: () => void }) {
+  return <>
+    <label className="field"><span>Rentang waktu</span><select className="form-input" aria-label={`Preset rentang ${ariaPrefix}`} value={datePreset} onChange={(event) => onDatePresetChange(event.target.value as GovernanceAuditDatePreset | "all")}><option value="all">Tanggal manual / semua</option>{governanceAuditDatePresetOptions.map((preset) => <option key={preset.value} value={preset.value}>{preset.label}</option>)}</select></label>
+    <label className="field"><span>Mulai (WIB)</span><input className="form-input" aria-label={`Tanggal mulai ${ariaPrefix}`} type="date" value={startDate} onChange={(event) => onStartDateChange(event.target.value)} /></label>
+    <label className="field"><span>Akhir (WIB)</span><input className="form-input" aria-label={`Tanggal akhir ${ariaPrefix}`} type="date" value={endDate} onChange={(event) => onEndDateChange(event.target.value)} /></label>
+    <label className="field"><span>Cari</span><input className="form-input" aria-label={`Cari ${ariaPrefix}`} maxLength={160} value={searchTerm} placeholder="ID receipt, export, event, aktor, atau QR" onChange={(event) => onSearchTermChange(event.target.value)} /></label>
+    <div className="field governance-audit-filter-action"><span>Filter aktif</span><button type="button" className="button ghost compact-button" onClick={onClear}>Hapus filter</button></div>
+  </>;
+}
 
 function GovernanceAuditQrPolicyExportPanel({ enabled }: { enabled: boolean }) {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [datePreset, setDatePreset] = useState<GovernanceAuditDatePreset | "all">("all");
+  const [searchTerm, setSearchTerm] = useState("");
   const [direction, setDirection] = useState<QrPolicyAuditDirection | "all">("all");
   const [actorOpenId, setActorOpenId] = useState("");
   const [latestArtifact, setLatestArtifact] = useState<(GovernanceAuditIntegrityArtifact & { generatedAt: Date | string; timezone: "Asia/Jakarta"; scope: string; recordCount: number; byteSize: number; sha256: string }) | null>(null);
@@ -83,15 +100,18 @@ function GovernanceAuditQrPolicyExportPanel({ enabled }: { enabled: boolean }) {
   const input = useMemo(() => ({
     ...(startDate ? { startDate } : {}),
     ...(endDate ? { endDate } : {}),
+    ...(datePreset === "all" ? {} : { datePreset }),
+    ...(searchTerm.trim() ? { searchTerm: searchTerm.trim() } : {}),
     ...(direction === "all" ? {} : { direction }),
     ...(actorOpenId.trim() ? { actorOpenId: actorOpenId.trim() } : {}),
     scope: "governance_audit_qr_expiry" as const,
-  }), [actorOpenId, direction, endDate, startDate]);
+  }), [actorOpenId, datePreset, direction, endDate, searchTerm, startDate]);
   const policyAuditQuery = trpc.reports.monthlyArtifactGovernanceAuditQrPolicyExport.useQuery(input, { enabled, retry: false, refetchOnWindowFocus: false });
   const exportMutation = trpc.reports.generateMonthlyArtifactGovernanceAuditQrPolicyExport.useMutation();
   const verifyMutation = trpc.reports.verifyMonthlyArtifactGovernanceAuditQrPolicyExport.useMutation();
   if (!enabled) return null;
   const audit = policyAuditQuery.data;
+  const activeFilterLabel = [searchTerm.trim() ? `Cari: ${searchTerm.trim()}` : "", direction === "all" ? "" : `Arah: ${direction}`, actorOpenId.trim() ? `Aktor: ${actorOpenId.trim()}` : ""].filter(Boolean).join(" · ") || "Tidak ada";
   const verify = (artifact = latestArtifact) => {
     if (!artifact) return;
     setVerificationMessage(null);
@@ -121,13 +141,12 @@ function GovernanceAuditQrPolicyExportPanel({ enabled }: { enabled: boolean }) {
   return <section className="governance-qr-policy-audit" aria-label="Ekspor Audit Kebijakan QR">
     <div className="governance-section-heading"><FileText size={16} /><div><strong>Ekspor Audit Kebijakan QR</strong><small>Snapshot read-only dari riwayat append-only. Batas tanggal diproses server-side di Jakarta/WIB; akhir tanggal bersifat eksklusif setelah hari yang dipilih.</small></div></div>
     <div className="governance-qr-policy-audit-filters">
-      <label className="field"><span>Mulai (WIB)</span><input className="form-input" aria-label="Tanggal mulai audit kebijakan QR" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label>
-      <label className="field"><span>Akhir (WIB)</span><input className="form-input" aria-label="Tanggal akhir audit kebijakan QR" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label>
+      <GovernanceAuditDateSearchFields ariaPrefix="audit kebijakan QR" datePreset={datePreset} startDate={startDate} endDate={endDate} searchTerm={searchTerm} onDatePresetChange={setDatePreset} onStartDateChange={(value) => { setDatePreset("all"); setStartDate(value); }} onEndDateChange={(value) => { setDatePreset("all"); setEndDate(value); }} onSearchTermChange={setSearchTerm} onClear={() => { setDatePreset("all"); setStartDate(""); setEndDate(""); setSearchTerm(""); setDirection("all"); setActorOpenId(""); }} />
       <label className="field"><span>Arah perubahan</span><select className="form-input" aria-label="Arah audit kebijakan QR" value={direction} onChange={(event) => setDirection(event.target.value as QrPolicyAuditDirection | "all")}><option value="all">Semua arah</option><option value="initial">Initial</option><option value="increase">Meningkat</option><option value="decrease">Menurun</option><option value="no_op">Tidak berubah</option></select></label>
       <label className="field"><span>Aktor owner-admin</span><input className="form-input" aria-label="Aktor audit kebijakan QR" maxLength={64} value={actorOpenId} placeholder="Semua aktor" onChange={(event) => setActorOpenId(event.target.value)} /></label>
     </div>
     {policyAuditQuery.isLoading ? <div className="loading-state compact-loading"><span className="loading-dot" /> Memuat snapshot audit kebijakan QR…</div> : policyAuditQuery.isError ? <p role="alert" className="integrity-error">Audit kebijakan QR tidak tersedia atau akses owner-admin ditolak.</p> : audit ? <>
-      <div className="governance-qr-policy-audit-summary"><div><span>Riwayat tersaring</span><strong>{number(audit.recordCount)} event</strong><small>Scope: governance_audit_qr_expiry</small></div><div><span>Dibuat pada</span><strong>{wibTime(audit.generatedAt)}</strong><small>{audit.filters.dateBoundary.replaceAll("_", " ")}</small></div><div className="governance-audit-actions"><button type="button" className="button secondary compact-button" onClick={() => generate("csv")} disabled={exportMutation.isPending}><Download size={14} /> {exportMutation.isPending ? "Menyiapkan" : "CSV Kebijakan"}</button><button type="button" className="button ghost compact-button" onClick={() => generate("pdf")} disabled={exportMutation.isPending}><FileText size={14} /> PDF Kebijakan</button></div></div>
+      <div className="governance-qr-policy-audit-summary"><div><span>Riwayat tersaring</span><strong>{number(audit.recordCount)} event</strong><small>Scope: governance_audit_qr_expiry</small></div><div><span>Rentang efektif</span><strong>{audit.filters.datePresetLabel ?? "Manual"}</strong><small>{audit.filters.startWib ?? "Tidak dibatasi"} s.d. {audit.filters.endWib ?? "Tidak dibatasi"}</small></div><div><span>Filter aktif</span><strong>{activeFilterLabel}</strong><small>Dicocokkan server-side</small></div><div><span>Dibuat pada</span><strong>{wibTime(audit.generatedAt)}</strong><small>{audit.filters.dateBoundary.replaceAll("_", " ")}</small></div><div className="governance-audit-actions"><button type="button" className="button secondary compact-button" onClick={() => generate("csv")} disabled={exportMutation.isPending}><Download size={14} /> {exportMutation.isPending ? "Menyiapkan" : "CSV Kebijakan"}</button><button type="button" className="button ghost compact-button" onClick={() => generate("pdf")} disabled={exportMutation.isPending}><FileText size={14} /> PDF Kebijakan</button></div></div>
       {audit.recordCount === 0 ? <div className="governance-qr-policy-history-empty"><History size={15} /><span>Tidak ada event kebijakan yang sesuai dengan filter saat ini. Ekspor tetap dapat dibuat sebagai snapshot kosong yang tervalidasi.</span></div> : <ol className="governance-qr-policy-history-list governance-qr-policy-audit-list">{audit.records.slice(0, 5).map((event) => <li key={event.eventId}><div><strong>{event.previousValidityMinutes ?? "Initial"} → {event.newValidityMinutes} menit · {event.direction}</strong><small>{wibTime(event.changedAt)} · oleh {event.actorOpenId} · {event.result}</small></div><code title={event.eventId}>{event.eventId}</code></li>)}</ol>}
       {latestArtifact && <div className="governance-export-integrity" aria-label="Integritas ekspor audit kebijakan QR"><div className="governance-section-heading"><ShieldCheck size={16} /><strong>Integritas ekspor kebijakan terbaru</strong><span className="badge success">Server-hashed</span></div><div className="governance-export-integrity-grid"><div><span>Format · ukuran</span><strong>{latestArtifact.format.toUpperCase()} · {fileSize(latestArtifact.byteSize)}</strong></div><div><span>Dibuat pada</span><strong>{wibTime(latestArtifact.generatedAt)}</strong></div><div className="integrity-scope"><span>Scope</span><strong>{latestArtifact.scope}</strong></div></div><div className="integrity-hash-row"><label htmlFor="qr-policy-audit-export-hash">SHA-256</label><input id="qr-policy-audit-export-hash" readOnly value={latestArtifact.sha256} aria-label="SHA-256 ekspor audit kebijakan QR" /><button type="button" className="button ghost compact-button" onClick={() => void navigator.clipboard.writeText(latestArtifact.sha256).catch(() => undefined)}><Copy size={13} /> Salin</button></div><div className="integrity-verification-row"><button type="button" className="button secondary compact-button" onClick={() => verify()} disabled={verifyMutation.isPending}><RefreshCw size={13} /> {verifyMutation.isPending ? "Memverifikasi" : "Verifikasi ulang"}</button><small>Id: {latestArtifact.exportId}</small>{verificationMessage && <span role="status" className={verificationStatus === "verified" ? "integrity-success" : "integrity-error"}>{verificationMessage}</span>}</div></div>}
     </> : null}
@@ -139,6 +158,8 @@ type QrPolicyReceiptAuditDirection = "increase" | "decrease" | "initial" | "unch
 function GovernanceAuditQrPolicyReceiptExportPanel({ enabled }: { enabled: boolean }) {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [datePreset, setDatePreset] = useState<GovernanceAuditDatePreset | "all">("all");
+  const [searchTerm, setSearchTerm] = useState("");
   const [direction, setDirection] = useState<QrPolicyReceiptAuditDirection | "all">("all");
   const [actorOpenId, setActorOpenId] = useState("");
   const [verificationStatusFilter, setVerificationStatusFilter] = useState<"all" | "verified">("all");
@@ -150,18 +171,21 @@ function GovernanceAuditQrPolicyReceiptExportPanel({ enabled }: { enabled: boole
   const input = useMemo(() => ({
     ...(startDate ? { startDate } : {}),
     ...(endDate ? { endDate } : {}),
+    ...(datePreset === "all" ? {} : { datePreset }),
+    ...(searchTerm.trim() ? { searchTerm: searchTerm.trim() } : {}),
     ...(direction === "all" ? {} : { direction }),
     ...(actorOpenId.trim() ? { actorOpenId: actorOpenId.trim() } : {}),
     ...(verificationStatusFilter === "all" ? {} : { verificationStatus: verificationStatusFilter }),
     ...(qrStatus === "all" ? {} : { qrStatus }),
     ...(receiptFormat === "all" ? {} : { receiptFormat }),
     scope: "governance_audit_qr_policy_receipt" as const,
-  }), [actorOpenId, direction, endDate, qrStatus, receiptFormat, startDate, verificationStatusFilter]);
+  }), [actorOpenId, datePreset, direction, endDate, qrStatus, receiptFormat, searchTerm, startDate, verificationStatusFilter]);
   const auditQuery = trpc.reports.monthlyArtifactGovernanceAuditQrPolicyReceiptExport.useQuery(input, { enabled, retry: false, refetchOnWindowFocus: false });
   const exportMutation = trpc.reports.generateMonthlyArtifactGovernanceAuditQrPolicyReceiptExport.useMutation();
   const verifyMutation = trpc.reports.verifyMonthlyArtifactGovernanceAuditQrPolicyReceiptExport.useMutation();
   if (!enabled) return null;
   const audit = auditQuery.data;
+  const activeFilterLabel = [searchTerm.trim() ? `Cari: ${searchTerm.trim()}` : "", direction === "all" ? "" : `Arah: ${direction}`, actorOpenId.trim() ? `Aktor: ${actorOpenId.trim()}` : "", verificationStatusFilter === "all" ? "" : `Receipt: ${verificationStatusFilter}`, qrStatus === "all" ? "" : `QR: ${qrStatus}`, receiptFormat === "all" ? "" : `Format: ${receiptFormat.toUpperCase()}`].filter(Boolean).join(" · ") || "Tidak ada";
   const verify = (artifact = latestArtifact) => {
     if (!artifact) return;
     setVerificationMessage(null);
@@ -191,8 +215,7 @@ function GovernanceAuditQrPolicyReceiptExportPanel({ enabled }: { enabled: boole
   return <section className="governance-qr-policy-audit governance-qr-policy-receipt-audit" aria-label="Ekspor Gabungan Policy & Receipt">
     <div className="governance-section-heading"><FileText size={16} /><div><strong>Ekspor Gabungan Policy &amp; Receipt QR</strong><small>Korelasi read-only dari snapshot policy yang sudah tersimpan pada receipt dan riwayat append-only. Batas tanggal diproses server-side di Jakarta/WIB.</small></div></div>
     <div className="governance-qr-policy-audit-filters">
-      <label className="field"><span>Mulai (WIB)</span><input className="form-input" aria-label="Tanggal mulai audit gabungan QR" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label>
-      <label className="field"><span>Akhir (WIB)</span><input className="form-input" aria-label="Tanggal akhir audit gabungan QR" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label>
+      <GovernanceAuditDateSearchFields ariaPrefix="audit gabungan QR" datePreset={datePreset} startDate={startDate} endDate={endDate} searchTerm={searchTerm} onDatePresetChange={setDatePreset} onStartDateChange={(value) => { setDatePreset("all"); setStartDate(value); }} onEndDateChange={(value) => { setDatePreset("all"); setEndDate(value); }} onSearchTermChange={setSearchTerm} onClear={() => { setDatePreset("all"); setStartDate(""); setEndDate(""); setSearchTerm(""); setDirection("all"); setActorOpenId(""); setVerificationStatusFilter("all"); setQrStatus("all"); setReceiptFormat("all"); }} />
       <label className="field"><span>Arah policy</span><select className="form-input" aria-label="Arah audit gabungan QR" value={direction} onChange={(event) => setDirection(event.target.value as QrPolicyReceiptAuditDirection | "all")}><option value="all">Semua arah</option><option value="initial">Initial</option><option value="increase">Meningkat</option><option value="decrease">Menurun</option><option value="unchanged">Tidak berubah</option></select></label>
       <label className="field"><span>Aktor policy</span><input className="form-input" aria-label="Aktor audit gabungan QR" maxLength={64} value={actorOpenId} placeholder="Semua aktor" onChange={(event) => setActorOpenId(event.target.value)} /></label>
       <label className="field"><span>Status receipt</span><select className="form-input" aria-label="Status receipt audit gabungan QR" value={verificationStatusFilter} onChange={(event) => setVerificationStatusFilter(event.target.value as "all" | "verified")}><option value="all">Semua status</option><option value="verified">Terverifikasi</option></select></label>
@@ -200,7 +223,7 @@ function GovernanceAuditQrPolicyReceiptExportPanel({ enabled }: { enabled: boole
       <label className="field"><span>Format receipt</span><select className="form-input" aria-label="Format receipt audit gabungan QR" value={receiptFormat} onChange={(event) => setReceiptFormat(event.target.value as "all" | "csv" | "pdf")}><option value="all">Semua format</option><option value="csv">CSV</option><option value="pdf">PDF</option></select></label>
     </div>
     {auditQuery.isLoading ? <div className="loading-state compact-loading"><span className="loading-dot" /> Memuat korelasi policy dan receipt…</div> : auditQuery.isError ? <p role="alert" className="integrity-error">Audit gabungan QR tidak tersedia, metadata receipt gagal uji integritas, atau akses owner-admin ditolak.</p> : audit ? <>
-      <div className="governance-qr-policy-audit-summary"><div><span>Receipt tersaring</span><strong>{number(audit.recordCount)} record</strong><small>Scope: governance_audit_qr_policy_receipt</small></div><div><span>Bukti receipt</span><strong>Indeks owner persisten</strong><small>Tahan restart · tanpa byte receipt</small></div><div><span>Dibuat pada</span><strong>{wibTime(audit.generatedAt)}</strong><small>{audit.filters.dateBoundary.replaceAll("_", " ")}</small></div><div className="governance-audit-actions"><button type="button" className="button secondary compact-button" onClick={() => generate("csv")} disabled={exportMutation.isPending}><Download size={14} /> {exportMutation.isPending ? "Menyiapkan" : "CSV Gabungan"}</button><button type="button" className="button ghost compact-button" onClick={() => generate("pdf")} disabled={exportMutation.isPending}><FileText size={14} /> PDF Gabungan</button></div></div>
+      <div className="governance-qr-policy-audit-summary"><div><span>Receipt tersaring</span><strong>{number(audit.recordCount)} record</strong><small>Scope: governance_audit_qr_policy_receipt</small></div><div><span>Rentang efektif</span><strong>{audit.filters.datePresetLabel ?? "Manual"}</strong><small>{audit.filters.startWib ?? "Tidak dibatasi"} s.d. {audit.filters.endWib ?? "Tidak dibatasi"}</small></div><div><span>Filter aktif</span><strong>{activeFilterLabel}</strong><small>Dicocokkan server-side</small></div><div><span>Bukti receipt</span><strong>Indeks owner persisten</strong><small>Tahan restart · tanpa byte receipt</small></div><div><span>Dibuat pada</span><strong>{wibTime(audit.generatedAt)}</strong><small>{audit.filters.dateBoundary.replaceAll("_", " ")}</small></div><div className="governance-audit-actions"><button type="button" className="button secondary compact-button" onClick={() => generate("csv")} disabled={exportMutation.isPending}><Download size={14} /> {exportMutation.isPending ? "Menyiapkan" : "CSV Gabungan"}</button><button type="button" className="button ghost compact-button" onClick={() => generate("pdf")} disabled={exportMutation.isPending}><FileText size={14} /> PDF Gabungan</button></div></div>
       {audit.recordCount === 0 ? <div className="governance-qr-policy-history-empty"><History size={15} /><span>Tidak ada receipt persisted yang sesuai dengan filter saat ini. Receipt yang tidak tersedia atau gagal dimuat tidak diperlakukan sebagai record valid; ekspor snapshot kosong tetap dapat dibuat dan diverifikasi.</span></div> : <ol className="governance-qr-policy-history-list governance-qr-policy-audit-list">{audit.records.slice(0, 5).map((record) => <li key={record.correlationId}><div><strong>{record.policyPreviousValidityMinutes ?? "Initial"} → {record.policyValidityMinutes} menit · {record.policyDirection}</strong><small>{wibTime(record.receiptIssuedAt)} · {record.receiptFormat.toUpperCase()} · {record.receiptVerificationStatus} · Status QR: {record.qrStatus} · Bukti: tersimpan · {record.policyCorrelation === "initial_policy" ? "Initial policy — no previous policy." : `${record.policyEventId ?? "—"} · ${record.policyChangedAt ? `berubah ${wibTime(record.policyChangedAt)}` : `oleh ${record.policyActorOpenId ?? "—"}`}`}</small></div><code title={record.correlationId}>{record.receiptId}</code></li>)}</ol>}
       {latestArtifact && <div className="governance-export-integrity" aria-label="Integritas ekspor gabungan policy dan receipt QR"><div className="governance-section-heading"><ShieldCheck size={16} /><strong>Integritas ekspor gabungan terbaru</strong><span className="badge success">Server-hashed</span></div><div className="governance-export-integrity-grid"><div><span>Format · ukuran</span><strong>{latestArtifact.format.toUpperCase()} · {fileSize(latestArtifact.byteSize)}</strong></div><div><span>Dibuat pada</span><strong>{wibTime(latestArtifact.generatedAt)}</strong></div><div className="integrity-scope"><span>Scope</span><strong>{latestArtifact.scope}</strong></div></div><div className="integrity-hash-row"><label htmlFor="qr-policy-receipt-audit-export-hash">SHA-256</label><input id="qr-policy-receipt-audit-export-hash" readOnly value={latestArtifact.sha256} aria-label="SHA-256 ekspor gabungan policy dan receipt QR" /><button type="button" className="button ghost compact-button" onClick={() => void navigator.clipboard.writeText(latestArtifact.sha256).catch(() => undefined)}><Copy size={13} /> Salin</button></div><div className="integrity-verification-row"><button type="button" className="button secondary compact-button" onClick={() => verify()} disabled={verifyMutation.isPending}><RefreshCw size={13} /> {verifyMutation.isPending ? "Memverifikasi" : "Verifikasi ulang"}</button><small>Id: {latestArtifact.exportId}</small>{verificationMessage && <span role="status" className={verificationState === "verified" ? "integrity-success" : "integrity-error"}>{verificationMessage}</span>}</div></div>}
     </> : null}

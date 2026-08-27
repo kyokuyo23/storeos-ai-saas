@@ -2,6 +2,7 @@ import { printableMonthlyHtmlToPdf } from "./monthlyReportPdf";
 import { getGovernanceAuditQrRevocation, listGovernanceAuditQrExpiryPolicyHistory } from "./db";
 import { decodeExactGovernanceAuditBytes, hashExactGovernanceAuditBytes } from "./governanceAuditExportIntegrity";
 import { listIssuedGovernanceAuditVerificationReceipts, type GovernanceAuditVerificationReceiptAuditRecord } from "./governanceAuditVerificationReceipts";
+import { governanceAuditWibStart, matchesGovernanceAuditSearch, resolveGovernanceAuditDateRange, validateGovernanceAuditDateSearchFilters, type GovernanceAuditDatePreset } from "./governanceAuditDateSearch";
 
 export type GovernanceAuditQrPolicyReceiptDirection = "initial" | "increase" | "decrease" | "unchanged";
 export type GovernanceAuditQrPolicyReceiptVerificationStatus = "verified";
@@ -10,6 +11,8 @@ export type GovernanceAuditQrPolicyReceiptScope = "governance_audit_qr_policy_re
 export type GovernanceAuditQrPolicyReceiptAuditFilters = {
   startDate?: string;
   endDate?: string;
+  datePreset?: GovernanceAuditDatePreset;
+  searchTerm?: string;
   direction?: GovernanceAuditQrPolicyReceiptDirection;
   actorOpenId?: string;
   verificationStatus?: GovernanceAuditQrPolicyReceiptVerificationStatus;
@@ -51,6 +54,11 @@ export type GovernanceAuditQrPolicyReceiptAuditExport = {
   filters: {
     startDate: string | null;
     endDate: string | null;
+    datePreset: GovernanceAuditDatePreset | null;
+    datePresetLabel: string | null;
+    startWib: string | null;
+    endWib: string | null;
+    searchTerm: string | null;
     direction: GovernanceAuditQrPolicyReceiptDirection | null;
     actorOpenId: string | null;
     verificationStatus: GovernanceAuditQrPolicyReceiptVerificationStatus | null;
@@ -123,26 +131,6 @@ function escapeHtml(value: string | number | null | undefined) {
     .replaceAll("'", "&#39;");
 }
 
-function isValidWibDate(value: string) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return false;
-  const [year, month, day] = match.slice(1).map(Number);
-  const candidate = new Date(Date.UTC(year, month - 1, day));
-  return candidate.getUTCFullYear() === year && candidate.getUTCMonth() === month - 1 && candidate.getUTCDate() === day;
-}
-
-function wibStart(value: string) {
-  if (!isValidWibDate(value)) throw new Error("Tanggal filter harus berformat YYYY-MM-DD yang valid di Jakarta/WIB.");
-  const [year, month, day] = value.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day, -7));
-}
-
-function nextWibDay(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-  const next = new Date(Date.UTC(year, month - 1, day + 1));
-  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}`;
-}
-
 function isValidDate(value: unknown): value is Date {
   return value instanceof Date && Number.isFinite(value.getTime());
 }
@@ -164,9 +152,7 @@ function isValidReceiptQr(receipt: GovernanceAuditVerificationReceiptAuditRecord
 }
 
 function validateFilters(filters: GovernanceAuditQrPolicyReceiptAuditFilters) {
-  if (filters.startDate && !isValidWibDate(filters.startDate)) throw new Error("Tanggal mulai filter QR harus valid di Jakarta/WIB.");
-  if (filters.endDate && !isValidWibDate(filters.endDate)) throw new Error("Tanggal akhir filter QR harus valid di Jakarta/WIB.");
-  if (filters.startDate && filters.endDate && wibStart(filters.startDate).getTime() > wibStart(filters.endDate).getTime()) throw new Error("Tanggal mulai tidak boleh setelah tanggal akhir.");
+  validateGovernanceAuditDateSearchFilters(filters);
   if (filters.direction && !(["initial", "increase", "decrease", "unchanged"] as const).includes(filters.direction)) throw new Error("Arah kebijakan QR tidak valid.");
   if (filters.actorOpenId !== undefined && (!filters.actorOpenId.trim() || filters.actorOpenId.length > 64)) throw new Error("Aktor kebijakan QR tidak valid.");
   if (filters.verificationStatus && filters.verificationStatus !== "verified") throw new Error("Status verifikasi receipt tidak valid.");
@@ -178,6 +164,8 @@ function validateFilters(filters: GovernanceAuditQrPolicyReceiptAuditFilters) {
 function auditScope(filters: GovernanceAuditQrPolicyReceiptAuditExport["filters"]) {
   return [
     `tanggal=${filters.startDate ?? "semua"} s.d. ${filters.endDate ?? "semua"} WIB`,
+    `preset=${filters.datePresetLabel ?? "manual"}`,
+    `pencarian=${filters.searchTerm ?? "semua"}`,
     `arah=${filters.direction ?? "semua"}`,
     `aktor=${filters.actorOpenId ?? "semua"}`,
     `status receipt=${filters.verificationStatus ?? "semua"}`,
@@ -199,8 +187,9 @@ export async function getGovernanceAuditQrPolicyReceiptAuditExport(
     listIssuedGovernanceAuditVerificationReceipts(ownerOpenId),
   ]);
   const eventById = new Map(history.map((event) => [event.eventId, event]));
-  const start = filters.startDate ? wibStart(filters.startDate) : null;
-  const endExclusive = filters.endDate ? wibStart(nextWibDay(filters.endDate)) : null;
+  const resolvedRange = resolveGovernanceAuditDateRange(filters, generatedAt);
+  const start = resolvedRange.startDate ? governanceAuditWibStart(resolvedRange.startDate) : null;
+  const endExclusive = resolvedRange.endWib ? governanceAuditWibStart(resolvedRange.endWib.slice(0, 10)) : null;
   const unfiltered = await Promise.all(receipts.map(async (receipt) => {
     const event = receipt.policy.policyEventId ? eventById.get(receipt.policy.policyEventId) : undefined;
     const correlated = Boolean(event);
@@ -249,6 +238,7 @@ export async function getGovernanceAuditQrPolicyReceiptAuditExport(
     && (!filters.verificationStatus || record.receiptVerificationStatus === filters.verificationStatus)
     && (!filters.qrStatus || record.qrStatus === filters.qrStatus)
     && (!filters.receiptFormat || record.receiptFormat === filters.receiptFormat)
+    && matchesGovernanceAuditSearch(filters.searchTerm, [record.receiptId, record.exportId, record.policyEventId, record.policyActorOpenId, record.qrReferenceId])
     && (!filters.scope || record.scope === filters.scope)
   )).sort((left, right) => (
     right.receiptIssuedAt.getTime() - left.receiptIssuedAt.getTime()
@@ -260,8 +250,13 @@ export async function getGovernanceAuditQrPolicyReceiptAuditExport(
     generatedAt,
     timezone: "Asia/Jakarta",
     filters: {
-      startDate: filters.startDate ?? null,
-      endDate: filters.endDate ?? null,
+      startDate: resolvedRange.startDate,
+      endDate: resolvedRange.endDate,
+      datePreset: resolvedRange.preset,
+      datePresetLabel: resolvedRange.label,
+      startWib: resolvedRange.startWib,
+      endWib: resolvedRange.endWib,
+      searchTerm: filters.searchTerm?.trim() || null,
       direction: filters.direction ?? null,
       actorOpenId: filters.actorOpenId ?? null,
       verificationStatus: filters.verificationStatus ?? null,
@@ -289,6 +284,7 @@ function rows(audit: GovernanceAuditQrPolicyReceiptAuditExport) {
     ["Generated At (Asia/Jakarta)", wibTime(audit.generatedAt)], ["Timezone", audit.timezone],
     ["Batas tanggal", "mulai inklusif; akhir eksklusif setelah akhir tanggal WIB"],
     ["Filter tanggal mulai", audit.filters.startDate ?? "Semua"], ["Filter tanggal akhir", audit.filters.endDate ?? "Semua"],
+    ["Preset rentang waktu", audit.filters.datePresetLabel ?? "Manual"], ["Rentang efektif WIB", `${audit.filters.startWib ?? "Tidak dibatasi"} s.d. ${audit.filters.endWib ?? "Tidak dibatasi"}`], ["Filter pencarian", audit.filters.searchTerm ?? "Semua"],
     ["Filter arah", audit.filters.direction ?? "Semua"], ["Filter aktor", audit.filters.actorOpenId ?? "Semua"],
     ["Filter status verifikasi", audit.filters.verificationStatus ?? "Semua"], ["Filter status QR", audit.filters.qrStatus ?? "Semua"], ["Filter format receipt", audit.filters.receiptFormat ?? "Semua"],
     ["Filter scope", audit.filters.scope ?? "Semua"], ["Jumlah record", audit.recordCount],

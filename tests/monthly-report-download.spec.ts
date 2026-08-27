@@ -685,12 +685,15 @@ test("filters, downloads, and re-verifies the combined policy and receipt audit 
   await expect(audit).toContainText("qrph_browser_increase");
   await audit.getByLabel("Tanggal mulai audit gabungan QR").fill("2026-08-01");
   await audit.getByLabel("Tanggal akhir audit gabungan QR").fill("2026-08-31");
+  await audit.getByLabel("Preset rentang audit gabungan QR").selectOption("last_30_days");
+  await audit.getByLabel("Cari audit gabungan QR").fill("receipt-browser-active");
   await audit.getByLabel("Arah audit gabungan QR").selectOption("increase");
   await audit.getByLabel("Aktor audit gabungan QR").fill("owner-1");
   await audit.getByLabel("Status receipt audit gabungan QR").selectOption("verified");
   await audit.getByLabel("Status QR audit gabungan").selectOption("active");
   await audit.getByLabel("Format receipt audit gabungan QR").selectOption("csv");
-  await expect.poll(() => auditRequests.some((request) => request.includes('"startDate":"2026-08-01"') && request.includes('"endDate":"2026-08-31"') && request.includes('"direction":"increase"') && request.includes('"actorOpenId":"owner-1"') && request.includes('"verificationStatus":"verified"') && request.includes('"qrStatus":"active"') && request.includes('"receiptFormat":"csv"') && request.includes('"scope":"governance_audit_qr_policy_receipt"'))).toBe(true);
+  await expect.poll(() => auditRequests.some((request) => request.includes('"startDate":"2026-08-01"') && request.includes('"endDate":"2026-08-31"') && request.includes('"datePreset":"last_30_days"') && request.includes('"searchTerm":"receipt-browser-active"') && request.includes('"direction":"increase"') && request.includes('"actorOpenId":"owner-1"') && request.includes('"verificationStatus":"verified"') && request.includes('"qrStatus":"active"') && request.includes('"receiptFormat":"csv"') && request.includes('"scope":"governance_audit_qr_policy_receipt"'))).toBe(true);
+  await expect(audit).toContainText("Cari: receipt-browser-active");
 
   const downloadPromise = page.waitForEvent("download");
   await audit.getByRole("button", { name: "CSV Gabungan" }).click();
@@ -763,6 +766,8 @@ test("keeps the combined audit controls readable and actionable on a narrow mobi
   await installArtifactOwnerRoutes(page, [storedArtifactFixture]);
   await page.goto("/reports");
   const audit = page.getByLabel("Ekspor Gabungan Policy & Receipt");
+  await expect(audit.getByLabel("Preset rentang audit gabungan QR")).toBeVisible();
+  await expect(audit.getByLabel("Cari audit gabungan QR")).toBeVisible();
   await expect(audit.getByLabel("Status QR audit gabungan")).toBeVisible();
   await expect(audit.getByRole("button", { name: "CSV Gabungan" })).toBeVisible();
   await expect(audit.getByRole("button", { name: "PDF Gabungan" })).toBeVisible();
@@ -771,13 +776,21 @@ test("keeps the combined audit controls readable and actionable on a narrow mobi
 });
 
 test("filters, downloads, and re-verifies an owner-admin QR policy audit export from exact server bytes", async ({ page }, testInfo) => {
+  const auditRequests: string[] = [];
   await installArtifactOwnerRoutes(page, [storedArtifactFixture]);
+  page.on("request", (request) => {
+    if (request.url().includes("reports.monthlyArtifactGovernanceAuditQrPolicyExport")) auditRequests.push(decodeURIComponent(request.url()));
+  });
   await page.goto("/reports");
   const audit = page.getByLabel("Ekspor Audit Kebijakan QR");
   await expect(audit).toContainText("Riwayat tersaring");
   await expect(audit).toContainText("2 event");
+  await audit.getByLabel("Preset rentang audit kebijakan QR").selectOption("previous_month");
+  await audit.getByLabel("Cari audit kebijakan QR").fill("qrph_browser_90");
   await audit.getByLabel("Arah audit kebijakan QR").selectOption("increase");
   await audit.getByLabel("Aktor audit kebijakan QR").fill("owner-1");
+  await expect.poll(() => auditRequests.some((request) => request.includes('"datePreset":"previous_month"') && request.includes('"searchTerm":"qrph_browser_90"') && request.includes('"direction":"increase"') && request.includes('"actorOpenId":"owner-1"') && request.includes('"scope":"governance_audit_qr_expiry"'))).toBe(true);
+  await expect(audit).toContainText("Cari: qrph_browser_90");
   await expect(audit).toContainText("qrph_browser_90");
   const downloadPromise = page.waitForEvent("download");
   await audit.getByRole("button", { name: "CSV Kebijakan" }).click();
