@@ -6,9 +6,17 @@ export type ReportReviewUrlState = {
   preset: ReportReviewPreset | null;
   year: number;
   month: number;
+  artifactList: ReportArtifactListUrlState;
 };
 
 export type JakartaYearMonth = { year: number; month: number };
+export const reportArtifactListFormats = ["csv", "html", "pdf"] as const;
+export type ReportArtifactListFormat = typeof reportArtifactListFormats[number];
+export type ReportArtifactListUrlState = {
+  active: boolean;
+  format: ReportArtifactListFormat | null;
+  integrity: "healthy" | null;
+};
 
 export const reportReviewPresetOptions: Array<{ value: ReportReviewPreset; label: string; periodCount: number }> = [
   { value: "current_month", label: "Bulan berjalan", periodCount: 1 },
@@ -35,18 +43,30 @@ export function parseReportReviewUrlState(search: string, fallback: JakartaYearM
   const preset = reportReviewPresets.includes(candidatePreset as ReportReviewPreset) ? candidatePreset as ReportReviewPreset : null;
   const candidateYear = Number(params.get("reportYear"));
   const candidateMonth = Number(params.get("reportMonth"));
+  const active = params.get("artifactView") === "active";
+  const candidateFormat = params.get("artifactFormat");
   return {
     preset,
     year: isPermittedYear(candidateYear, fallback.year) ? candidateYear : fallback.year,
     month: Number.isInteger(candidateMonth) && candidateMonth >= 1 && candidateMonth <= 12 ? candidateMonth : fallback.month,
+    artifactList: {
+      active,
+      format: active && reportArtifactListFormats.includes(candidateFormat as ReportArtifactListFormat) ? candidateFormat as ReportArtifactListFormat : null,
+      integrity: active && params.get("artifactIntegrity") === "healthy" ? "healthy" : null,
+    },
   };
 }
 
 /** Keeps URL state shareable while omitting the unchanged default Reports view. */
 export function getReportReviewPath(state: ReportReviewUrlState, defaults: JakartaYearMonth) {
-  if (!state.preset && state.year === defaults.year && state.month === defaults.month) return "/reports";
+  if (!state.preset && state.year === defaults.year && state.month === defaults.month && !state.artifactList.active) return "/reports";
   const params = new URLSearchParams({ reportYear: String(state.year), reportMonth: String(state.month) });
   if (state.preset) params.set("reportPreset", state.preset);
+  if (state.artifactList.active) {
+    params.set("artifactView", "active");
+    if (state.artifactList.format) params.set("artifactFormat", state.artifactList.format);
+    if (state.artifactList.integrity) params.set("artifactIntegrity", state.artifactList.integrity);
+  }
   return `/reports?${params.toString()}`;
 }
 

@@ -455,3 +455,10 @@
 - [x] Render responsive Ringkasan Artefak Aktif states for selected context, loading, empty, integrity warning, and authorization/error conditions
 - [x] Add unit, router, and browser coverage for deterministic counts, scope boundaries, integrity exclusions, read-only behavior, and access isolation
 - [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.20
+
+- [x] Inspect the released Active Artifact Summary, stored-artifact list, safe Reports URL state, and authorization contracts for Phase 2.21 reuse
+- [x] Add validated URL state for active-artifact list filters while preserving Jakarta/WIB review scope and existing report review state
+- [x] Add accessible deep-link actions from active total, CSV, HTML, PDF, and available integrity metrics to the existing artifact list without broadening results
+- [x] Preserve read-only owner-admin behavior, cross-scope denial, zero-count non-navigation, back navigation context, and existing download/lifecycle/integrity restrictions
+- [x] Add unit, router, and browser coverage for deep-link targets, URL restoration, period/format/integrity filtering, empty cards, isolation, and no mutation
+- [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.21

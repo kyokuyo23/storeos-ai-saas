@@ -83,6 +83,13 @@ export type MonthlyReportArtifactGovernanceSummary = {
 
 export type MonthlyReportActiveArtifactSummaryInput = Pick<GovernanceAuditDateSearchFilters, "startDate" | "endDate" | "datePreset">;
 
+export type MonthlyReportArtifactListFilter = MonthlyReportActiveArtifactSummaryInput & {
+  year?: number;
+  month?: number;
+  format?: ArtifactKind;
+  integrity?: "healthy";
+};
+
 export type MonthlyReportActiveArtifactSummary = {
   timezone: "Asia/Jakarta";
   range: GovernanceAuditResolvedDateRange;
@@ -437,18 +444,28 @@ export async function readVerifiedMonthlyReportArtifact(year: number, month: num
   return { artifact, availability, data };
 }
 
-export async function listMonthlyReportArtifacts(ownerOpenId = defaultArtifactScope(), filter?: { year?: number; month?: number }) {
+export async function listMonthlyReportArtifacts(ownerOpenId = defaultArtifactScope(), filter?: MonthlyReportArtifactListFilter) {
   if (!isAuthorizedOwnerScope(ownerOpenId)) return [];
   if (filter?.year !== undefined && (!Number.isInteger(filter.year) || filter.year < 2000 || filter.year > 2200)) throw new Error("Invalid report year");
   if (filter?.month !== undefined && (!Number.isInteger(filter.month) || filter.month < 1 || filter.month > 12)) throw new Error("Invalid report month");
+  const hasExplicitRange = Boolean(filter?.startDate || filter?.endDate);
+  if (filter?.datePreset && hasExplicitRange) throw new Error("Gunakan preset atau rentang Jakarta/WIB, bukan keduanya.");
+  if (hasExplicitRange && (!filter?.startDate || !filter?.endDate)) throw new Error("Rentang Jakarta/WIB harus lengkap.");
+  const range = filter?.datePreset || hasExplicitRange
+    ? resolveGovernanceAuditDateRange({
+      ...(filter?.datePreset ? { datePreset: filter.datePreset } : {}),
+      ...(filter?.startDate ? { startDate: filter.startDate } : {}),
+      ...(filter?.endDate ? { endDate: filter.endDate } : {}),
+    })
+    : null;
   const db = await getDb();
   if (!db) throw new Error("Database tidak tersedia. Silakan coba lagi.");
   const rows = await db.select().from(monthlyReportArtifacts).where(and(isNull(monthlyReportArtifacts.retiredAt), isNull(monthlyReportArtifacts.archivedAt)));
   const matching = rows
     .map(mapArtifact)
-    .filter((artifact) => !artifact.retiredAt && !artifact.archivedAt && artifact.lifecycleStatus !== "archived" && belongsToOwnerScope(artifact, ownerOpenId) && isProductionArtifact(artifact) && (filter?.year === undefined || artifact.year === filter.year) && (filter?.month === undefined || artifact.month === filter.month))
+    .filter((artifact) => !artifact.retiredAt && !artifact.archivedAt && artifact.lifecycleStatus !== "archived" && belongsToOwnerScope(artifact, ownerOpenId) && isProductionArtifact(artifact) && (filter?.year === undefined || artifact.year === filter.year) && (filter?.month === undefined || artifact.month === filter.month) && (!range || isArtifactInResolvedRange(artifact, range)))
     .sort((left, right) => right.year - left.year || right.month - left.month);
-  return Promise.all(matching.map(async (artifact) => ({
+  const verified = await Promise.all(matching.map(async (artifact) => ({
     id: artifact.id,
     year: artifact.year,
     month: artifact.month,
@@ -462,6 +479,14 @@ export async function listMonthlyReportArtifacts(ownerOpenId = defaultArtifactSc
     printableHtml: await verifyMonthlyReportArtifact(artifact, "html"),
     pdf: await verifyMonthlyReportArtifact(artifact, "pdf"),
   })));
+  return verified.filter((artifact) => {
+    const files = [artifact.csv, artifact.printableHtml, artifact.pdf];
+    if (filter?.integrity === "healthy" && !files.every((file) => file.status === "available")) return false;
+    if (filter?.format === "csv" && artifact.csv.status !== "available") return false;
+    if (filter?.format === "html" && artifact.printableHtml.status !== "available") return false;
+    if (filter?.format === "pdf" && artifact.pdf.status !== "available") return false;
+    return true;
+  });
 }
 
 /**

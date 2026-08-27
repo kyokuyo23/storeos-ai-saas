@@ -423,6 +423,21 @@
 .active-artifact-dates small { color: #607b72; font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
 .active-artifact-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .active-artifact-dates { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.active-artifact-summary-link,
+.active-artifact-integrity-link { width: 100%; min-height: 94px; padding: 0; color: inherit; border: 0; border-radius: 12px; text-align: left; background: transparent; cursor: pointer; }
+.active-artifact-summary-link > *,
+.active-artifact-integrity-link > * { pointer-events: none; }
+.active-artifact-summary-link:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(36, 85, 65, .09); }
+.active-artifact-summary-link:focus-visible,
+.active-artifact-integrity-link:focus-visible { outline: 3px solid #5d9d80; outline-offset: 3px; }
+.active-artifact-summary-link:disabled { opacity: .72; cursor: not-allowed; }
+.active-artifact-integrity-link { display: grid; gap: 4px; padding: 12px; border: 1px solid #d8e8e0; background: #f8fcfa; }
+.active-artifact-integrity-link:hover { border-color: #a8d1c0; background: #f2faf6; }
+.stored-artifact-list-anchor { scroll-margin-top: 24px; }
+.artifact-active-filter { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid #cae4db; border-radius: 10px; background: #f3faf6; }
+.artifact-active-filter > div { display: grid; gap: 3px; min-width: 0; }
+.artifact-active-filter strong { color: #295845; font-size: 13px; }
+.artifact-active-filter small { color: #607b72; font-size: 11px; line-height: 1.45; }
 .active-artifact-integrity-warning { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 12px; border: 1px solid #f2d59c; border-radius: 9px; background: #fffaf0; color: #8a5a10; font-size: 12px; line-height: 1.45; }
 .active-artifact-integrity-warning svg { flex: 0 0 auto; margin-top: 1px; }
 
@@ -451,6 +466,8 @@
   .active-artifact-context,
   .active-artifact-metrics,
   .active-artifact-dates { grid-template-columns: 1fr; }
+  .artifact-active-filter { align-items: stretch; flex-direction: column; }
+  .artifact-active-filter .button { width: 100%; }
   .report-review-context-heading,
   .report-review-apply { align-items: stretch; flex-direction: column; }
   .report-review-context-heading .button,

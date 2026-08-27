@@ -344,6 +344,8 @@ async function installArtifactOwnerRoutes(
     const requestedQrExpiry = Number(encodedRequest.match(/"validityMinutes":(\d+)/)?.[1]);
     const requestedQrRevocationReason = encodedRequest.match(/"reason":"([^"\\]*(?:\\.[^"\\]*)*)"/)?.[1] ?? null;
     const requestedReviewPreset = encodedRequest.match(/"datePreset":"(current_month|previous_month|last_3_months|current_quarter|previous_quarter|current_year)"/)?.[1];
+    const requestedArtifactFormat = encodedRequest.match(/"format":"(csv|html|pdf)"/)?.[1];
+    const requestedHealthyArtifacts = encodedRequest.includes('"integrity":"healthy"');
     const reviewRanges: Record<string, { label: string; startDate: string; endDate: string; startWib: string; endWib: string }> = {
       current_month: { label: "Bulan berjalan", startDate: "2026-08-01", endDate: "2026-08-31", startWib: "2026-08-01 00:00:00 WIB", endWib: "2026-09-01 00:00:00 WIB" },
       previous_month: { label: "Bulan sebelumnya", startDate: "2026-07-01", endDate: "2026-07-31", startWib: "2026-07-01 00:00:00 WIB", endWib: "2026-08-01 00:00:00 WIB" },
@@ -380,6 +382,19 @@ async function installArtifactOwnerRoutes(
       newestActiveArtifact: newestActiveArtifact ? { year: newestActiveArtifact.year, month: newestActiveArtifact.month, generatedAt: newestActiveArtifact.generatedAt } : null,
       integrity: { verifiedBundleCount: activeSummaryBundles.length, excludedBundleCount: summaryArtifacts.length - activeSummaryBundles.length, availabilityCounts },
     };
+    const requestedArtifactRange = requestedReviewPreset && reviewRanges[requestedReviewPreset]
+      ? reviewRanges[requestedReviewPreset]
+      : null;
+    const filteredArtifactList = requestedHealthyArtifacts
+      ? summaryArtifacts.filter((artifact) => {
+        const periodStart = `${artifact.year}-${String(artifact.month).padStart(2, "0")}-01`;
+        const inRange = !requestedArtifactRange || (periodStart >= requestedArtifactRange.startDate && periodStart <= requestedArtifactRange.endDate);
+        const selectedFile = requestedArtifactFormat === "html" ? artifact.printableHtml : requestedArtifactFormat ? artifact[requestedArtifactFormat as "csv" | "pdf"] : null;
+        const formatAvailable = !selectedFile || selectedFile.status === "available";
+        const allAvailable = [artifact.csv, artifact.printableHtml, artifact.pdf].every((entry) => entry?.status === "available");
+        return inRange && artifact.lifecycleStatus !== "archived" && formatAvailable && allAvailable;
+      })
+      : artifacts;
     const qrExpiryChanged = procedures.includes("reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy") && Number.isInteger(requestedQrExpiry) && requestedQrExpiry !== qrExpiryValidityMinutes;
     if (procedures.includes("reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy") && Number.isInteger(requestedQrExpiry)) {
       if (qrExpiryChanged) qrExpiryHistory.unshift({ eventId: `qrph_browser_${requestedQrExpiry}`, previousValidityMinutes: qrExpiryValidityMinutes, newValidityMinutes: requestedQrExpiry, resultingValidityMinutes: requestedQrExpiry, changedAt: "2026-08-26T02:10:00.000Z", actorOpenId: "owner-1" });
@@ -398,7 +413,7 @@ async function installArtifactOwnerRoutes(
     const result = procedures.map((procedure) => {
       const data = procedure === "auth.me" ? owner
         : procedure === "reports.monthlySummary" ? reportFixture
-          : procedure === "reports.monthlyArtifacts" ? artifacts
+          : procedure === "reports.monthlyArtifacts" ? filteredArtifactList
             : procedure === "reports.monthlyArtifactGovernance" ? governance
               : procedure === "reports.monthlyActiveArtifactSummary" ? activeArtifactSummary
                 : procedure === "reports.monthlyArtifactLifecycleHistory" ? lifecycleHistory
@@ -497,6 +512,29 @@ test("summarizes only verified active artifacts within the Jakarta/WIB review co
   await expect(summary.getByText("1 bundle tervalidasi", { exact: true })).toBeVisible();
 });
 
+test("opens a filtered active-artifact list from a summary metric and preserves the Jakarta/WIB review context", async ({ page }) => {
+  await installArtifactOwnerRoutes(page, [storedArtifactFixture]);
+  await page.goto("/reports?reportPreset=current_year&reportYear=2026&reportMonth=1");
+
+  const summary = page.getByLabel("Ringkasan Artefak Aktif");
+  await summary.getByLabel("Buka artefak PDF aktif sesuai periode review").click();
+  await expect(page).toHaveURL(/reportPreset=current_year/);
+  await expect(page).toHaveURL(/artifactView=active/);
+  await expect(page).toHaveURL(/artifactFormat=pdf/);
+  await expect(page).toHaveURL(/artifactIntegrity=healthy/);
+  const list = page.locator("#stored-artifact-list");
+  await expect(list.getByText("FILTER DARI RINGKASAN", { exact: true })).toBeVisible();
+  await expect(list.getByText("Tahun berjalan", { exact: true })).toBeVisible();
+  await expect(list.getByText("Format PDF · integritas sehat · Asia/Jakarta (WIB)", { exact: true })).toBeVisible();
+  await expect(page.locator(".artifact-table thead th")).toHaveText(["Periode", "Dibuat (WIB)", "Lifecycle", "PDF", "Kontrol"]);
+  await page.reload();
+  await expect(list.getByText("Format PDF · integritas sehat · Asia/Jakarta (WIB)", { exact: true })).toBeVisible();
+  await list.getByRole("button", { name: "Kembali ke arsip laporan" }).click();
+  await expect(page).not.toHaveURL(/artifactView=active/);
+  await expect(page).toHaveURL(/reportPreset=current_year/);
+  await expect(page.getByLabel("Preset periode review laporan")).toHaveValue("current_year");
+});
+
 test("shows an empty read-only active summary and warns when a candidate fails integrity", async ({ page }) => {
   const corruptArtifact = { ...storedArtifactFixture, csv: { ...storedArtifactFixture.csv, status: "corrupt" } };
   await installArtifactOwnerRoutes(page, [corruptArtifact]);
@@ -506,6 +544,8 @@ test("shows an empty read-only active summary and warns when a candidate fails i
   await expect(summary.getByText("Belum ada artefak aktif pada periode review ini.")).toBeVisible();
   await expect(summary.getByText("1 bundle pada scope tidak ditampilkan sebagai aktif karena verifikasi artefak tidak lengkap. Tidak ada metadata atau lifecycle yang diubah.")).toBeVisible();
   await expect(summary.getByText("0 file", { exact: true })).toBeVisible();
+  await expect(summary.getByLabel("Buka semua artefak aktif sesuai periode review")).toBeDisabled();
+  await expect(page).not.toHaveURL(/artifactView=active/);
 });
 
 test("shows the owner-visible stored-artifact empty state", async ({ page }) => {

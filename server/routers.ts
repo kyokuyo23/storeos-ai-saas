@@ -64,7 +64,15 @@ export const appRouter = router({
   }),
   reports: router({
     monthlySummary: publicProcedure.input(monthlyReportInput).query(({ input }) => runMutation("Laporan bulanan", () => getMonthlyManagementReport(input))),
-    monthlyArtifacts: protectedProcedure.input(z.object({ year: z.number().int().min(2000).max(2200).optional(), month: z.number().int().min(1).max(12).optional() }).optional()).query(({ ctx, input }) => {
+    monthlyArtifacts: protectedProcedure.input(z.object({
+      year: z.number().int().min(2000).max(2200).optional(),
+      month: z.number().int().min(1).max(12).optional(),
+      startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      datePreset: z.enum(["current_month", "previous_month", "last_3_months", "current_quarter", "previous_quarter", "current_year"]).optional(),
+      format: z.enum(["csv", "html", "pdf"]).optional(),
+      integrity: z.literal("healthy").optional(),
+    }).refine((input) => !(input.datePreset && (input.startDate || input.endDate)), { message: "Gunakan preset atau rentang Jakarta/WIB, bukan keduanya." }).refine((input) => !input.startDate && !input.endDate || Boolean(input.startDate && input.endDate), { message: "Rentang Jakarta/WIB harus lengkap." }).optional()).query(({ ctx, input }) => {
       if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Akses artefak laporan dibatasi untuk pemilik StoreOS." });
       return runMutation("Artefak laporan bulanan", () => listMonthlyReportArtifacts(ctx.user.openId, input));
     }),

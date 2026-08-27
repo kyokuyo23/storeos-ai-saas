@@ -138,6 +138,27 @@ describe("Phase 2.4 monthly report artifact governance", () => {
     expect(JSON.stringify(list[0])).not.toContain("monthly-management-reports/");
   });
 
+  it("applies Jakarta/WIB range, format, and healthy-integrity list filters without changing artifact records", async () => {
+    await persistMonthlyReportArtifacts(generatedReport({ month: 1 }));
+    await persistMonthlyReportArtifacts(generatedReport({ month: 2, generatedAt: "2026-03-01T00:15:00.000Z" }));
+    const february = artifactRows.find((row) => row.month === 2);
+    objects.set(february.csvKey, Buffer.from("tampered February CSV"));
+    const storedRowsBefore = JSON.stringify(artifactRows);
+    const eventCountBefore = lifecycleEvents.length;
+
+    const list = await listMonthlyReportArtifacts("owner-1", {
+      startDate: "2026-01-01",
+      endDate: "2026-03-01",
+      format: "pdf",
+      integrity: "healthy",
+    });
+
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ year: 2026, month: 1, pdf: { status: "available" } });
+    expect(JSON.stringify(artifactRows)).toBe(storedRowsBefore);
+    expect(lifecycleEvents).toHaveLength(eventCountBefore);
+  });
+
   it("serves only verified bytes and rejects missing or corrupt storage content", async () => {
     const persisted = await persistMonthlyReportArtifacts(generatedReport());
     const valid = await readVerifiedMonthlyReportArtifact(2026, 1, "csv", "owner-1");
