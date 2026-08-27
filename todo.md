@@ -410,3 +410,13 @@
 - [x] Preserve append-only policy history, QR expiry/revocation/HMAC/SHA enforcement, report artifacts, lifecycle, retention, scheduler, and operational-domain immutability
 - [x] Add Phase 2.15 filter, integrity, authorization, read-only, CSV/PDF, browser-download, and responsive regression coverage
 - [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.15
+
+- [x] Inspect QR policy history, receipt policy snapshots, existing audit export integrity, authorization, and Reports UI for Phase 2.16 reuse
+- [x] Add a server-filtered owner-admin combined policy-and-receipt dataset correlated only through each receipt's stored policy snapshot
+- [x] Label unmatched historical receipts as Initial policy without reconstructing policy values from current configuration
+- [x] Generate BOM CSV and printable/PDF combined audit exports as exact server-side bytes with deterministic ID, scope, WIB metadata, SHA-256, and byte size
+- [x] Add protected exact-byte verification with explicit missing, tampered, or mismatched outcomes and no mutation
+- [x] Add responsive owner-admin Ekspor Gabungan Policy & Receipt filters, downloads, integrity, loading, empty, error, and unauthorized states
+- [x] Preserve policy history append-only semantics, receipts, QR security/enforcement, artifacts, lifecycle, retention, scheduler, and operational-domain immutability
+- [x] Add Phase 2.16 correlation, initial policy, direction, date, actor, status, format, scope, integrity, authorization, read-only, browser-download, and responsive regression coverage
+- [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.16

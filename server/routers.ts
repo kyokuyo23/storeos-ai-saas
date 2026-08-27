@@ -15,6 +15,7 @@ import { getGovernanceAuditVerificationQrReference, resolveGovernanceAuditVerifi
 import { deriveGovernanceAuditQrReceiptPolicyContext } from "./governanceAuditQrExpiry";
 import { GOVERNANCE_AUDIT_QR_REVOCATION_REASON_MAX_LENGTH } from "./governanceAuditQrRevocation";
 import { generateGovernanceAuditQrPolicyAuditArtifact, getGovernanceAuditQrPolicyAuditExport, verifyGovernanceAuditQrPolicyAuditBytes } from "./governanceAuditQrPolicyAuditExport";
+import { generateGovernanceAuditQrPolicyReceiptAuditArtifact, getGovernanceAuditQrPolicyReceiptAuditExport, verifyGovernanceAuditQrPolicyReceiptAuditBytes } from "./governanceAuditQrPolicyReceiptAuditExport";
 
 const idInput = z.object({ id: z.number().int().positive() });
 const runMutation = async <T>(entity: string, operation: () => Promise<T>) => {
@@ -136,6 +137,41 @@ export const appRouter = router({
     })).mutation(({ ctx, input }) => {
       if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Verifikasi ekspor audit kebijakan QR dibatasi untuk pemilik StoreOS." });
       return runMutation("Verifikasi ekspor audit kebijakan QR", () => Promise.resolve(verifyGovernanceAuditQrPolicyAuditBytes(input.exportId, input.bytesBase64)));
+    }),
+    monthlyArtifactGovernanceAuditQrPolicyReceiptExport: protectedProcedure.input(z.object({
+      startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      direction: z.enum(["increase", "decrease", "initial", "unchanged"]).optional(),
+      actorOpenId: z.string().min(1).max(64).optional(),
+      verificationStatus: z.literal("verified").optional(),
+      qrStatus: z.enum(["active", "expired", "revoked", "invalid"]).optional(),
+      receiptFormat: z.enum(["csv", "pdf"]).optional(),
+      scope: z.literal("governance_audit_qr_policy_receipt").optional(),
+    }).optional()).query(({ ctx, input }) => {
+      if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Ekspor gabungan kebijakan dan receipt QR dibatasi untuk pemilik StoreOS." });
+      return runMutation("Ekspor gabungan kebijakan dan receipt QR", () => getGovernanceAuditQrPolicyReceiptAuditExport(ctx.user.openId, input ?? {}));
+    }),
+    generateMonthlyArtifactGovernanceAuditQrPolicyReceiptExport: protectedProcedure.input(z.object({
+      startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      direction: z.enum(["increase", "decrease", "initial", "unchanged"]).optional(),
+      actorOpenId: z.string().min(1).max(64).optional(),
+      verificationStatus: z.literal("verified").optional(),
+      qrStatus: z.enum(["active", "expired", "revoked", "invalid"]).optional(),
+      receiptFormat: z.enum(["csv", "pdf"]).optional(),
+      scope: z.literal("governance_audit_qr_policy_receipt").optional(),
+      format: z.enum(["csv", "pdf"]),
+    })).mutation(({ ctx, input }) => {
+      if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Ekspor gabungan kebijakan dan receipt QR dibatasi untuk pemilik StoreOS." });
+      const { format, ...filters } = input;
+      return runMutation("Ekspor gabungan kebijakan dan receipt QR", () => generateGovernanceAuditQrPolicyReceiptAuditArtifact(ctx.user.openId, filters, format));
+    }),
+    verifyMonthlyArtifactGovernanceAuditQrPolicyReceiptExport: protectedProcedure.input(z.object({
+      exportId: z.string().min(32).max(160),
+      bytesBase64: z.string().min(4).max(14_000_000),
+    })).mutation(({ ctx, input }) => {
+      if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Verifikasi ekspor gabungan kebijakan dan receipt QR dibatasi untuk pemilik StoreOS." });
+      return runMutation("Verifikasi ekspor gabungan kebijakan dan receipt QR", () => Promise.resolve(verifyGovernanceAuditQrPolicyReceiptAuditBytes(input.exportId, input.bytesBase64)));
     }),
     issueMonthlyArtifactGovernanceAuditVerificationReceipt: protectedProcedure.input(z.object({
       exportId: z.string().min(32).max(128),

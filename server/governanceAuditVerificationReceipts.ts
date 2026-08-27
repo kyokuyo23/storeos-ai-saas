@@ -56,6 +56,35 @@ export type GovernanceAuditVerificationReceiptResult =
   | { status: "export_not_available"; message: string }
   | { status: "verification_failed"; message: string; expectedSha256?: string; actualSha256?: string };
 
+type CachedGovernanceAuditVerificationReceipt = GovernanceAuditVerificationReceipt & {
+  ownerOpenId: string;
+};
+
+/**
+ * A process-local, owner-scoped audit index of receipts that have already been
+ * issued by this server instance. It does not alter receipt bytes or recover
+ * policy values from current configuration. It mirrors the established
+ * process-local governance export and QR reference contexts.
+ */
+const issuedReceiptCache = new Map<string, CachedGovernanceAuditVerificationReceipt>();
+
+function issuedReceiptCacheKey(ownerOpenId: string, receipt: GovernanceAuditVerificationReceipt) {
+  return `${ownerOpenId}:${receipt.receiptId}:${receipt.receiptFormat}:${receipt.receiptSha256}`;
+}
+
+export function listIssuedGovernanceAuditVerificationReceipts(ownerOpenId: string) {
+  return Array.from(issuedReceiptCache.values())
+    .filter((receipt) => receipt.ownerOpenId === ownerOpenId)
+    .sort((left, right) => (
+      right.verificationAt.getTime() - left.verificationAt.getTime()
+      || right.receiptSha256.localeCompare(left.receiptSha256)
+    ));
+}
+
+export function clearIssuedGovernanceAuditVerificationReceiptsForTests() {
+  issuedReceiptCache.clear();
+}
+
 function sha256(bytes: Buffer) {
   return createHash("sha256").update(bytes).digest("hex");
 }
@@ -205,7 +234,7 @@ export async function issueGovernanceAuditVerificationReceipt(
     },
   };
   const bytes = input.receiptFormat === "csv" ? buildReceiptCsvBytes(baseReceipt) : buildReceiptPdfBytes(baseReceipt);
-  return {
+  const receipt: GovernanceAuditVerificationReceipt = {
     status: "issued",
     receipt: {
       ...baseReceipt,
@@ -213,5 +242,7 @@ export async function issueGovernanceAuditVerificationReceipt(
       receiptSha256: sha256(bytes),
       bytesBase64: bytes.toString("base64"),
     },
-  };
+  }.receipt;
+  issuedReceiptCache.set(issuedReceiptCacheKey(ownerOpenId, receipt), { ...receipt, ownerOpenId });
+  return { status: "issued", receipt };
 }

@@ -25,6 +25,11 @@ const { generateGovernanceAuditQrPolicyAuditArtifact, getGovernanceAuditQrPolicy
   getGovernanceAuditQrPolicyAuditExport: vi.fn(),
   verifyGovernanceAuditQrPolicyAuditBytes: vi.fn(),
 }));
+const { generateGovernanceAuditQrPolicyReceiptAuditArtifact, getGovernanceAuditQrPolicyReceiptAuditExport, verifyGovernanceAuditQrPolicyReceiptAuditBytes } = vi.hoisted(() => ({
+  generateGovernanceAuditQrPolicyReceiptAuditArtifact: vi.fn(),
+  getGovernanceAuditQrPolicyReceiptAuditExport: vi.fn(),
+  verifyGovernanceAuditQrPolicyReceiptAuditBytes: vi.fn(),
+}));
 const { getGovernanceAuditQrExpiryPolicy, getGovernanceAuditQrRevocation, listGovernanceAuditQrExpiryPolicyHistory, revokeGovernanceAuditQrReference, updateGovernanceAuditQrExpiryPolicy } = vi.hoisted(() => ({
   getGovernanceAuditQrExpiryPolicy: vi.fn(),
   getGovernanceAuditQrRevocation: vi.fn(),
@@ -44,6 +49,7 @@ vi.mock("./governanceAuditExportIntegrity", () => ({ generateGovernanceAuditExpo
 vi.mock("./governanceAuditVerificationReceipts", () => ({ issueGovernanceAuditVerificationReceipt }));
 vi.mock("./governanceAuditVerificationQr", () => ({ getGovernanceAuditVerificationQrReference, resolveGovernanceAuditVerificationQr, revokeGovernanceAuditVerificationQrReference }));
 vi.mock("./governanceAuditQrPolicyAuditExport", () => ({ generateGovernanceAuditQrPolicyAuditArtifact, getGovernanceAuditQrPolicyAuditExport, verifyGovernanceAuditQrPolicyAuditBytes }));
+vi.mock("./governanceAuditQrPolicyReceiptAuditExport", () => ({ generateGovernanceAuditQrPolicyReceiptAuditArtifact, getGovernanceAuditQrPolicyReceiptAuditExport, verifyGovernanceAuditQrPolicyReceiptAuditBytes }));
 vi.mock("./db", () => ({ getGovernanceAuditQrExpiryPolicy, getGovernanceAuditQrRevocation, listGovernanceAuditQrExpiryPolicyHistory, revokeGovernanceAuditQrReference, updateGovernanceAuditQrExpiryPolicy }));
 
 import { appRouter } from "./routers";
@@ -64,6 +70,9 @@ describe("reports.monthlyArtifacts authorization", () => {
     getGovernanceAuditQrPolicyAuditExport.mockResolvedValue({ kind: "storeos_governance_qr_policy_audit", version: 1, timezone: "Asia/Jakarta", generatedAt: new Date("2026-08-26T00:00:00.000Z"), filters: {}, recordCount: 0, records: [] });
     generateGovernanceAuditQrPolicyAuditArtifact.mockResolvedValue({ exportId: `storeos-qr-policy-audit-csv-${"c".repeat(64)}`, format: "csv", filename: "audit.csv", contentType: "text/csv;charset=utf-8", generatedAt: new Date("2026-08-26T00:00:00.000Z"), timezone: "Asia/Jakarta", filters: {}, scope: "scope", recordCount: 0, byteSize: 12, sha256: "c".repeat(64), bytesBase64: "77u/" });
     verifyGovernanceAuditQrPolicyAuditBytes.mockReturnValue({ verified: true, status: "verified", byteSize: 3 });
+    getGovernanceAuditQrPolicyReceiptAuditExport.mockResolvedValue({ kind: "storeos_governance_qr_policy_receipt_audit", version: 1, timezone: "Asia/Jakarta", generatedAt: new Date("2026-08-27T00:00:00.000Z"), filters: {}, recordCount: 0, records: [] });
+    generateGovernanceAuditQrPolicyReceiptAuditArtifact.mockResolvedValue({ exportId: `storeos-qr-policy-receipt-audit-csv-${"d".repeat(64)}`, format: "csv", filename: "combined.csv", contentType: "text/csv;charset=utf-8", generatedAt: new Date("2026-08-27T00:00:00.000Z"), timezone: "Asia/Jakarta", filters: {}, scope: "scope", recordCount: 0, byteSize: 12, sha256: "d".repeat(64), bytesBase64: "77u/" });
+    verifyGovernanceAuditQrPolicyReceiptAuditBytes.mockReturnValue({ verified: true, status: "verified", byteSize: 3 });
   });
 
   it("rejects anonymous artifact access", async () => {
@@ -158,6 +167,30 @@ describe("reports.monthlyArtifacts authorization", () => {
     expect(generateGovernanceAuditQrPolicyAuditArtifact).toHaveBeenCalledWith("owner-1", filters, "csv");
     await expect(caller({ openId: "owner-1", role: "admin" }).reports.verifyMonthlyArtifactGovernanceAuditQrPolicyExport(verification)).resolves.toMatchObject({ verified: true, status: "verified" });
     expect(verifyGovernanceAuditQrPolicyAuditBytes).toHaveBeenCalledWith(verification.exportId, verification.bytesBase64);
+  });
+
+  it("restricts combined QR policy and receipt audit query, generation, and exact-byte verification before service calls", async () => {
+    const filters = { startDate: "2026-08-01", endDate: "2026-08-31", direction: "increase" as const, actorOpenId: "owner-1", verificationStatus: "verified" as const, qrStatus: "active" as const, receiptFormat: "csv" as const, scope: "governance_audit_qr_policy_receipt" as const };
+    const generation = { ...filters, format: "csv" as const };
+    const verification = { exportId: `storeos-qr-policy-receipt-audit-csv-${"d".repeat(64)}`, bytesBase64: "77u/" };
+    await expect(caller(null).reports.monthlyArtifactGovernanceAuditQrPolicyReceiptExport(filters)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller({ openId: "owner-1", role: "user" }).reports.generateMonthlyArtifactGovernanceAuditQrPolicyReceiptExport(generation)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller({ openId: "other-workspace", role: "admin" }).reports.verifyMonthlyArtifactGovernanceAuditQrPolicyReceiptExport(verification)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(getGovernanceAuditQrPolicyReceiptAuditExport).not.toHaveBeenCalled();
+    expect(generateGovernanceAuditQrPolicyReceiptAuditArtifact).not.toHaveBeenCalled();
+    expect(verifyGovernanceAuditQrPolicyReceiptAuditBytes).not.toHaveBeenCalled();
+  });
+
+  it("forwards all validated combined filters only in the authenticated owner-admin scope", async () => {
+    const filters = { startDate: "2026-08-01", endDate: "2026-08-31", direction: "decrease" as const, actorOpenId: "owner-1", verificationStatus: "verified" as const, qrStatus: "revoked" as const, receiptFormat: "pdf" as const, scope: "governance_audit_qr_policy_receipt" as const };
+    const generation = { ...filters, format: "pdf" as const };
+    const verification = { exportId: `storeos-qr-policy-receipt-audit-csv-${"d".repeat(64)}`, bytesBase64: "77u/" };
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.monthlyArtifactGovernanceAuditQrPolicyReceiptExport(filters)).resolves.toMatchObject({ kind: "storeos_governance_qr_policy_receipt_audit", recordCount: 0 });
+    expect(getGovernanceAuditQrPolicyReceiptAuditExport).toHaveBeenCalledWith("owner-1", filters);
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.generateMonthlyArtifactGovernanceAuditQrPolicyReceiptExport(generation)).resolves.toMatchObject({ format: "csv", byteSize: 12 });
+    expect(generateGovernanceAuditQrPolicyReceiptAuditArtifact).toHaveBeenCalledWith("owner-1", filters, "pdf");
+    await expect(caller({ openId: "owner-1", role: "admin" }).reports.verifyMonthlyArtifactGovernanceAuditQrPolicyReceiptExport(verification)).resolves.toMatchObject({ verified: true, status: "verified" });
+    expect(verifyGovernanceAuditQrPolicyReceiptAuditBytes).toHaveBeenCalledWith(verification.exportId, verification.bytesBase64);
   });
 
   it("rejects anonymous, member, and cross-workspace verification receipt requests before receipt issuance", async () => {
