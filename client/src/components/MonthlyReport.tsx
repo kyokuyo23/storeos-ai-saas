@@ -1,8 +1,10 @@
 import { AlertTriangle, Archive, CheckCircle2, Clock3, Copy, Download, FileText, History, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useLocation, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { downloadMonthlyReportCsv, printMonthlyReport } from "@/lib/monthlyReportExports";
 import { downloadGovernanceAuditIntegrityArtifact, downloadGovernanceAuditVerificationReceipt, governanceAuditFilterScope, type GovernanceAuditExportData, type GovernanceAuditIntegrityArtifact } from "@/lib/governanceAuditExports";
+import { getFocusedMonthForReportReviewPreset, getReportReviewPath, parseReportReviewUrlState, reportReviewPresetOptions, type ReportReviewPreset } from "@/lib/reportReviewUrlState";
 import { AppShell, ErrorState, PageHeader, Panel } from "./FoundationShell";
 import { useAuth } from "../_core/hooks/useAuth";
 import { startLogin } from "@/const";
@@ -71,10 +73,10 @@ function GovernanceAuditQrReceiptPolicy({ policy }: { policy: { validityMinutes:
 }
 
 type QrPolicyAuditDirection = "increase" | "decrease" | "initial" | "no_op";
-type GovernanceAuditDatePreset = "today" | "last_7_days" | "last_30_days" | "current_month" | "previous_month" | "last_3_months" | "last_12_months";
+type GovernanceAuditDatePreset = "today" | "last_7_days" | "last_30_days" | "current_month" | "previous_month" | "last_3_months" | "last_12_months" | "current_quarter" | "previous_quarter" | "current_year";
 
 const governanceAuditDatePresetOptions: Array<{ value: GovernanceAuditDatePreset; label: string }> = [
-  { value: "today", label: "Hari ini" }, { value: "last_7_days", label: "7 hari terakhir" }, { value: "last_30_days", label: "30 hari terakhir" }, { value: "current_month", label: "Bulan berjalan" }, { value: "previous_month", label: "Bulan sebelumnya" }, { value: "last_3_months", label: "3 bulan terakhir" }, { value: "last_12_months", label: "12 bulan terakhir" },
+  { value: "today", label: "Hari ini" }, { value: "last_7_days", label: "7 hari terakhir" }, { value: "last_30_days", label: "30 hari terakhir" }, { value: "current_month", label: "Bulan berjalan" }, { value: "previous_month", label: "Bulan sebelumnya" }, { value: "last_3_months", label: "3 bulan terakhir" }, { value: "last_12_months", label: "12 bulan terakhir" }, { value: "current_quarter", label: "Kuartal berjalan" }, { value: "previous_quarter", label: "Kuartal sebelumnya" }, { value: "current_year", label: "Tahun berjalan" },
 ];
 
 function GovernanceAuditDateSearchFields({ ariaPrefix, datePreset, startDate, endDate, searchTerm, onDatePresetChange, onStartDateChange, onEndDateChange, onSearchTermChange, onClear }: { ariaPrefix: string; datePreset: GovernanceAuditDatePreset | "all"; startDate: string; endDate: string; searchTerm: string; onDatePresetChange: (value: GovernanceAuditDatePreset | "all") => void; onStartDateChange: (value: string) => void; onEndDateChange: (value: string) => void; onSearchTermChange: (value: string) => void; onClear: () => void }) {
@@ -87,7 +89,7 @@ function GovernanceAuditDateSearchFields({ ariaPrefix, datePreset, startDate, en
   </>;
 }
 
-function GovernanceAuditQrPolicyExportPanel({ enabled }: { enabled: boolean }) {
+function GovernanceAuditQrPolicyExportPanel({ enabled, reviewPreset }: { enabled: boolean; reviewPreset: ReportReviewPreset | null }) {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [datePreset, setDatePreset] = useState<GovernanceAuditDatePreset | "all">("all");
@@ -145,6 +147,7 @@ function GovernanceAuditQrPolicyExportPanel({ enabled }: { enabled: boolean }) {
       <label className="field"><span>Arah perubahan</span><select className="form-input" aria-label="Arah audit kebijakan QR" value={direction} onChange={(event) => setDirection(event.target.value as QrPolicyAuditDirection | "all")}><option value="all">Semua arah</option><option value="initial">Initial</option><option value="increase">Meningkat</option><option value="decrease">Menurun</option><option value="no_op">Tidak berubah</option></select></label>
       <label className="field"><span>Aktor owner-admin</span><input className="form-input" aria-label="Aktor audit kebijakan QR" maxLength={64} value={actorOpenId} placeholder="Semua aktor" onChange={(event) => setActorOpenId(event.target.value)} /></label>
     </div>
+    {reviewPreset && <div className="report-review-apply"><small>Preset review Reports tersedia: <strong>{reportReviewPresetOptions.find((option) => option.value === reviewPreset)?.label}</strong>. Filter audit yang ada tidak akan berubah sebelum diterapkan.</small><button type="button" className="button ghost compact-button" onClick={() => { setDatePreset(reviewPreset); setStartDate(""); setEndDate(""); }}>Gunakan periode review</button></div>}
     {policyAuditQuery.isLoading ? <div className="loading-state compact-loading"><span className="loading-dot" /> Memuat snapshot audit kebijakan QR…</div> : policyAuditQuery.isError ? <p role="alert" className="integrity-error">Audit kebijakan QR tidak tersedia atau akses owner-admin ditolak.</p> : audit ? <>
       <div className="governance-qr-policy-audit-summary"><div><span>Riwayat tersaring</span><strong>{number(audit.recordCount)} event</strong><small>Scope: governance_audit_qr_expiry</small></div><div><span>Rentang efektif</span><strong>{audit.filters.datePresetLabel ?? "Manual"}</strong><small>{audit.filters.startWib ?? "Tidak dibatasi"} s.d. {audit.filters.endWib ?? "Tidak dibatasi"}</small></div><div><span>Filter aktif</span><strong>{activeFilterLabel}</strong><small>Dicocokkan server-side</small></div><div><span>Dibuat pada</span><strong>{wibTime(audit.generatedAt)}</strong><small>{audit.filters.dateBoundary.replaceAll("_", " ")}</small></div><div className="governance-audit-actions"><button type="button" className="button secondary compact-button" onClick={() => generate("csv")} disabled={exportMutation.isPending}><Download size={14} /> {exportMutation.isPending ? "Menyiapkan" : "CSV Kebijakan"}</button><button type="button" className="button ghost compact-button" onClick={() => generate("pdf")} disabled={exportMutation.isPending}><FileText size={14} /> PDF Kebijakan</button></div></div>
       {audit.recordCount === 0 ? <div className="governance-qr-policy-history-empty"><History size={15} /><span>Tidak ada event kebijakan yang sesuai dengan filter saat ini. Ekspor tetap dapat dibuat sebagai snapshot kosong yang tervalidasi.</span></div> : <ol className="governance-qr-policy-history-list governance-qr-policy-audit-list">{audit.records.slice(0, 5).map((event) => <li key={event.eventId}><div><strong>{event.previousValidityMinutes ?? "Initial"} → {event.newValidityMinutes} menit · {event.direction}</strong><small>{wibTime(event.changedAt)} · oleh {event.actorOpenId} · {event.result}</small></div><code title={event.eventId}>{event.eventId}</code></li>)}</ol>}
@@ -155,7 +158,7 @@ function GovernanceAuditQrPolicyExportPanel({ enabled }: { enabled: boolean }) {
 
 type QrPolicyReceiptAuditDirection = "increase" | "decrease" | "initial" | "unchanged";
 
-function GovernanceAuditQrPolicyReceiptExportPanel({ enabled }: { enabled: boolean }) {
+function GovernanceAuditQrPolicyReceiptExportPanel({ enabled, reviewPreset }: { enabled: boolean; reviewPreset: ReportReviewPreset | null }) {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [datePreset, setDatePreset] = useState<GovernanceAuditDatePreset | "all">("all");
@@ -222,6 +225,7 @@ function GovernanceAuditQrPolicyReceiptExportPanel({ enabled }: { enabled: boole
       <label className="field"><span>Status QR</span><select className="form-input" aria-label="Status QR audit gabungan" value={qrStatus} onChange={(event) => setQrStatus(event.target.value as "all" | "active" | "expired" | "revoked" | "invalid")}><option value="all">Semua status QR</option><option value="active">Aktif</option><option value="expired">Kedaluwarsa</option><option value="revoked">Dicabut</option><option value="invalid">Tidak valid</option></select></label>
       <label className="field"><span>Format receipt</span><select className="form-input" aria-label="Format receipt audit gabungan QR" value={receiptFormat} onChange={(event) => setReceiptFormat(event.target.value as "all" | "csv" | "pdf")}><option value="all">Semua format</option><option value="csv">CSV</option><option value="pdf">PDF</option></select></label>
     </div>
+    {reviewPreset && <div className="report-review-apply"><small>Preset review Reports tersedia: <strong>{reportReviewPresetOptions.find((option) => option.value === reviewPreset)?.label}</strong>. Filter audit yang ada tidak akan berubah sebelum diterapkan.</small><button type="button" className="button ghost compact-button" onClick={() => { setDatePreset(reviewPreset); setStartDate(""); setEndDate(""); }}>Gunakan periode review</button></div>}
     {auditQuery.isLoading ? <div className="loading-state compact-loading"><span className="loading-dot" /> Memuat korelasi policy dan receipt…</div> : auditQuery.isError ? <p role="alert" className="integrity-error">Audit gabungan QR tidak tersedia, metadata receipt gagal uji integritas, atau akses owner-admin ditolak.</p> : audit ? <>
       <div className="governance-qr-policy-audit-summary"><div><span>Receipt tersaring</span><strong>{number(audit.recordCount)} record</strong><small>Scope: governance_audit_qr_policy_receipt</small></div><div><span>Rentang efektif</span><strong>{audit.filters.datePresetLabel ?? "Manual"}</strong><small>{audit.filters.startWib ?? "Tidak dibatasi"} s.d. {audit.filters.endWib ?? "Tidak dibatasi"}</small></div><div><span>Filter aktif</span><strong>{activeFilterLabel}</strong><small>Dicocokkan server-side</small></div><div><span>Bukti receipt</span><strong>Indeks owner persisten</strong><small>Tahan restart · tanpa byte receipt</small></div><div><span>Dibuat pada</span><strong>{wibTime(audit.generatedAt)}</strong><small>{audit.filters.dateBoundary.replaceAll("_", " ")}</small></div><div className="governance-audit-actions"><button type="button" className="button secondary compact-button" onClick={() => generate("csv")} disabled={exportMutation.isPending}><Download size={14} /> {exportMutation.isPending ? "Menyiapkan" : "CSV Gabungan"}</button><button type="button" className="button ghost compact-button" onClick={() => generate("pdf")} disabled={exportMutation.isPending}><FileText size={14} /> PDF Gabungan</button></div></div>
       {audit.recordCount === 0 ? <div className="governance-qr-policy-history-empty"><History size={15} /><span>Tidak ada receipt persisted yang sesuai dengan filter saat ini. Receipt yang tidak tersedia atau gagal dimuat tidak diperlakukan sebagai record valid; ekspor snapshot kosong tetap dapat dibuat dan diverifikasi.</span></div> : <ol className="governance-qr-policy-history-list governance-qr-policy-audit-list">{audit.records.slice(0, 5).map((record) => <li key={record.correlationId}><div><strong>{record.policyPreviousValidityMinutes ?? "Initial"} → {record.policyValidityMinutes} menit · {record.policyDirection}</strong><small>{wibTime(record.receiptIssuedAt)} · {record.receiptFormat.toUpperCase()} · {record.receiptVerificationStatus} · Status QR: {record.qrStatus} · Bukti: tersimpan · {record.policyCorrelation === "initial_policy" ? "Initial policy — no previous policy." : `${record.policyEventId ?? "—"} · ${record.policyChangedAt ? `berubah ${wibTime(record.policyChangedAt)}` : `oleh ${record.policyActorOpenId ?? "—"}`}`}</small></div><code title={record.correlationId}>{record.receiptId}</code></li>)}</ol>}
@@ -284,7 +288,7 @@ function GovernancePanel({ enabled }: { enabled: boolean }) {
   </Panel>;
 }
 
-function GovernanceAuditExportPanel({ enabled, initialYear }: { enabled: boolean; initialYear: number }) {
+function GovernanceAuditExportPanel({ enabled, initialYear, reviewPreset }: { enabled: boolean; initialYear: number; reviewPreset: ReportReviewPreset | null }) {
   const [auditYear, setAuditYear] = useState<number | "all">("all");
   const [auditMonth, setAuditMonth] = useState<number | "all">("all");
   const [auditLifecycle, setAuditLifecycle] = useState<LifecycleStatus | "all">("all");
@@ -443,8 +447,8 @@ function GovernanceAuditExportPanel({ enabled, initialYear }: { enabled: boolean
   return <Panel className="governance-audit-export-panel" title="Ekspor Audit Governance" description="Ekspor read-only jejak lifecycle yang sudah tersimpan. Filter diproses di server dalam scope owner-admin dan tidak mencatat event lifecycle baru.">
     <div className="governance-audit-stack">
       <QrExpiryPolicyHistory history={qrExpiryPolicyHistoryQuery.data} isLoading={qrExpiryPolicyHistoryQuery.isLoading} isError={qrExpiryPolicyHistoryQuery.isError} currentValidityMinutes={qrExpiryPolicyQuery.data?.validityMinutes ?? 30} />
-      <GovernanceAuditQrPolicyExportPanel enabled={enabled} />
-      <GovernanceAuditQrPolicyReceiptExportPanel enabled={enabled} />
+      <GovernanceAuditQrPolicyExportPanel enabled={enabled} reviewPreset={reviewPreset} />
+      <GovernanceAuditQrPolicyReceiptExportPanel enabled={enabled} reviewPreset={reviewPreset} />
       <div className="governance-audit-filters" aria-label="Filter ekspor audit governance">
         <label className="field"><span>Tahun periode</span><select aria-label="Tahun audit governance" className="form-input" value={auditYear} onChange={(event) => setAuditYear(event.target.value === "all" ? "all" : Number(event.target.value))}><option value="all">Semua tahun</option>{Array.from({ length: 8 }, (_, index) => initialYear - 5 + index).map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
         <label className="field"><span>Bulan periode</span><select aria-label="Bulan audit governance" className="form-input" value={auditMonth} onChange={(event) => setAuditMonth(event.target.value === "all" ? "all" : Number(event.target.value))}><option value="all">Semua bulan</option>{months.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}</select></label>
@@ -512,24 +516,55 @@ function ArchiveConfirmationPanel({ selection, onClose }: { selection: { year: n
 
 export function MonthlyReport() {
   const initial = useMemo(currentJakarta, []);
-  const [year, setYear] = useState(initial.year);
-  const [month, setMonth] = useState(initial.month);
+  const [, navigate] = useLocation();
+  const search = useSearch();
+  const urlReviewState = useMemo(() => parseReportReviewUrlState(search, initial), [initial, search]);
+  const [year, setYear] = useState(urlReviewState.year);
+  const [month, setMonth] = useState(urlReviewState.month);
+  const [reviewPreset, setReviewPreset] = useState<ReportReviewPreset | null>(urlReviewState.preset);
   const [artifactYear, setArtifactYear] = useState(initial.year);
   const [artifactMonth, setArtifactMonth] = useState<number | "all">("all");
   const [historyPeriod, setHistoryPeriod] = useState<{ year: number; month: number } | null>(null);
   const [archivePeriod, setArchivePeriod] = useState<{ year: number; month: number; lifecycleStatus: LifecycleStatus; generatedAt: Date | string } | null>(null);
   const auth = useAuth();
   const isOwnerAdmin = auth.isAuthenticated && auth.user?.role === "admin";
+  const reviewRangeQuery = trpc.reports.monthlyArtifactGovernanceAuditQrPolicyExport.useQuery(
+    reviewPreset ? { datePreset: reviewPreset, scope: "governance_audit_qr_expiry" as const } : undefined,
+    { enabled: isOwnerAdmin && Boolean(reviewPreset), retry: false, refetchOnWindowFocus: false },
+  );
+  useEffect(() => {
+    setYear(urlReviewState.year);
+    setMonth(urlReviewState.month);
+    setReviewPreset(urlReviewState.preset);
+  }, [urlReviewState]);
   const query = trpc.reports.monthlySummary.useQuery({ year, month });
   const artifactsQuery = trpc.reports.monthlyArtifacts.useQuery(
     { year: artifactYear, ...(artifactMonth === "all" ? {} : { month: artifactMonth }) },
     { enabled: isOwnerAdmin, retry: false, refetchOnWindowFocus: false },
   );
   const report = query.data;
+  const reviewOption = reviewPreset ? reportReviewPresetOptions.find((option) => option.value === reviewPreset) : null;
+  const reviewRange = reviewRangeQuery.data?.filters;
+  const updateReviewState = (next: { preset: ReportReviewPreset | null; year: number; month: number }) => {
+    setReviewPreset(next.preset);
+    setYear(next.year);
+    setMonth(next.month);
+    navigate(getReportReviewPath(next, initial));
+  };
+  const selectReviewPreset = (value: ReportReviewPreset | "custom") => {
+    if (value === "custom") {
+      updateReviewState({ preset: null, year, month });
+      return;
+    }
+    const focused = getFocusedMonthForReportReviewPreset(value, initial);
+    updateReviewState({ preset: value, year: focused.year, month: focused.month });
+  };
+  const updateManualYear = (nextYear: number) => updateReviewState({ preset: null, year: nextYear, month });
+  const updateManualMonth = (nextMonth: number) => updateReviewState({ preset: null, year, month: nextMonth });
   const downloadCsv = () => { if (report) downloadMonthlyReportCsv(report); };
   return <AppShell active="reports" eyebrow="Management Reporting" title="Monthly Summary">
     <PageHeader eyebrow="MONTHLY REPORTING" title="Ringkasan Manajemen Bulanan" description="Financial Core dan Inventory Intelligence dalam satu laporan read-only berbasis kalender Jakarta/WIB." action={<div className="header-actions"><button className="button secondary" onClick={downloadCsv} disabled={!report}><Download size={16} /> CSV</button><button className="button ghost" onClick={() => printMonthlyReport(report)} disabled={!report}><FileText size={16} /> PDF / Cetak</button></div>} />
-    <Panel title="Periode laporan" description="Batas laporan memakai 00:00 WIB pada hari pertama sampai sebelum 00:00 WIB bulan berikutnya."><div className="form-grid report-period-controls"><label className="field"><span>Tahun</span><select className="form-input" value={year} onChange={(event) => setYear(Number(event.target.value))}>{Array.from({ length: 7 }, (_, index) => initial.year - 3 + index).map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="field"><span>Bulan</span><select className="form-input" value={month} onChange={(event) => setMonth(Number(event.target.value))}>{months.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}</select></label><div className="report-period-label"><span>Periode aktif</span><strong>{report?.period.label ?? `${months[month - 1]} ${year}`}</strong><small>{report?.period.startDate ?? "—"} s/d {report?.period.endDate ?? "—"} · Asia/Jakarta</small></div></div></Panel>
+    <Panel title="Periode laporan" description="Batas laporan memakai 00:00 WIB pada hari pertama sampai sebelum 00:00 WIB bulan berikutnya."><div className="form-grid report-period-controls"><label className="field"><span>Tahun</span><select className="form-input" value={year} onChange={(event) => updateManualYear(Number(event.target.value))}>{Array.from({ length: 7 }, (_, index) => initial.year - 3 + index).map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="field"><span>Bulan</span><select className="form-input" value={month} onChange={(event) => updateManualMonth(Number(event.target.value))}>{months.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}</select></label><div className="report-period-label"><span>Bulan fokus laporan</span><strong>{report?.period.label ?? `${months[month - 1]} ${year}`}</strong><small>{report?.period.startDate ?? "—"} s/d {report?.period.endDate ?? "—"} · Asia/Jakarta</small></div></div><section className="report-review-context" aria-label="Periode review laporan"><div className="report-review-context-heading"><div><span className="eyebrow">KONTEKS READ-ONLY</span><h3>Periode review laporan</h3><p>Preset hanya memberi konteks peninjauan dan tidak menggabungkan perhitungan bulanan. Ringkasan di atas tetap untuk bulan fokus yang dipilih.</p></div><button type="button" className="button ghost compact-button" onClick={() => updateReviewState({ preset: null, year: initial.year, month: initial.month })} disabled={!reviewPreset && year === initial.year && month === initial.month}>Reset</button></div><div className="report-review-context-grid"><label className="field"><span>Preset review</span><select aria-label="Preset periode review laporan" className="form-input" value={reviewPreset ?? "custom"} onChange={(event) => selectReviewPreset(event.target.value as ReportReviewPreset | "custom")}><option value="custom">Kustom / bulan fokus</option>{reportReviewPresetOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><div><span>Status konteks</span><strong>{reviewOption ? reviewOption.label : "Kustom"}</strong><small>{reviewOption ? `Preset · ${reviewOption.periodCount} periode kalender` : "Pilihan tahun/bulan manual berwenang"}</small></div><div><span>Rentang efektif</span><strong>{reviewOption ? (reviewRangeQuery.isLoading ? "Memuat batas WIB…" : reviewRange?.datePresetLabel ?? "Belum tersedia") : `${months[month - 1]} ${year}`}</strong><small>{reviewOption ? (reviewRange ? `${reviewRange.startWib} sampai sebelum ${reviewRange.endWib}` : isOwnerAdmin ? "Rentang tidak tersedia." : "Rentang audit server-side tersedia untuk owner-admin.") : `${report?.period.startDate ?? "—"} sampai ${report?.period.endDate ?? "—"} · bulan fokus`}</small></div><div><span>Zona waktu & batas</span><strong>Asia/Jakarta (WIB)</strong><small>Mulai inklusif · akhir eksklusif</small></div></div>{reviewRangeQuery.isError && <p role="alert" className="integrity-error">Konteks range review tidak tersedia. Perhitungan laporan bulanan tidak diubah.</p>}</section></Panel>
     {query.isLoading ? <div className="loading-state"><span className="loading-dot" /> Memuat laporan bulanan…</div> : query.isError ? <ErrorState message="Laporan bulanan tidak dapat dimuat. Silakan coba lagi." /> : report ? <div className="monthly-report-grid"><Panel title="Financial Core" description="Nilai yang sudah mengikuti pembatalan, refund, dan exchange sesuai Financial Core."><div className="summary-grid"><Metric label="Gross Sales" value={currency(report.financial.grossSales)} /><Metric label="Net Revenue" value={currency(report.financial.netRevenue)} /><Metric label="COGS" value={currency(report.financial.cogs)} /><Metric label="Gross Profit" value={currency(report.financial.grossProfit)} /><Metric label="Gross Margin" value={`${number(report.financial.grossMargin)}%`} /><Metric label="Sales" value={number(report.financial.salesTransactionCount)} /><Metric label="Refund Value" value={currency(report.financial.refundValue)} /><Metric label="Void Value" value={currency(report.financial.voidValue)} /><Metric label="Exchange Impact" value={currency(report.financial.exchangeImpact)} /></div></Panel><Panel title="Inventory Intelligence" description="Rekonsiliasi memakai inventory ledger dan tolerance engine yang sudah ada."><div className="summary-grid"><Metric label="Opening Stock" value={number(report.inventory.openingStock)} /><Metric label="Expected Stock" value={number(report.inventory.expectedStock)} /><Metric label="Actual / Closing Stock" value={number(report.inventory.actualStock)} /><Metric label="Total Variance" value={number(report.inventory.totalVariance)} /><Metric label="Di luar toleransi" value={number(report.inventory.outOfToleranceItemCount)} /><Metric label="High-value variance" value={number(report.inventory.highValueVarianceCount)} /><Metric label="Varians tinggi berulang" value={number(report.inventory.recurringHighVarianceIngredientCount)} detail="2/3 atau 3/3 periode comparable" /><Metric label="Sesi stock-opname" value={number(report.inventory.stockOpnameSessionCount)} /><Metric label="Follow-up terbuka" value={number(report.inventory.openStockOpnameFollowUpCount)} /></div></Panel></div> : <Panel title="Tidak ada data" description="Belum ada data transaksi atau pergerakan untuk bulan Jakarta/WIB yang dipilih."><div className="empty-state">Belum ada data pada periode yang dipilih.</div></Panel>}
     {report && <Panel title="Metadata laporan" description="Metadata ini ikut tersedia pada CSV dan tampilan cetak/PDF."><div className="report-metadata"><div><span>Dibuat pada</span><strong>{report.generatedAt ? wibTime(report.generatedAt) : "—"}</strong></div><div><span>Catatan audit</span>{(report.auditNotes ?? []).length ? <ul>{(report.auditNotes ?? []).map((entry, index) => <li key={`${entry.reference}-${entry.type}-${index}`}><strong>{entry.reference}</strong> · {entry.note}</li>)}</ul> : <strong>Tidak ada catatan audit pada periode ini.</strong>}</div></div></Panel>}
     <Panel title="Artefak laporan tersimpan" description="CSV, PDF, dan HTML yang tersimpan untuk periode selesai. Akses dan unduhan hanya tersedia bagi pemilik StoreOS setelah checksum tervalidasi di server.">
@@ -541,7 +576,7 @@ export function MonthlyReport() {
       </>}
     </Panel>
     <GovernancePanel enabled={isOwnerAdmin} />
-    <GovernanceAuditExportPanel enabled={isOwnerAdmin} initialYear={initial.year} />
+    <GovernanceAuditExportPanel enabled={isOwnerAdmin} initialYear={initial.year} reviewPreset={reviewPreset} />
     <p className="settings-help"><RefreshCw size={14} /> Laporan dan governance ini bersifat read-only serta tidak mengubah penjualan, ledger, stock-opname, atau Financial Core.</p>
   </AppShell>;
 }

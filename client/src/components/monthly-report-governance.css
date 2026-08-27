@@ -362,12 +362,59 @@
 .governance-audit-preview .badge { width: fit-content; }
 .governance-audit-preview ul li:nth-child(n + 6) { display: none; }
 
+.report-review-context {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #c9dfd5;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f3faf6 0%, #fbfdfc 100%);
+}
+
+.report-review-context-heading,
+.report-review-apply {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.report-review-context-heading > div { display: grid; gap: 3px; }
+.report-review-context-heading h3 { margin: 0; color: #294f40; font-size: 14px; }
+.report-review-context-heading p,
+.report-review-apply small { margin: 0; color: #607b72; font-size: 11px; line-height: 1.45; }
+
+.report-review-context-grid {
+  display: grid;
+  grid-template-columns: minmax(156px, .9fr) repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.report-review-context-grid > div,
+.report-review-context-grid .field { display: grid; gap: 4px; min-width: 0; }
+.report-review-context-grid > div > span,
+.report-review-context-grid .field > span { color: #607b72; font-size: 11px; font-weight: 700; }
+.report-review-context-grid strong { color: #295845; font-size: 12px; line-height: 1.35; }
+.report-review-context-grid small { color: #607b72; font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+
+.report-review-apply {
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid #dbeae3;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.report-review-apply small { max-width: 680px; }
+
 @media (max-width: 1020px) {
   .governance-audit-filters { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
   .governance-audit-summary { grid-template-columns: 1fr 1fr; }
   .governance-qr-policy-audit-filters { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
   .governance-qr-policy-audit-summary { grid-template-columns: 1fr 1fr; }
   .governance-audit-actions { justify-content: flex-start; }
+  .report-review-context-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 640px) {
@@ -380,6 +427,11 @@
   .governance-audit-summary,
   .governance-qr-policy-audit-filters,
   .governance-qr-policy-audit-summary { grid-template-columns: 1fr; }
+  .report-review-context-grid { grid-template-columns: 1fr; }
+  .report-review-context-heading,
+  .report-review-apply { align-items: stretch; flex-direction: column; }
+  .report-review-context-heading .button,
+  .report-review-apply .button { width: 100%; }
   .governance-qr-expiry-policy { grid-template-columns: 1fr; align-items: stretch; }
   .governance-qr-expiry-policy .button { width: 100%; }
   .governance-qr-policy-history-list li { align-items: flex-start; flex-direction: column; }

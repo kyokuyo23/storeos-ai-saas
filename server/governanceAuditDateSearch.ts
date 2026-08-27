@@ -6,6 +6,9 @@ export const GOVERNANCE_AUDIT_DATE_PRESETS = [
   "previous_month",
   "last_3_months",
   "last_12_months",
+  "current_quarter",
+  "previous_quarter",
+  "current_year",
 ] as const;
 
 export type GovernanceAuditDatePreset = typeof GOVERNANCE_AUDIT_DATE_PRESETS[number];
@@ -35,6 +38,9 @@ const PRESET_LABEL: Record<GovernanceAuditDatePreset, string> = {
   previous_month: "Bulan sebelumnya",
   last_3_months: "3 bulan terakhir",
   last_12_months: "12 bulan terakhir",
+  current_quarter: "Kuartal berjalan",
+  previous_quarter: "Kuartal sebelumnya",
+  current_year: "Tahun berjalan",
 };
 
 function pad(value: number) {
@@ -73,6 +79,17 @@ function monthStart(value: string, monthsOffset = 0) {
 
 function monthEnd(value: string, monthsOffset = 0) {
   return shiftCalendarDate(monthStart(value, monthsOffset + 1), -1);
+}
+
+function quarterStart(value: string, quartersOffset = 0) {
+  const [year, month] = value.split("-").map(Number);
+  const quarterMonth = Math.floor((month - 1) / 3) * 3 + 1;
+  const result = new Date(Date.UTC(year, quarterMonth - 1 + quartersOffset * 3, 1));
+  return dateString(result.getUTCFullYear(), result.getUTCMonth() + 1, 1);
+}
+
+function quarterEnd(value: string, quartersOffset = 0) {
+  return shiftCalendarDate(quarterStart(value, quartersOffset + 1), -1);
 }
 
 export function isValidGovernanceAuditWibDate(value: string) {
@@ -133,6 +150,9 @@ export function resolveGovernanceAuditDateRange(filters: GovernanceAuditDateSear
       case "previous_month": return { startDate: monthStart(today, -1), endDate: monthEnd(today, -1) };
       case "last_3_months": return { startDate: monthStart(today, -2), endDate: monthEnd(today) };
       case "last_12_months": return { startDate: monthStart(today, -11), endDate: monthEnd(today) };
+      case "current_quarter": return { startDate: quarterStart(today), endDate: quarterEnd(today) };
+      case "previous_quarter": return { startDate: quarterStart(today, -1), endDate: quarterEnd(today, -1) };
+      case "current_year": return { startDate: dateString(current.year, 1, 1), endDate: dateString(current.year, 12, 31) };
     }
   })();
   const endExclusive = nextGovernanceAuditWibDay(range.endDate);

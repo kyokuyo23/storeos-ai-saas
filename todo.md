@@ -439,3 +439,12 @@
 - [x] Add concise Indonesian governance filter controls showing effective WIB range, search, scope, active filters, clear action, loading, empty, error, unauthorized, integrity, and unavailable-metadata states
 - [x] Add Phase 2.18 preset-boundary, Jakarta midnight, rollover, February, search, deterministic ordering, authorization, isolation, no-mutation, router, export-propagation, and responsive browser coverage
 - [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.18
+
+- [x] Inspect released Reports period filters, monthly artifact views, governance filters, and safe client state to identify Phase 2.19 gaps without duplicating Phase 2.18
+- [x] Add deterministic Jakarta/WIB report-period presets for current month, previous month, trailing three months, current quarter, previous quarter, and current year
+- [x] Preserve manual year/month or custom range precedence and validate all inclusive-start/exclusive-end month, quarter, year, rollover, and leap-year boundaries
+- [x] Persist selected report-period preset/filter in existing safe URL or UI state without backend persistence and restore it after refresh
+- [x] Add concise read-only audit review context for selected range, Asia/Jakarta, period count, preset/custom source, reset, invalid range, loading, and empty states
+- [x] Preserve artifact scope and metadata, owner-admin authorization, cross-scope denial, export integrity, and all protected financial, inventory, scheduler, artifact lifecycle, and QR domains
+- [x] Add Phase 2.19 unit, router, and browser coverage for presets, boundaries, custom precedence, state restoration, reset, empty state, authorization/isolation, artifact compatibility, and responsive layouts
+- [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.19

@@ -343,6 +343,18 @@ async function installArtifactOwnerRoutes(
     const requestedReceiptFormat = encodedRequest.includes('"receiptFormat":"pdf"') ? "pdf" : "csv";
     const requestedQrExpiry = Number(encodedRequest.match(/"validityMinutes":(\d+)/)?.[1]);
     const requestedQrRevocationReason = encodedRequest.match(/"reason":"([^"\\]*(?:\\.[^"\\]*)*)"/)?.[1] ?? null;
+    const requestedReviewPreset = encodedRequest.match(/"datePreset":"(current_month|previous_month|last_3_months|current_quarter|previous_quarter|current_year)"/)?.[1];
+    const reviewRanges: Record<string, { label: string; startDate: string; endDate: string; startWib: string; endWib: string }> = {
+      current_month: { label: "Bulan berjalan", startDate: "2026-08-01", endDate: "2026-08-31", startWib: "2026-08-01 00:00:00 WIB", endWib: "2026-09-01 00:00:00 WIB" },
+      previous_month: { label: "Bulan sebelumnya", startDate: "2026-07-01", endDate: "2026-07-31", startWib: "2026-07-01 00:00:00 WIB", endWib: "2026-08-01 00:00:00 WIB" },
+      last_3_months: { label: "3 bulan terakhir", startDate: "2026-06-01", endDate: "2026-08-31", startWib: "2026-06-01 00:00:00 WIB", endWib: "2026-09-01 00:00:00 WIB" },
+      current_quarter: { label: "Kuartal berjalan", startDate: "2026-07-01", endDate: "2026-09-30", startWib: "2026-07-01 00:00:00 WIB", endWib: "2026-10-01 00:00:00 WIB" },
+      previous_quarter: { label: "Kuartal sebelumnya", startDate: "2026-04-01", endDate: "2026-06-30", startWib: "2026-04-01 00:00:00 WIB", endWib: "2026-07-01 00:00:00 WIB" },
+      current_year: { label: "Tahun berjalan", startDate: "2026-01-01", endDate: "2026-12-31", startWib: "2026-01-01 00:00:00 WIB", endWib: "2027-01-01 00:00:00 WIB" },
+    };
+    const policyAuditForReview = requestedReviewPreset && reviewRanges[requestedReviewPreset]
+      ? { ...governanceAuditQrPolicyAudit, filters: { ...governanceAuditQrPolicyAudit.filters, ...reviewRanges[requestedReviewPreset], datePreset: requestedReviewPreset, datePresetLabel: reviewRanges[requestedReviewPreset].label } }
+      : governanceAuditQrPolicyAudit;
     const qrExpiryChanged = procedures.includes("reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy") && Number.isInteger(requestedQrExpiry) && requestedQrExpiry !== qrExpiryValidityMinutes;
     if (procedures.includes("reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy") && Number.isInteger(requestedQrExpiry)) {
       if (qrExpiryChanged) qrExpiryHistory.unshift({ eventId: `qrph_browser_${requestedQrExpiry}`, previousValidityMinutes: qrExpiryValidityMinutes, newValidityMinutes: requestedQrExpiry, resultingValidityMinutes: requestedQrExpiry, changedAt: "2026-08-26T02:10:00.000Z", actorOpenId: "owner-1" });
@@ -374,7 +386,7 @@ async function installArtifactOwnerRoutes(
                               : procedure === "reports.getMonthlyArtifactGovernanceAuditQrExpiryPolicy" ? { ownerOpenId: "owner-1", validityMinutes: qrExpiryValidityMinutes }
                               : procedure === "reports.listMonthlyArtifactGovernanceAuditQrExpiryPolicyHistory" ? qrExpiryHistory
                               : procedure === "reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy" ? { ownerOpenId: "owner-1", validityMinutes: qrExpiryValidityMinutes, outcome: qrExpiryChanged ? "updated" : "unchanged" }
-                              : procedure === "reports.monthlyArtifactGovernanceAuditQrPolicyExport" ? governanceAuditQrPolicyAudit
+                              : procedure === "reports.monthlyArtifactGovernanceAuditQrPolicyExport" ? policyAuditForReview
                               : procedure === "reports.generateMonthlyArtifactGovernanceAuditQrPolicyExport" ? (requestedAuditFormat === "pdf" ? governanceAuditQrPolicyAuditPdfFixture : governanceAuditQrPolicyAuditCsvFixture)
                               : procedure === "reports.verifyMonthlyArtifactGovernanceAuditQrPolicyExport" ? governanceAuditQrPolicyAuditVerification
                               : procedure === "reports.monthlyArtifactGovernanceAuditQrPolicyReceiptExport" ? governanceAuditQrPolicyReceiptAudit
@@ -387,6 +399,59 @@ async function installArtifactOwnerRoutes(
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(result) });
   });
 }
+
+test("restores a review preset from the Reports URL and shows an authoritative Jakarta/WIB review range", async ({ page }) => {
+  await installArtifactOwnerRoutes(page, []);
+  await page.goto("/reports?reportPreset=current_quarter&reportYear=2026&reportMonth=9");
+
+  await expect(page.getByLabel("Preset periode review laporan")).toHaveValue("current_quarter");
+  await expect(page.getByText("2026-07-01 00:00:00 WIB sampai sebelum 2026-10-01 00:00:00 WIB")).toBeVisible();
+  await expect(page.getByText("Asia/Jakarta (WIB)", { exact: true })).toBeVisible();
+  await expect(page.getByText("Mulai inklusif · akhir eksklusif", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("Preset periode review laporan")).toHaveValue("current_quarter");
+  await expect(page.getByText("2026-07-01 00:00:00 WIB sampai sebelum 2026-10-01 00:00:00 WIB")).toBeVisible();
+  const policyAudit = page.getByLabel("Ekspor Audit Kebijakan QR");
+  const policyDatePreset = policyAudit.getByLabel("Preset rentang audit kebijakan QR");
+  await expect(policyDatePreset).toHaveValue("all");
+  await policyAudit.getByRole("button", { name: "Gunakan periode review" }).click();
+  await expect(policyDatePreset).toHaveValue("current_quarter");
+});
+
+test("uses all requested review presets, keeps manual selection authoritative, and resets safely", async ({ page }) => {
+  await installArtifactOwnerRoutes(page, []);
+  await page.goto("/reports");
+  const preset = page.getByLabel("Preset periode review laporan");
+  for (const value of ["current_month", "previous_month", "last_3_months", "current_quarter", "previous_quarter", "current_year"]) {
+    await preset.selectOption(value);
+    await expect(preset).toHaveValue(value);
+    await expect(page).toHaveURL(new RegExp(`reportPreset=${value}`));
+  }
+
+  await expect(preset).toHaveValue("current_year");
+  await expect(page.getByText("2026-01-01 00:00:00 WIB sampai sebelum 2027-01-01 00:00:00 WIB")).toBeVisible();
+  await page.locator(".report-period-controls").getByLabel("Tahun").selectOption("2026");
+  await page.locator(".report-period-controls").getByLabel("Bulan").selectOption("1");
+  await expect(preset).toHaveValue("custom");
+  await expect(page).not.toHaveURL(/reportPreset=/);
+  await expect(page.getByText("Pilihan tahun/bulan manual berwenang")).toBeVisible();
+
+  await page.getByRole("button", { name: "Reset" }).click();
+  await expect(preset).toHaveValue("custom");
+  await expect(page).toHaveURL(/\/reports$/);
+});
+
+test("keeps the read-only review context and explicit audit apply action responsive on mobile", async ({ page }) => {
+  await installArtifactOwnerRoutes(page, []);
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/reports?reportPreset=previous_quarter&reportYear=2026&reportMonth=6");
+
+  const review = page.getByLabel("Periode review laporan");
+  await expect(review.getByLabel("Preset periode review laporan")).toHaveValue("previous_quarter");
+  await expect(review.getByText("2026-04-01 00:00:00 WIB sampai sebelum 2026-07-01 00:00:00 WIB")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Gunakan periode review" }).first()).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
 
 test("shows the owner-visible stored-artifact empty state", async ({ page }) => {
   await installArtifactOwnerRoutes(page, []);

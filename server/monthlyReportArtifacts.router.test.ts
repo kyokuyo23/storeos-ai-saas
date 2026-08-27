@@ -193,6 +193,20 @@ describe("reports.monthlyArtifacts authorization", () => {
     expect(verifyGovernanceAuditQrPolicyReceiptAuditBytes).toHaveBeenCalledWith(verification.exportId, verification.bytesBase64);
   });
 
+  it("accepts Phase 2.19 quarter and year review presets only through the existing owner-admin audit query contracts", async () => {
+    for (const datePreset of ["current_quarter", "previous_quarter", "current_year"] as const) {
+      const policyFilters = { datePreset, scope: "governance_audit_qr_expiry" as const };
+      await expect(caller({ openId: "owner-1", role: "admin" }).reports.monthlyArtifactGovernanceAuditQrPolicyExport(policyFilters)).resolves.toMatchObject({ kind: "storeos_governance_qr_policy_audit" });
+      expect(getGovernanceAuditQrPolicyAuditExport).toHaveBeenLastCalledWith("owner-1", policyFilters);
+
+      const combinedFilters = { datePreset, scope: "governance_audit_qr_policy_receipt" as const };
+      await expect(caller({ openId: "owner-1", role: "admin" }).reports.monthlyArtifactGovernanceAuditQrPolicyReceiptExport(combinedFilters)).resolves.toMatchObject({ kind: "storeos_governance_qr_policy_receipt_audit" });
+      expect(getGovernanceAuditQrPolicyReceiptAuditExport).toHaveBeenLastCalledWith("owner-1", combinedFilters);
+    }
+    expect(generateGovernanceAuditQrPolicyAuditArtifact).not.toHaveBeenCalled();
+    expect(generateGovernanceAuditQrPolicyReceiptAuditArtifact).not.toHaveBeenCalled();
+  });
+
   it("rejects anonymous, member, and cross-workspace verification receipt requests before receipt issuance", async () => {
     const receiptInput = { exportId: `storeos-governance-audit-csv-${"a".repeat(64)}`, bytesBase64: "77u/", receiptFormat: "csv" as const };
     await expect(caller(null).reports.issueMonthlyArtifactGovernanceAuditVerificationReceipt(receiptInput)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
