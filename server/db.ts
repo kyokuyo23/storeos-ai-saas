@@ -2,7 +2,7 @@ import { and, count, desc, eq, gte, inArray, lt } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { drizzle } from "drizzle-orm/mysql2";
 import { nanoid } from "nanoid";
-import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, governanceAuditQrExpiryPolicies, governanceAuditQrExpiryPolicyHistory, governanceAuditQrRevocations, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, stockOpnameFollowUps, users } from "../drizzle/schema";
+import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, governanceAuditQrExpiryPolicies, governanceAuditQrExpiryPolicyHistory, governanceAuditQrRevocations, governanceAuditVerificationReceiptIndex, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, stockOpnameFollowUps, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import type { z } from "zod";
 import type { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput, stockOpnameFollowUpInput, stockOpnameFollowUpNoteInput, stockOpnameHistoryInput } from "./foundationSchemas";
@@ -547,4 +547,57 @@ export async function revokeGovernanceAuditQrReference(input: {
   const revocation = await getGovernanceAuditQrRevocation(input.ownerOpenId, input.referenceId);
   if (!revocation) throw new Error("Catatan pencabutan QR tidak dapat dibaca kembali.");
   return { outcome: "revoked" as const, revocation };
+}
+
+/** Immutable metadata-only representation of a verified receipt for cross-restart audit discovery. */
+export type GovernanceAuditVerificationReceiptIndexInput = {
+  ownerOpenId: string;
+  receiptId: string;
+  receiptFormat: "csv" | "pdf";
+  receiptSha256: string;
+  receiptByteSize: number;
+  verificationStatus: "verified";
+  verificationAt: Date;
+  issuedByOpenId: string;
+  exportId: string;
+  exportFormat: "csv" | "pdf";
+  exportGeneratedAt: Date;
+  exportScope: string;
+  exportByteSize: number;
+  exportSha256: string;
+  exportRecordCount: number;
+  qrReferenceId: string;
+  qrIssuedAt: Date;
+  qrExpiresAt: Date;
+  policyEventId: string | null;
+  policyPreviousValidityMinutes: number | null;
+  policyValidityMinutes: number;
+  policyDifferenceMinutes: number;
+  policyChange: "initial" | "increase" | "decrease" | "unchanged";
+};
+
+export async function indexGovernanceAuditVerificationReceipt(input: GovernanceAuditVerificationReceiptIndexInput) {
+  const db = await requireDb();
+  const readExisting = async () => (await db.select().from(governanceAuditVerificationReceiptIndex).where(and(
+    eq(governanceAuditVerificationReceiptIndex.ownerOpenId, input.ownerOpenId),
+    eq(governanceAuditVerificationReceiptIndex.receiptSha256, input.receiptSha256),
+  )).limit(1))[0] ?? null;
+  const existing = await readExisting();
+  if (existing) return { outcome: "already_indexed" as const, receipt: existing };
+  try {
+    await db.insert(governanceAuditVerificationReceiptIndex).values(input);
+  } catch (error) {
+    const candidate = error as { code?: string; message?: string };
+    if (candidate.code !== "ER_DUP_ENTRY" && !candidate.message?.includes("Duplicate entry")) throw error;
+  }
+  const receipt = await readExisting();
+  if (!receipt) throw new Error("Indeks receipt verifikasi tidak dapat dibaca kembali.");
+  return { outcome: "indexed" as const, receipt };
+}
+
+export async function listGovernanceAuditVerificationReceiptIndex(ownerOpenId: string) {
+  const db = await requireDb();
+  return db.select().from(governanceAuditVerificationReceiptIndex).where(
+    eq(governanceAuditVerificationReceiptIndex.ownerOpenId, ownerOpenId),
+  ).orderBy(desc(governanceAuditVerificationReceiptIndex.verificationAt), desc(governanceAuditVerificationReceiptIndex.id));
 }

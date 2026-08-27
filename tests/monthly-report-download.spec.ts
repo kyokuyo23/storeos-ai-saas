@@ -678,7 +678,10 @@ test("filters, downloads, and re-verifies the combined policy and receipt audit 
   const audit = page.getByLabel("Ekspor Gabungan Policy & Receipt");
   await expect(audit).toContainText("Receipt tersaring");
   await expect(audit).toContainText("4 record");
+  await expect(audit).toContainText("Indeks owner persisten");
+  await expect(audit).toContainText("Tahan restart · tanpa byte receipt");
   await expect(audit).toContainText("Status QR: active");
+  await expect(audit).toContainText("Bukti: tersimpan");
   await expect(audit).toContainText("qrph_browser_increase");
   await audit.getByLabel("Tanggal mulai audit gabungan QR").fill("2026-08-01");
   await audit.getByLabel("Tanggal akhir audit gabungan QR").fill("2026-08-31");
@@ -740,7 +743,7 @@ test("shows combined audit empty and owner-admin error states without raw storag
   );
   await page.goto("/reports");
   const audit = page.getByLabel("Ekspor Gabungan Policy & Receipt");
-  await expect(audit.getByText("Tidak ada receipt policy yang sesuai dengan filter saat ini. Ekspor snapshot kosong tetap dapat dibuat dan diverifikasi.")).toBeVisible();
+  await expect(audit.getByText("Tidak ada receipt persisted yang sesuai dengan filter saat ini. Receipt yang tidak tersedia atau gagal dimuat tidak diperlakukan sebagai record valid; ekspor snapshot kosong tetap dapat dibuat dan diverifikasi.")).toBeVisible();
   await expect(page.locator("body")).not.toContainText("monthly-management-reports/");
 
   await page.unroute("**/api/trpc/**");
@@ -752,7 +755,7 @@ test("shows combined audit empty and owner-admin error states without raw storag
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(result) });
   });
   await page.reload();
-  await expect(page.getByText("Audit gabungan QR tidak tersedia atau akses owner-admin ditolak.")).toBeVisible();
+  await expect(page.getByText("Audit gabungan QR tidak tersedia, metadata receipt gagal uji integritas, atau akses owner-admin ditolak.")).toBeVisible();
 });
 
 test("keeps the combined audit controls readable and actionable on a narrow mobile viewport", async ({ page }) => {

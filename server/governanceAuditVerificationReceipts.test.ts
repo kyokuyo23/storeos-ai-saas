@@ -4,12 +4,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { getMonthlyReportArtifactGovernanceAuditExport } = vi.hoisted(() => ({
   getMonthlyReportArtifactGovernanceAuditExport: vi.fn(),
 }));
+const { indexGovernanceAuditVerificationReceipt, listGovernanceAuditVerificationReceiptIndex } = vi.hoisted(() => ({
+  indexGovernanceAuditVerificationReceipt: vi.fn(),
+  listGovernanceAuditVerificationReceiptIndex: vi.fn(),
+}));
 
 vi.mock("./monthlyReportArtifacts", () => ({ getMonthlyReportArtifactGovernanceAuditExport }));
+vi.mock("./db", () => ({ indexGovernanceAuditVerificationReceipt, listGovernanceAuditVerificationReceiptIndex }));
 
 import { generateGovernanceAuditExportArtifact, registerGeneratedGovernanceAuditExport } from "./governanceAuditExportIntegrity";
 import { deriveGovernanceAuditQrReceiptPolicyContext } from "./governanceAuditQrExpiry";
-import { issueGovernanceAuditVerificationReceipt } from "./governanceAuditVerificationReceipts";
+import { GovernanceAuditVerificationReceiptIndexIntegrityError, issueGovernanceAuditVerificationReceipt, listIssuedGovernanceAuditVerificationReceipts } from "./governanceAuditVerificationReceipts";
 
 const generatedAt = new Date("2026-08-26T01:15:00.000Z");
 const verificationAt = new Date("2026-08-26T01:20:00.000Z");
@@ -53,7 +58,11 @@ async function registeredExport(ownerOpenId = "owner-1") {
 }
 
 describe("Phase 2.9 governance audit verification receipts", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    indexGovernanceAuditVerificationReceipt.mockResolvedValue({ outcome: "indexed" });
+    listGovernanceAuditVerificationReceiptIndex.mockResolvedValue([]);
+  });
 
   it("issues a deterministic BOM CSV receipt only for the exact verified bytes and includes WIB, scope, size, hashes, QR expiry, and initial policy context", async () => {
     const { artifact, audit } = await registeredExport();
@@ -91,6 +100,18 @@ describe("Phase 2.9 governance audit verification receipts", () => {
     });
     expect(result.receipt.receiptByteSize).toBe(bytes.byteLength);
     expect(result.receipt.receiptSha256).toBe(createHash("sha256").update(bytes).digest("hex"));
+    expect(indexGovernanceAuditVerificationReceipt).toHaveBeenCalledWith(expect.objectContaining({
+      ownerOpenId: "owner-1",
+      receiptId: result.receipt.receiptId,
+      receiptSha256: result.receipt.receiptSha256,
+      receiptByteSize: result.receipt.receiptByteSize,
+      verificationAt,
+      exportId: artifact.exportId,
+      exportSha256: artifact.sha256,
+      qrReferenceId: result.receipt.qr.referenceId,
+      policyEventId: null,
+      policyChange: "initial",
+    }));
     expect(JSON.stringify(audit)).toBe(snapshot);
   });
 
@@ -155,5 +176,30 @@ describe("Phase 2.9 governance audit verification receipts", () => {
     await expect(issueGovernanceAuditVerificationReceipt("other-owner", { exportId: artifact.exportId, bytesBase64: artifact.bytesBase64, receiptFormat: "csv" }, verificationAt)).resolves.toMatchObject({ status: "export_not_available" });
     await expect(issueGovernanceAuditVerificationReceipt("owner-1", { exportId: "storeos-governance-audit-csv-" + "f".repeat(64), bytesBase64: artifact.bytesBase64, receiptFormat: "csv" }, verificationAt)).resolves.toMatchObject({ status: "export_not_available" });
     expect(JSON.stringify(audit)).toBe(snapshot);
+  });
+
+  it("does not report a receipt as issued when its durable metadata index cannot be written", async () => {
+    const { artifact } = await registeredExport();
+    indexGovernanceAuditVerificationReceipt.mockRejectedValueOnce(new Error("database unavailable"));
+
+    await expect(issueGovernanceAuditVerificationReceipt("owner-1", {
+      exportId: artifact.exportId,
+      bytesBase64: artifact.bytesBase64,
+      receiptFormat: "csv",
+    }, verificationAt)).resolves.toMatchObject({
+      status: "receipt_index_failed",
+      message: expect.stringContaining("tidak dapat disimpan"),
+    });
+  });
+
+  it("fails closed when persisted receipt metadata is missing or corrupt instead of returning a valid combined-audit record", async () => {
+    listGovernanceAuditVerificationReceiptIndex.mockResolvedValueOnce([{
+      ownerOpenId: "owner-1", receiptId: "receipt-corrupt", receiptFormat: "csv", receiptSha256: "not-a-hash", receiptByteSize: 0,
+      verificationStatus: "verified", verificationAt, issuedByOpenId: "owner-1", exportId: "export-corrupt", exportFormat: "csv",
+      exportGeneratedAt: generatedAt, exportScope: "scope", exportByteSize: 1, exportSha256: "b".repeat(64), exportRecordCount: 1,
+      qrReferenceId: "qr_invalid", qrIssuedAt: verificationAt, qrExpiresAt: verificationAt, policyEventId: null,
+      policyPreviousValidityMinutes: null, policyValidityMinutes: 30, policyDifferenceMinutes: 0, policyChange: "initial",
+    }]);
+    await expect(listIssuedGovernanceAuditVerificationReceipts("owner-1")).rejects.toBeInstanceOf(GovernanceAuditVerificationReceiptIndexIntegrityError);
   });
 });

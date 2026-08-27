@@ -10,6 +10,7 @@ import {
   type GovernanceAuditExportFormat,
 } from "./governanceAuditExportIntegrity";
 import { createGovernanceAuditVerificationQr, type GovernanceAuditVerificationQr } from "./governanceAuditVerificationQr";
+import { indexGovernanceAuditVerificationReceipt, listGovernanceAuditVerificationReceiptIndex } from "./db";
 
 export type GovernanceAuditReceiptFormat = "csv" | "pdf";
 
@@ -54,11 +55,27 @@ export type GovernanceAuditVerificationReceipt = {
 export type GovernanceAuditVerificationReceiptResult =
   | { status: "issued"; receipt: GovernanceAuditVerificationReceipt }
   | { status: "export_not_available"; message: string }
-  | { status: "verification_failed"; message: string; expectedSha256?: string; actualSha256?: string };
+  | { status: "verification_failed"; message: string; expectedSha256?: string; actualSha256?: string }
+  | { status: "receipt_index_failed"; message: string };
 
 type CachedGovernanceAuditVerificationReceipt = GovernanceAuditVerificationReceipt & {
   ownerOpenId: string;
 };
+
+/** The metadata-only receipt shape used by the combined audit; it has no receipt bytes or QR image payload. */
+export type GovernanceAuditVerificationReceiptAuditRecord = Pick<GovernanceAuditVerificationReceipt,
+  "receiptId" | "receiptFormat" | "receiptByteSize" | "receiptSha256" | "verificationAt" | "export" | "verification" | "policy"
+> & {
+  qr: Pick<GovernanceAuditVerificationQr, "referenceId" | "exportId" | "receiptId" | "verificationStatus" | "issuedAt" | "expiresAt">;
+  indexPersistence: "durable" | "process_local";
+};
+
+export class GovernanceAuditVerificationReceiptIndexIntegrityError extends Error {
+  constructor() {
+    super("Metadata indeks receipt governance audit tidak valid; receipt tidak dapat diperlakukan sebagai record audit valid.");
+    this.name = "GovernanceAuditVerificationReceiptIndexIntegrityError";
+  }
+}
 
 /**
  * A process-local, owner-scoped audit index of receipts that have already been
@@ -72,13 +89,105 @@ function issuedReceiptCacheKey(ownerOpenId: string, receipt: GovernanceAuditVeri
   return `${ownerOpenId}:${receipt.receiptId}:${receipt.receiptFormat}:${receipt.receiptSha256}`;
 }
 
-export function listIssuedGovernanceAuditVerificationReceipts(ownerOpenId: string) {
-  return Array.from(issuedReceiptCache.values())
-    .filter((receipt) => receipt.ownerOpenId === ownerOpenId)
-    .sort((left, right) => (
-      right.verificationAt.getTime() - left.verificationAt.getTime()
-      || right.receiptSha256.localeCompare(left.receiptSha256)
-    ));
+function toAuditRecord(receipt: GovernanceAuditVerificationReceipt, indexPersistence: GovernanceAuditVerificationReceiptAuditRecord["indexPersistence"]): GovernanceAuditVerificationReceiptAuditRecord {
+  return {
+    receiptId: receipt.receiptId,
+    receiptFormat: receipt.receiptFormat,
+    receiptByteSize: receipt.receiptByteSize,
+    receiptSha256: receipt.receiptSha256,
+    verificationAt: receipt.verificationAt,
+    export: receipt.export,
+    verification: receipt.verification,
+    qr: {
+      referenceId: receipt.qr.referenceId,
+      exportId: receipt.qr.exportId,
+      receiptId: receipt.qr.receiptId,
+      verificationStatus: receipt.qr.verificationStatus,
+      issuedAt: receipt.qr.issuedAt,
+      expiresAt: receipt.qr.expiresAt,
+    },
+    policy: receipt.policy,
+    indexPersistence,
+  };
+}
+
+function isValidStoredDate(value: unknown): value is Date {
+  return value instanceof Date && Number.isFinite(value.getTime());
+}
+
+function isValidDurableReceiptIndexRecord(receipt: Awaited<ReturnType<typeof listGovernanceAuditVerificationReceiptIndex>>[number]) {
+  return receipt.ownerOpenId.length > 0
+    && receipt.receiptId.length > 0
+    && (receipt.receiptFormat === "csv" || receipt.receiptFormat === "pdf")
+    && /^[a-f0-9]{64}$/.test(receipt.receiptSha256)
+    && Number.isInteger(receipt.receiptByteSize) && receipt.receiptByteSize > 0
+    && receipt.verificationStatus === "verified"
+    && isValidStoredDate(receipt.verificationAt)
+    && receipt.issuedByOpenId.length > 0
+    && receipt.exportId.length > 0
+    && (receipt.exportFormat === "csv" || receipt.exportFormat === "pdf")
+    && isValidStoredDate(receipt.exportGeneratedAt)
+    && receipt.exportScope.length > 0
+    && Number.isInteger(receipt.exportByteSize) && receipt.exportByteSize > 0
+    && /^[a-f0-9]{64}$/.test(receipt.exportSha256)
+    && Number.isInteger(receipt.exportRecordCount) && receipt.exportRecordCount >= 0
+    && /^qr_[a-f0-9]{32}$/.test(receipt.qrReferenceId)
+    && isValidStoredDate(receipt.qrIssuedAt)
+    && isValidStoredDate(receipt.qrExpiresAt)
+    && receipt.qrExpiresAt.getTime() >= receipt.qrIssuedAt.getTime()
+    && Number.isInteger(receipt.policyValidityMinutes)
+    && Number.isInteger(receipt.policyDifferenceMinutes)
+    && ["initial", "increase", "decrease", "unchanged"].includes(receipt.policyChange);
+}
+
+export async function listIssuedGovernanceAuditVerificationReceipts(ownerOpenId: string): Promise<GovernanceAuditVerificationReceiptAuditRecord[]> {
+  const indexed = await listGovernanceAuditVerificationReceiptIndex(ownerOpenId);
+  return indexed.map((receipt) => {
+    if (!isValidDurableReceiptIndexRecord(receipt)) throw new GovernanceAuditVerificationReceiptIndexIntegrityError();
+    return {
+    receiptId: receipt.receiptId,
+    receiptFormat: receipt.receiptFormat as GovernanceAuditReceiptFormat,
+    receiptByteSize: receipt.receiptByteSize,
+    receiptSha256: receipt.receiptSha256,
+    verificationAt: receipt.verificationAt,
+    export: {
+      exportId: receipt.exportId,
+      format: receipt.exportFormat as GovernanceAuditExportFormat,
+      generatedAt: receipt.exportGeneratedAt,
+      generatedAtWib: wibTime(receipt.exportGeneratedAt),
+      timezone: "Asia/Jakarta",
+      scope: receipt.exportScope,
+      byteSize: receipt.exportByteSize,
+      sha256: receipt.exportSha256,
+      recordCount: receipt.exportRecordCount,
+    },
+    verification: {
+      status: "verified",
+      verified: true,
+      expectedSha256: receipt.exportSha256,
+      actualSha256: receipt.exportSha256,
+      byteSize: receipt.exportByteSize,
+    },
+    qr: {
+      referenceId: receipt.qrReferenceId,
+      exportId: receipt.exportId,
+      receiptId: receipt.receiptId,
+      verificationStatus: "verified",
+      issuedAt: receipt.qrIssuedAt,
+      expiresAt: receipt.qrExpiresAt,
+    },
+    policy: {
+      validityMinutes: receipt.policyValidityMinutes,
+      policyEventId: receipt.policyEventId,
+      previousValidityMinutes: receipt.policyPreviousValidityMinutes,
+      change: receipt.policyChange as GovernanceAuditQrReceiptPolicyContext["change"],
+      differenceMinutes: receipt.policyDifferenceMinutes,
+      issuedAt: receipt.qrIssuedAt,
+      expiresAt: receipt.qrExpiresAt,
+    },
+      indexPersistence: "durable",
+    };
+  });
 }
 
 export function clearIssuedGovernanceAuditVerificationReceiptsForTests() {
@@ -243,6 +352,35 @@ export async function issueGovernanceAuditVerificationReceipt(
       bytesBase64: bytes.toString("base64"),
     },
   }.receipt;
+  try {
+    await indexGovernanceAuditVerificationReceipt({
+      ownerOpenId,
+      receiptId: receipt.receiptId,
+      receiptFormat: receipt.receiptFormat,
+      receiptSha256: receipt.receiptSha256,
+      receiptByteSize: receipt.receiptByteSize,
+      verificationStatus: receipt.verification.status,
+      verificationAt: receipt.verificationAt,
+      issuedByOpenId: ownerOpenId,
+      exportId: receipt.export.exportId,
+      exportFormat: receipt.export.format,
+      exportGeneratedAt: receipt.export.generatedAt,
+      exportScope: receipt.export.scope,
+      exportByteSize: receipt.export.byteSize,
+      exportSha256: receipt.export.sha256,
+      exportRecordCount: receipt.export.recordCount,
+      qrReferenceId: receipt.qr.referenceId,
+      qrIssuedAt: receipt.qr.issuedAt,
+      qrExpiresAt: receipt.qr.expiresAt,
+      policyEventId: receipt.policy.policyEventId,
+      policyPreviousValidityMinutes: receipt.policy.previousValidityMinutes,
+      policyValidityMinutes: receipt.policy.validityMinutes,
+      policyDifferenceMinutes: receipt.policy.differenceMinutes,
+      policyChange: receipt.policy.change,
+    });
+  } catch {
+    return { status: "receipt_index_failed", message: "Metadata receipt tidak dapat disimpan dengan aman. Bukti tidak diterbitkan; ekspor dan QR yang ada tidak diubah." };
+  }
   issuedReceiptCache.set(issuedReceiptCacheKey(ownerOpenId, receipt), { ...receipt, ownerOpenId });
   return { status: "issued", receipt };
 }

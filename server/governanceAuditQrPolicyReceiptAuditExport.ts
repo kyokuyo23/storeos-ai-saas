@@ -1,7 +1,7 @@
 import { printableMonthlyHtmlToPdf } from "./monthlyReportPdf";
 import { getGovernanceAuditQrRevocation, listGovernanceAuditQrExpiryPolicyHistory } from "./db";
 import { decodeExactGovernanceAuditBytes, hashExactGovernanceAuditBytes } from "./governanceAuditExportIntegrity";
-import { listIssuedGovernanceAuditVerificationReceipts, type GovernanceAuditVerificationReceipt } from "./governanceAuditVerificationReceipts";
+import { listIssuedGovernanceAuditVerificationReceipts, type GovernanceAuditVerificationReceiptAuditRecord } from "./governanceAuditVerificationReceipts";
 
 export type GovernanceAuditQrPolicyReceiptDirection = "initial" | "increase" | "decrease" | "unchanged";
 export type GovernanceAuditQrPolicyReceiptVerificationStatus = "verified";
@@ -147,11 +147,11 @@ function isValidDate(value: unknown): value is Date {
   return value instanceof Date && Number.isFinite(value.getTime());
 }
 
-function getReceiptQr(receipt: GovernanceAuditVerificationReceipt) {
-  return receipt.qr as Partial<GovernanceAuditVerificationReceipt["qr"]> | undefined;
+function getReceiptQr(receipt: GovernanceAuditVerificationReceiptAuditRecord) {
+  return receipt.qr as Partial<GovernanceAuditVerificationReceiptAuditRecord["qr"]> | undefined;
 }
 
-function isValidReceiptQr(receipt: GovernanceAuditVerificationReceipt) {
+function isValidReceiptQr(receipt: GovernanceAuditVerificationReceiptAuditRecord) {
   const qr = getReceiptQr(receipt);
   if (!qr) return false;
   return /^qr_[a-f0-9]{32}$/.test(qr.referenceId ?? "")
@@ -196,7 +196,7 @@ export async function getGovernanceAuditQrPolicyReceiptAuditExport(
   validateFilters(filters);
   const [history, receipts] = await Promise.all([
     listGovernanceAuditQrExpiryPolicyHistory(ownerOpenId),
-    Promise.resolve(listIssuedGovernanceAuditVerificationReceipts(ownerOpenId)),
+    listIssuedGovernanceAuditVerificationReceipts(ownerOpenId),
   ]);
   const eventById = new Map(history.map((event) => [event.eventId, event]));
   const start = filters.startDate ? wibStart(filters.startDate) : null;

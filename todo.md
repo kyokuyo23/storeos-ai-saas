@@ -420,3 +420,11 @@
 - [x] Preserve policy history append-only semantics, receipts, QR security/enforcement, artifacts, lifecycle, retention, scheduler, and operational-domain immutability
 - [x] Add Phase 2.16 correlation, initial policy, direction, date, actor, status, format, scope, integrity, authorization, read-only, browser-download, and responsive regression coverage
 - [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.16
+
+- [x] Perform a read-only assessment of existing persisted owner-issued receipt, QR, policy snapshot, export association, integrity, and authorization data for Phase 2.17
+- [x] Reuse existing persistence or add only the smallest normalized owner-scoped receipt metadata index necessary for cross-restart discovery without copying receipt bytes
+- [x] Preserve stored receipt policy snapshots and correlate Phase 2.16 combined audits without deriving historical values from current policy
+- [x] Preserve QR HMAC, expiry/revocation, exact-byte SHA-256, receipt/artifact integrity, and read-only export boundaries
+- [x] Add a minimal persisted/unavailable/integrity-failure receipt evidence indicator to the existing owner-admin combined audit UI when required
+- [x] Add Phase 2.17 cross-restart, multiple-receipt, policy-change, status, missing/corrupt, initial-policy, ordering, WIB, integrity, authorization, isolation, and no-mutation coverage
+- [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.17

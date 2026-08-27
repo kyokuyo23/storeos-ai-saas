@@ -291,6 +291,44 @@ export const governanceAuditQrRevocations = mysqlTable("governanceAuditQrRevocat
   index("governance_audit_qr_revocation_owner_revoked_idx").on(table.ownerOpenId, table.revokedAt),
 ]);
 
+/**
+ * Immutable owner-scoped index for real receipts that were issued after an
+ * exact-byte governance export verification. This intentionally stores only
+ * query metadata and integrity descriptors, never the downloadable bytes.
+ */
+export const governanceAuditVerificationReceiptIndex = mysqlTable("governanceAuditVerificationReceiptIndex", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerOpenId: varchar("ownerOpenId", { length: 64 }).notNull(),
+  receiptId: varchar("receiptId", { length: 160 }).notNull(),
+  receiptFormat: varchar("receiptFormat", { length: 8 }).notNull(),
+  receiptSha256: varchar("receiptSha256", { length: 64 }).notNull(),
+  receiptByteSize: int("receiptByteSize").notNull(),
+  verificationStatus: varchar("verificationStatus", { length: 24 }).notNull(),
+  verificationAt: timestamp("verificationAt").notNull(),
+  issuedByOpenId: varchar("issuedByOpenId", { length: 64 }).notNull(),
+  exportId: varchar("exportId", { length: 128 }).notNull(),
+  exportFormat: varchar("exportFormat", { length: 8 }).notNull(),
+  exportGeneratedAt: timestamp("exportGeneratedAt").notNull(),
+  exportScope: varchar("exportScope", { length: 512 }).notNull(),
+  exportByteSize: int("exportByteSize").notNull(),
+  exportSha256: varchar("exportSha256", { length: 64 }).notNull(),
+  exportRecordCount: int("exportRecordCount").notNull(),
+  qrReferenceId: varchar("qrReferenceId", { length: 40 }).notNull(),
+  qrIssuedAt: timestamp("qrIssuedAt").notNull(),
+  qrExpiresAt: timestamp("qrExpiresAt").notNull(),
+  policyEventId: varchar("policyEventId", { length: 48 }),
+  policyPreviousValidityMinutes: int("policyPreviousValidityMinutes"),
+  policyValidityMinutes: int("policyValidityMinutes").notNull(),
+  policyDifferenceMinutes: int("policyDifferenceMinutes").notNull(),
+  policyChange: varchar("policyChange", { length: 16 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("governance_audit_receipt_index_owner_sha_unique").on(table.ownerOpenId, table.receiptSha256),
+  index("governance_audit_receipt_index_owner_verified_idx").on(table.ownerOpenId, table.verificationAt),
+  index("governance_audit_receipt_index_owner_qr_idx").on(table.ownerOpenId, table.qrReferenceId),
+  index("governance_audit_receipt_index_owner_policy_event_idx").on(table.ownerOpenId, table.policyEventId),
+]);
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Category = typeof categories.$inferSelect;
