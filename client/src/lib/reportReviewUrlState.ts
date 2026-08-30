@@ -12,10 +12,13 @@ export type ReportReviewUrlState = {
 export type JakartaYearMonth = { year: number; month: number };
 export const reportArtifactListFormats = ["csv", "html", "pdf"] as const;
 export type ReportArtifactListFormat = typeof reportArtifactListFormats[number];
+export const reportArtifactRetentionStatuses = ["normal", "approaching", "eligible"] as const;
+export type ReportArtifactRetentionStatus = typeof reportArtifactRetentionStatuses[number];
 export type ReportArtifactListUrlState = {
   active: boolean;
   format: ReportArtifactListFormat | null;
   integrity: "healthy" | null;
+  retentionStatus: ReportArtifactRetentionStatus | null;
 };
 
 export const reportReviewPresetOptions: Array<{ value: ReportReviewPreset; label: string; periodCount: number }> = [
@@ -53,6 +56,7 @@ export function parseReportReviewUrlState(search: string, fallback: JakartaYearM
       active,
       format: active && reportArtifactListFormats.includes(candidateFormat as ReportArtifactListFormat) ? candidateFormat as ReportArtifactListFormat : null,
       integrity: active && params.get("artifactIntegrity") === "healthy" ? "healthy" : null,
+      retentionStatus: active && reportArtifactRetentionStatuses.includes(params.get("artifactRetention") as ReportArtifactRetentionStatus) ? params.get("artifactRetention") as ReportArtifactRetentionStatus : null,
     },
   };
 }
@@ -66,6 +70,7 @@ export function getReportReviewPath(state: ReportReviewUrlState, defaults: Jakar
     params.set("artifactView", "active");
     if (state.artifactList.format) params.set("artifactFormat", state.artifactList.format);
     if (state.artifactList.integrity) params.set("artifactIntegrity", state.artifactList.integrity);
+    if (state.artifactList.retentionStatus) params.set("artifactRetention", state.artifactList.retentionStatus);
   }
   return `/reports?${params.toString()}`;
 }

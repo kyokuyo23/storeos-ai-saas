@@ -462,3 +462,11 @@
 - [x] Preserve read-only owner-admin behavior, cross-scope denial, zero-count non-navigation, back navigation context, and existing download/lifecycle/integrity restrictions
 - [x] Add unit, router, and browser coverage for deep-link targets, URL restoration, period/format/integrity filtering, empty cards, isolation, and no mutation
 - [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.21
+
+- [x] Inspect the released retention, lifecycle, active-artifact summary, list filter, and owner-admin authorization implementation for Phase 2.22 reuse
+- [x] Add deterministic Jakarta/WIB-aware retention classification using the existing authoritative retention semantics without changing policy or lifecycle
+- [x] Extend the read-only active-artifact summary with approaching-retention counts, oldest candidate, per-format breakdown, and evaluation timestamp
+- [x] Add validated URL and server-side retention-status filtering to the existing artifact list while preserving review, scope, format, integrity, and deep-link behavior
+- [x] Render accessible responsive normal, approaching, eligible, empty, loading, error, and unauthorized retention states without automatic archival or notifications
+- [x] Add unit, router, and browser coverage for retention boundaries, scope/integrity exclusions, deterministic ordering, URL validation, access isolation, and no mutation
+- [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.22

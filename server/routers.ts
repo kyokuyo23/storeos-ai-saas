@@ -72,6 +72,7 @@ export const appRouter = router({
       datePreset: z.enum(["current_month", "previous_month", "last_3_months", "current_quarter", "previous_quarter", "current_year"]).optional(),
       format: z.enum(["csv", "html", "pdf"]).optional(),
       integrity: z.literal("healthy").optional(),
+      retentionStatus: z.enum(["normal", "approaching", "eligible"]).optional(),
     }).refine((input) => !(input.datePreset && (input.startDate || input.endDate)), { message: "Gunakan preset atau rentang Jakarta/WIB, bukan keduanya." }).refine((input) => !input.startDate && !input.endDate || Boolean(input.startDate && input.endDate), { message: "Rentang Jakarta/WIB harus lengkap." }).optional()).query(({ ctx, input }) => {
       if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Akses artefak laporan dibatasi untuk pemilik StoreOS." });
       return runMutation("Artefak laporan bulanan", () => listMonthlyReportArtifacts(ctx.user.openId, input));

@@ -346,6 +346,7 @@ async function installArtifactOwnerRoutes(
     const requestedReviewPreset = encodedRequest.match(/"datePreset":"(current_month|previous_month|last_3_months|current_quarter|previous_quarter|current_year)"/)?.[1];
     const requestedArtifactFormat = encodedRequest.match(/"format":"(csv|html|pdf)"/)?.[1];
     const requestedHealthyArtifacts = encodedRequest.includes('"integrity":"healthy"');
+    const requestedRetentionStatus = encodedRequest.match(/"retentionStatus":"(normal|approaching|eligible)"/)?.[1];
     const reviewRanges: Record<string, { label: string; startDate: string; endDate: string; startWib: string; endWib: string }> = {
       current_month: { label: "Bulan berjalan", startDate: "2026-08-01", endDate: "2026-08-31", startWib: "2026-08-01 00:00:00 WIB", endWib: "2026-09-01 00:00:00 WIB" },
       previous_month: { label: "Bulan sebelumnya", startDate: "2026-07-01", endDate: "2026-07-31", startWib: "2026-07-01 00:00:00 WIB", endWib: "2026-08-01 00:00:00 WIB" },
@@ -360,7 +361,7 @@ async function installArtifactOwnerRoutes(
     const activeSummaryRange = requestedReviewPreset && reviewRanges[requestedReviewPreset]
       ? { ...reviewRanges[requestedReviewPreset], datePreset: requestedReviewPreset, datePresetLabel: reviewRanges[requestedReviewPreset].label }
       : { label: "Pilihan bulan manual", startDate: reportFixture.period.startDate, endDate: reportFixture.period.endDate, startWib: `${reportFixture.period.startDate} 00:00:00 WIB`, endWib: "2026-02-01 00:00:00 WIB", datePreset: null, datePresetLabel: null };
-    const summaryArtifacts = artifacts as Array<{ year: number; month: number; generatedAt: string; lifecycleStatus?: string; csv?: { status?: string }; printableHtml?: { status?: string }; pdf?: { status?: string } }>;
+    const summaryArtifacts = artifacts as Array<{ year: number; month: number; generatedAt: string; lifecycleStatus?: string; retentionStatus?: "normal" | "approaching" | "eligible"; archiveEligibleAt?: string; csv?: { status?: string }; printableHtml?: { status?: string }; pdf?: { status?: string } }>;
     const activeSummaryBundles = summaryArtifacts.filter((artifact) => artifact.lifecycleStatus !== "archived" && [artifact.csv, artifact.printableHtml, artifact.pdf].every((entry) => entry?.status === "available"));
     const availabilityCounts = summaryArtifacts.reduce((counts, artifact) => {
       [artifact.csv, artifact.printableHtml, artifact.pdf].forEach((entry) => {
@@ -372,6 +373,9 @@ async function installArtifactOwnerRoutes(
     const chronologicalActiveBundles = [...activeSummaryBundles].sort((left, right) => left.year - right.year || left.month - right.month);
     const oldestActiveArtifact = chronologicalActiveBundles[0];
     const newestActiveArtifact = chronologicalActiveBundles.at(-1);
+    const activeBundlesByRetention = (status: "normal" | "approaching" | "eligible") => activeSummaryBundles.filter((artifact) => (artifact.retentionStatus ?? "normal") === status);
+    const approachingBundles = activeBundlesByRetention("approaching");
+    const oldestApproachingArtifact = [...approachingBundles].sort((left, right) => left.year - right.year || left.month - right.month)[0];
     const activeArtifactSummary = {
       timezone: "Asia/Jakarta",
       range: activeSummaryRange,
@@ -381,20 +385,37 @@ async function installArtifactOwnerRoutes(
       oldestActiveArtifact: oldestActiveArtifact ? { year: oldestActiveArtifact.year, month: oldestActiveArtifact.month, generatedAt: oldestActiveArtifact.generatedAt } : null,
       newestActiveArtifact: newestActiveArtifact ? { year: newestActiveArtifact.year, month: newestActiveArtifact.month, generatedAt: newestActiveArtifact.generatedAt } : null,
       integrity: { verifiedBundleCount: activeSummaryBundles.length, excludedBundleCount: summaryArtifacts.length - activeSummaryBundles.length, availabilityCounts },
+      retention: {
+        retentionMonths: 24,
+        archiveWarningWindowDays: 90,
+        evaluatedAt: "2026-08-28T00:00:00.000Z",
+        normalArtifactCount: activeBundlesByRetention("normal").length * 3,
+        approachingArtifactCount: approachingBundles.length * 3,
+        eligibleArtifactCount: activeBundlesByRetention("eligible").length * 3,
+        approachingArtifactTypeCounts: { csv: approachingBundles.length, html: approachingBundles.length, pdf: approachingBundles.length },
+        oldestApproachingArtifact: oldestApproachingArtifact ? { year: oldestApproachingArtifact.year, month: oldestApproachingArtifact.month, generatedAt: oldestApproachingArtifact.generatedAt, archiveEligibleAt: oldestApproachingArtifact.archiveEligibleAt ?? "2026-11-26T00:00:00.000Z" } : null,
+      },
     };
+    const listArtifactRecords = summaryArtifacts.map((artifact) => ({
+      ...artifact,
+      retention: {
+        status: artifact.retentionStatus ?? "normal",
+        archiveEligibleAt: artifact.archiveEligibleAt ?? "2028-02-01T00:00:00.000Z",
+      },
+    }));
     const requestedArtifactRange = requestedReviewPreset && reviewRanges[requestedReviewPreset]
       ? reviewRanges[requestedReviewPreset]
       : null;
     const filteredArtifactList = requestedHealthyArtifacts
-      ? summaryArtifacts.filter((artifact) => {
+      ? listArtifactRecords.filter((artifact) => {
         const periodStart = `${artifact.year}-${String(artifact.month).padStart(2, "0")}-01`;
         const inRange = !requestedArtifactRange || (periodStart >= requestedArtifactRange.startDate && periodStart <= requestedArtifactRange.endDate);
         const selectedFile = requestedArtifactFormat === "html" ? artifact.printableHtml : requestedArtifactFormat ? artifact[requestedArtifactFormat as "csv" | "pdf"] : null;
         const formatAvailable = !selectedFile || selectedFile.status === "available";
         const allAvailable = [artifact.csv, artifact.printableHtml, artifact.pdf].every((entry) => entry?.status === "available");
-        return inRange && artifact.lifecycleStatus !== "archived" && formatAvailable && allAvailable;
+        return inRange && artifact.lifecycleStatus !== "archived" && formatAvailable && allAvailable && (!requestedRetentionStatus || (artifact.retentionStatus ?? "normal") === requestedRetentionStatus);
       })
-      : artifacts;
+      : listArtifactRecords;
     const qrExpiryChanged = procedures.includes("reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy") && Number.isInteger(requestedQrExpiry) && requestedQrExpiry !== qrExpiryValidityMinutes;
     if (procedures.includes("reports.updateMonthlyArtifactGovernanceAuditQrExpiryPolicy") && Number.isInteger(requestedQrExpiry)) {
       if (qrExpiryChanged) qrExpiryHistory.unshift({ eventId: `qrph_browser_${requestedQrExpiry}`, previousValidityMinutes: qrExpiryValidityMinutes, newValidityMinutes: requestedQrExpiry, resultingValidityMinutes: requestedQrExpiry, changedAt: "2026-08-26T02:10:00.000Z", actorOpenId: "owner-1" });
@@ -525,10 +546,10 @@ test("opens a filtered active-artifact list from a summary metric and preserves 
   const list = page.locator("#stored-artifact-list");
   await expect(list.getByText("FILTER DARI RINGKASAN", { exact: true })).toBeVisible();
   await expect(list.getByText("Tahun berjalan", { exact: true })).toBeVisible();
-  await expect(list.getByText("Format PDF · integritas sehat · Asia/Jakarta (WIB)", { exact: true })).toBeVisible();
-  await expect(page.locator(".artifact-table thead th")).toHaveText(["Periode", "Dibuat (WIB)", "Lifecycle", "PDF", "Kontrol"]);
+  await expect(list.getByText("Format PDF · integritas sehat · semua status retensi · Asia/Jakarta (WIB)", { exact: true })).toBeVisible();
+  await expect(page.locator(".artifact-table thead th")).toHaveText(["Periode", "Dibuat (WIB)", "Lifecycle", "Retensi", "PDF", "Kontrol"]);
   await page.reload();
-  await expect(list.getByText("Format PDF · integritas sehat · Asia/Jakarta (WIB)", { exact: true })).toBeVisible();
+  await expect(list.getByText("Format PDF · integritas sehat · semua status retensi · Asia/Jakarta (WIB)", { exact: true })).toBeVisible();
   await list.getByRole("button", { name: "Kembali ke arsip laporan" }).click();
   await expect(page).not.toHaveURL(/artifactView=active/);
   await expect(page).toHaveURL(/reportPreset=current_year/);
@@ -543,9 +564,40 @@ test("shows an empty read-only active summary and warns when a candidate fails i
   const summary = page.getByLabel("Ringkasan Artefak Aktif");
   await expect(summary.getByText("Belum ada artefak aktif pada periode review ini.")).toBeVisible();
   await expect(summary.getByText("1 bundle pada scope tidak ditampilkan sebagai aktif karena verifikasi artefak tidak lengkap. Tidak ada metadata atau lifecycle yang diubah.")).toBeVisible();
-  await expect(summary.getByText("0 file", { exact: true })).toBeVisible();
-  await expect(summary.getByLabel("Buka semua artefak aktif sesuai periode review")).toBeDisabled();
+  const totalActive = summary.getByLabel("Buka semua artefak aktif sesuai periode review");
+  await expect(totalActive.getByText("0 file", { exact: true })).toBeVisible();
+  await expect(totalActive).toBeDisabled();
   await expect(page).not.toHaveURL(/artifactView=active/);
+});
+
+test("shows read-only retention indicators and deep-links only approaching active artifacts", async ({ page }) => {
+  const approachingArtifact = {
+    ...storedArtifactFixture,
+    id: 43,
+    retentionStatus: "approaching" as const,
+    archiveEligibleAt: "2026-11-26T00:00:00.000Z",
+  };
+  await installArtifactOwnerRoutes(page, [approachingArtifact]);
+  await page.goto("/reports?reportPreset=current_year&reportYear=2026&reportMonth=1");
+
+  const summary = page.getByLabel("Ringkasan Artefak Aktif");
+  await expect(summary.getByLabel("Indikator retensi artefak")).toBeVisible();
+  await expect(summary.getByText("0 file normal · 3 file mendekati · 0 file memenuhi syarat", { exact: true })).toBeVisible();
+  await expect(summary.getByText(/jendela 90 hari/)).toBeVisible();
+  await summary.getByLabel("Buka artefak yang mendekati batas retensi").click();
+
+  await expect(page).toHaveURL(/artifactView=active/);
+  await expect(page).toHaveURL(/artifactIntegrity=healthy/);
+  await expect(page).toHaveURL(/artifactRetention=approaching/);
+  const list = page.locator("#stored-artifact-list");
+  await expect(list.getByText("Semua format · integritas sehat · Mendekati batas retensi · Asia/Jakarta (WIB)", { exact: true })).toBeVisible();
+  await expect(page.locator(".artifact-table tbody tr")).toHaveCount(1);
+  await expect(page.getByText("Mendekati batas retensi", { exact: true }).last()).toBeVisible();
+  await page.reload();
+  await expect(list.getByText("Semua format · integritas sehat · Mendekati batas retensi · Asia/Jakarta (WIB)", { exact: true })).toBeVisible();
+  await list.getByRole("button", { name: "Kembali ke arsip laporan" }).click();
+  await expect(page).not.toHaveURL(/artifactRetention=/);
+  await expect(page).toHaveURL(/reportPreset=current_year/);
 });
 
 test("shows the owner-visible stored-artifact empty state", async ({ page }) => {

@@ -14,6 +14,7 @@ export const ARCHIVE_WARNING_WINDOW_DAYS = 90;
 export type ArtifactKind = "csv" | "html" | "pdf";
 export type ArtifactLifecycleStatus = "generated" | "verified" | "retained" | "eligible_for_archive" | "archived";
 export type ArtifactIntegrityStatus = "available" | "missing" | "corrupt" | "retired" | "archived";
+export type ArtifactRetentionStatus = "normal" | "approaching" | "eligible";
 type MonthlyReportDb = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 
 export type StoredMonthlyReportArtifact = {
@@ -88,6 +89,7 @@ export type MonthlyReportArtifactListFilter = MonthlyReportActiveArtifactSummary
   month?: number;
   format?: ArtifactKind;
   integrity?: "healthy";
+  retentionStatus?: ArtifactRetentionStatus;
 };
 
 export type MonthlyReportActiveArtifactSummary = {
@@ -102,6 +104,16 @@ export type MonthlyReportActiveArtifactSummary = {
     verifiedBundleCount: number;
     excludedBundleCount: number;
     availabilityCounts: Record<ArtifactIntegrityStatus, number>;
+  };
+  retention: {
+    retentionMonths: number;
+    archiveWarningWindowDays: number;
+    evaluatedAt: Date;
+    normalArtifactCount: number;
+    approachingArtifactCount: number;
+    eligibleArtifactCount: number;
+    approachingArtifactTypeCounts: Record<ArtifactKind, number>;
+    oldestApproachingArtifact: { year: number; month: number; generatedAt: Date; archiveEligibleAt: Date } | null;
   };
 };
 
@@ -187,6 +199,27 @@ export function retentionCutoff(now = new Date(), retentionMonths = DEFAULT_MONT
   const cutoff = new Date(now);
   cutoff.setUTCMonth(cutoff.getUTCMonth() - retentionMonths);
   return cutoff;
+}
+
+/**
+ * Retention indicator only: it reuses the lifecycle cutoff and warning window
+ * without changing metadata, lifecycle status, storage, or download behavior.
+ */
+export function classifyMonthlyReportArtifactRetention(
+  artifact: Pick<StoredMonthlyReportArtifact, "generatedAt" | "lifecycleStatus">,
+  evaluationNow = new Date(),
+  retentionMonths = DEFAULT_MONTHLY_REPORT_RETENTION_MONTHS,
+): { status: ArtifactRetentionStatus; archiveEligibleAt: Date } {
+  const archiveEligibleAt = new Date(artifact.generatedAt);
+  archiveEligibleAt.setUTCMonth(archiveEligibleAt.getUTCMonth() + retentionMonths);
+  const archiveCutoff = retentionCutoff(evaluationNow, retentionMonths);
+  const warningCutoff = new Date(archiveCutoff);
+  warningCutoff.setUTCDate(warningCutoff.getUTCDate() + ARCHIVE_WARNING_WINDOW_DAYS);
+  if (artifact.lifecycleStatus === "eligible_for_archive" || artifact.generatedAt < archiveCutoff) {
+    return { status: "eligible", archiveEligibleAt };
+  }
+  if (artifact.generatedAt < warningCutoff) return { status: "approaching", archiveEligibleAt };
+  return { status: "normal", archiveEligibleAt };
 }
 
 function mapArtifact(row: typeof monthlyReportArtifacts.$inferSelect): StoredMonthlyReportArtifact {
@@ -444,7 +477,7 @@ export async function readVerifiedMonthlyReportArtifact(year: number, month: num
   return { artifact, availability, data };
 }
 
-export async function listMonthlyReportArtifacts(ownerOpenId = defaultArtifactScope(), filter?: MonthlyReportArtifactListFilter) {
+export async function listMonthlyReportArtifacts(ownerOpenId = defaultArtifactScope(), filter?: MonthlyReportArtifactListFilter, evaluationNow = new Date()) {
   if (!isAuthorizedOwnerScope(ownerOpenId)) return [];
   if (filter?.year !== undefined && (!Number.isInteger(filter.year) || filter.year < 2000 || filter.year > 2200)) throw new Error("Invalid report year");
   if (filter?.month !== undefined && (!Number.isInteger(filter.month) || filter.month < 1 || filter.month > 12)) throw new Error("Invalid report month");
@@ -478,6 +511,7 @@ export async function listMonthlyReportArtifacts(ownerOpenId = defaultArtifactSc
     csv: await verifyMonthlyReportArtifact(artifact, "csv"),
     printableHtml: await verifyMonthlyReportArtifact(artifact, "html"),
     pdf: await verifyMonthlyReportArtifact(artifact, "pdf"),
+    retention: classifyMonthlyReportArtifactRetention(artifact, evaluationNow),
   })));
   return verified.filter((artifact) => {
     const files = [artifact.csv, artifact.printableHtml, artifact.pdf];
@@ -485,6 +519,7 @@ export async function listMonthlyReportArtifacts(ownerOpenId = defaultArtifactSc
     if (filter?.format === "csv" && artifact.csv.status !== "available") return false;
     if (filter?.format === "html" && artifact.printableHtml.status !== "available") return false;
     if (filter?.format === "pdf" && artifact.pdf.status !== "available") return false;
+    if (filter?.retentionStatus && artifact.retention.status !== filter.retentionStatus) return false;
     return true;
   });
 }
@@ -513,6 +548,10 @@ export async function getMonthlyReportActiveArtifactSummary(ownerOpenId = defaul
   }
   const oldest = verified[0] ?? null;
   const newest = verified.at(-1) ?? null;
+  const classified = verified.map((artifact) => ({ artifact, retention: classifyMonthlyReportArtifactRetention(artifact, referenceNow) }));
+  const approaching = classified.filter(({ retention }) => retention.status === "approaching");
+  const eligible = classified.filter(({ retention }) => retention.status === "eligible");
+  const oldestApproaching = approaching[0] ?? null;
   return {
     timezone: "Asia/Jakarta",
     range,
@@ -522,6 +561,21 @@ export async function getMonthlyReportActiveArtifactSummary(ownerOpenId = defaul
     oldestActiveArtifact: oldest ? { year: oldest.year, month: oldest.month, generatedAt: oldest.generatedAt } : null,
     newestActiveArtifact: newest ? { year: newest.year, month: newest.month, generatedAt: newest.generatedAt } : null,
     integrity: { verifiedBundleCount: verified.length, excludedBundleCount: candidates.length - verified.length, availabilityCounts },
+    retention: {
+      retentionMonths: DEFAULT_MONTHLY_REPORT_RETENTION_MONTHS,
+      archiveWarningWindowDays: ARCHIVE_WARNING_WINDOW_DAYS,
+      evaluatedAt: referenceNow,
+      normalArtifactCount: classified.filter(({ retention }) => retention.status === "normal").length * 3,
+      approachingArtifactCount: approaching.length * 3,
+      eligibleArtifactCount: eligible.length * 3,
+      approachingArtifactTypeCounts: { csv: approaching.length, html: approaching.length, pdf: approaching.length },
+      oldestApproachingArtifact: oldestApproaching ? {
+        year: oldestApproaching.artifact.year,
+        month: oldestApproaching.artifact.month,
+        generatedAt: oldestApproaching.artifact.generatedAt,
+        archiveEligibleAt: oldestApproaching.retention.archiveEligibleAt,
+      } : null,
+    },
   };
 }
 

@@ -71,6 +71,7 @@ import {
   archiveMonthlyReportArtifactWithOwnerApproval,
   archiveEligibleMonthlyReportArtifacts,
   canAccessMonthlyReportArtifacts,
+  classifyMonthlyReportArtifactRetention,
   getMonthlyReportArtifact,
   getMonthlyReportArtifactGovernanceAuditExport,
   getMonthlyReportArtifactGovernanceSummary,
@@ -232,6 +233,38 @@ describe("Phase 2.4 monthly report artifact governance", () => {
       integrity: { verifiedBundleCount: 1, excludedBundleCount: 0, availabilityCounts: { available: 3 } },
     });
     expect(lifecycleEvents).toHaveLength(lifecycleCount);
+    expect(updateWhere).not.toHaveBeenCalled();
+  });
+
+  it("classifies the existing 24-month retention threshold and 90-day warning window deterministically without lifecycle mutation", () => {
+    const evaluationNow = new Date("2026-03-01T00:00:00.000Z");
+    const normal = classifyMonthlyReportArtifactRetention({ generatedAt: new Date("2024-06-01T00:15:00.000Z"), lifecycleStatus: "retained" }, evaluationNow);
+    const approaching = classifyMonthlyReportArtifactRetention({ generatedAt: new Date("2024-05-29T00:15:00.000Z"), lifecycleStatus: "retained" }, evaluationNow);
+    const eligible = classifyMonthlyReportArtifactRetention({ generatedAt: new Date("2024-02-29T00:15:00.000Z"), lifecycleStatus: "retained" }, evaluationNow);
+    const boundary = classifyMonthlyReportArtifactRetention({ generatedAt: new Date("2024-03-01T00:00:00.000Z"), lifecycleStatus: "retained" }, evaluationNow);
+
+    expect(normal).toMatchObject({ status: "normal", archiveEligibleAt: new Date("2026-06-01T00:15:00.000Z") });
+    expect(approaching).toMatchObject({ status: "approaching", archiveEligibleAt: new Date("2026-05-29T00:15:00.000Z") });
+    expect(eligible).toMatchObject({ status: "eligible", archiveEligibleAt: new Date("2026-03-01T00:15:00.000Z") });
+    expect(boundary.status).toBe("approaching");
+  });
+
+  it("returns only the requested active retention status and reports approaching formats from verified Jakarta/WIB review periods", async () => {
+    await persistMonthlyReportArtifacts(generatedReport({ year: 2024, month: 1, generatedAt: "2024-02-29T00:15:00.000Z" }));
+    await persistMonthlyReportArtifacts(generatedReport({ year: 2024, month: 2, generatedAt: "2024-05-29T00:15:00.000Z" }));
+    await persistMonthlyReportArtifacts(generatedReport({ year: 2024, month: 3, generatedAt: "2024-06-01T00:15:00.000Z" }));
+    const now = new Date("2026-03-01T00:00:00.000Z");
+    const rowsBefore = JSON.stringify(artifactRows);
+    const eventsBefore = lifecycleEvents.length;
+
+    const approaching = await listMonthlyReportArtifacts("owner-1", { startDate: "2024-01-01", endDate: "2024-03-31", integrity: "healthy", retentionStatus: "approaching" }, now);
+    const summary = await getMonthlyReportActiveArtifactSummary("owner-1", { startDate: "2024-01-01", endDate: "2024-03-31" }, now);
+
+    expect(approaching).toHaveLength(1);
+    expect(approaching[0]).toMatchObject({ year: 2024, month: 2, retention: { status: "approaching", archiveEligibleAt: new Date("2026-05-29T00:15:00.000Z") } });
+    expect(summary.retention).toMatchObject({ normalArtifactCount: 3, approachingArtifactCount: 3, eligibleArtifactCount: 3, approachingArtifactTypeCounts: { csv: 1, html: 1, pdf: 1 }, oldestApproachingArtifact: { year: 2024, month: 2 } });
+    expect(JSON.stringify(artifactRows)).toBe(rowsBefore);
+    expect(lifecycleEvents).toHaveLength(eventsBefore);
     expect(updateWhere).not.toHaveBeenCalled();
   });
 

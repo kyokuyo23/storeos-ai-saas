@@ -87,7 +87,7 @@ describe("reports.monthlyArtifacts authorization", () => {
   });
 
   it("allows the current StoreOS owner to request only their filtered metadata", async () => {
-    const filters = { datePreset: "previous_quarter" as const, format: "pdf" as const, integrity: "healthy" as const };
+    const filters = { datePreset: "previous_quarter" as const, format: "pdf" as const, integrity: "healthy" as const, retentionStatus: "approaching" as const };
     await expect(caller({ openId: "owner-1", role: "admin" }).reports.monthlyArtifacts(filters)).resolves.toEqual([]);
     expect(listMonthlyReportArtifacts).toHaveBeenCalledWith("owner-1", filters);
     expect(archiveMonthlyReportArtifactWithOwnerApproval).not.toHaveBeenCalled();
