@@ -470,3 +470,8 @@
 - [x] Render accessible responsive normal, approaching, eligible, empty, loading, error, and unauthorized retention states without automatic archival or notifications
 - [x] Add unit, router, and browser coverage for retention boundaries, scope/integrity exclusions, deterministic ordering, URL validation, access isolation, and no mutation
 - [x] Run full Vitest, Playwright, TypeScript, production build, and desktop/mobile validation for Phase 2.22
+
+- [x] Produce BRD for StoreOS reporting governance and Phase 2.23 retention-summary export
+- [x] Produce PRD for StoreOS reporting governance and Phase 2.23 retention-summary export
+- [x] Produce FRD for StoreOS reporting governance and Phase 2.23 retention-summary export
+- [x] Review BRD, PRD, and FRD consistency against released architecture and protected-domain constraints
