@@ -329,6 +329,27 @@ export const governanceAuditVerificationReceiptIndex = mysqlTable("governanceAud
   index("governance_audit_receipt_index_owner_policy_event_idx").on(table.ownerOpenId, table.policyEventId),
 ]);
 
+/** Phase 2.23: metadata-only index of retention summary exports; artifact bytes stay in durable storage. */
+export const retentionSummaryExports = mysqlTable("retentionSummaryExports", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerOpenId: varchar("ownerOpenId", { length: 64 }).notNull(),
+  exportId: varchar("exportId", { length: 128 }).notNull(),
+  format: varchar("format", { length: 8 }).notNull(),
+  storageKey: varchar("storageKey", { length: 512 }).notNull(),
+  sha256: varchar("sha256", { length: 64 }).notNull(),
+  byteSize: int("byteSize").notNull(),
+  evaluatedAt: timestamp("evaluatedAt").notNull(),
+  scopeLabel: varchar("scopeLabel", { length: 64 }).notNull(),
+  datePreset: varchar("datePreset", { length: 32 }),
+  rangeStartDate: varchar("rangeStartDate", { length: 10 }).notNull(),
+  rangeEndDate: varchar("rangeEndDate", { length: 10 }).notNull(),
+  snapshotJson: text("snapshotJson").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("retention_summary_exports_owner_export_unique").on(table.ownerOpenId, table.exportId),
+  index("retention_summary_exports_owner_evaluated_idx").on(table.ownerOpenId, table.evaluatedAt),
+]);
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Category = typeof categories.$inferSelect;
@@ -348,3 +369,4 @@ export type Recipe = typeof recipes.$inferSelect;
 export type RecipeItem = typeof recipeItems.$inferSelect;
 export type BusinessSettings = typeof businessSettings.$inferSelect;
 export type MonthlyReportArtifact = typeof monthlyReportArtifacts.$inferSelect;
+export type RetentionSummaryExportRow = typeof retentionSummaryExports.$inferSelect;

@@ -18,7 +18,7 @@ function decodeHtml(value: string) {
  */
 export function printableMonthlyHtmlToPdf(
   printableHtml: string,
-  metadata: { title?: string; subject?: string; creationDate?: Date } = {},
+  metadata: { title?: string; subject?: string; creationDate?: Date; /** 32 hex chars; makes the PDF trailer ID (otherwise random) deterministic. */ fileId?: string } = {},
 ) {
   const plainText = decodeHtml(
     printableHtml
@@ -39,6 +39,7 @@ export function printableMonthlyHtmlToPdf(
     creator: "StoreOS server-side report generator",
   });
   if (metadata.creationDate) pdf.setCreationDate(metadata.creationDate);
+  if (metadata.fileId) pdf.setFileId(metadata.fileId);
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(10);
 

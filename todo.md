@@ -475,3 +475,11 @@
 - [x] Produce PRD for StoreOS reporting governance and Phase 2.23 retention-summary export
 - [x] Produce FRD for StoreOS reporting governance and Phase 2.23 retention-summary export
 - [x] Review BRD, PRD, and FRD consistency against released architecture and protected-domain constraints
+
+- [x] Inspect the released retention classification, active-artifact summary, governance export/verification, owner-admin authorization, and storage abstraction for Phase 2.23 reuse
+- [x] Add owner-admin-only read-only retention summary export (CSV with UTF-8 BOM, printable HTML, server-side PDF) rendered from one shared snapshot built only from the authoritative active-artifact summary
+- [x] Add additive oldest-eligible candidate to the existing summary and a deterministic PDF file ID; no change to retention semantics, lifecycle, scheduler, QR, Financial Core, Inventory Intelligence, ledger, or stock-opname
+- [x] Persist exact bytes through the existing storage abstraction and a metadata-only index (additive table); export ID, byte size, and SHA-256 derive from the exact final bytes with Jakarta/WIB evaluation time
+- [x] Add protected create/get/verify procedures returning VERIFIED, MISMATCH, NOT_FOUND (unknown or bytes unavailable), UNAUTHORIZED without repair, hash overwrite, or cross-scope disclosure
+- [x] Add responsive Reports panel with format actions, progress, empty/error states, metadata visibility, download, and verification
+- [x] Add Vitest unit/router/persistence and Playwright desktop/mobile coverage; run full Vitest, TypeScript, production build, and Playwright validation for Phase 2.23

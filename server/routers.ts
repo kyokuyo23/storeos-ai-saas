@@ -10,6 +10,7 @@ import { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput,
 import { getMonthlyManagementReport } from "./monthlyReports";
 import { archiveMonthlyReportArtifactWithOwnerApproval, canAccessMonthlyReportArtifacts, getMonthlyReportActiveArtifactSummary, getMonthlyReportArtifactGovernanceAuditExport, getMonthlyReportArtifactGovernanceSummary, getMonthlyReportArtifactLifecycleHistory, listMonthlyReportArtifacts } from "./monthlyReportArtifacts";
 import { generateGovernanceAuditExportArtifact, registerGeneratedGovernanceAuditExport, verifyGovernanceAuditExportBytes } from "./governanceAuditExportIntegrity";
+import { createRetentionSummaryExport, getRetentionSummaryExport, verifyRetentionSummaryExport } from "./retentionSummaryExport";
 import { issueGovernanceAuditVerificationReceipt } from "./governanceAuditVerificationReceipts";
 import { getGovernanceAuditVerificationQrReference, resolveGovernanceAuditVerificationQr, revokeGovernanceAuditVerificationQrReference } from "./governanceAuditVerificationQr";
 import { deriveGovernanceAuditQrReceiptPolicyContext } from "./governanceAuditQrExpiry";
@@ -88,6 +89,24 @@ export const appRouter = router({
     }).refine((input) => input.datePreset ? !input.startDate && !input.endDate : Boolean(input.startDate && input.endDate), { message: "Gunakan preset review atau rentang Jakarta/WIB lengkap." })).query(({ ctx, input }) => {
       if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Ringkasan artefak laporan dibatasi untuk pemilik StoreOS." });
       return runMutation("Ringkasan artefak aktif", () => getMonthlyReportActiveArtifactSummary(ctx.user.openId, input));
+    }),
+    createMonthlyRetentionSummaryExport: protectedProcedure.input(z.object({
+      startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      datePreset: z.enum(["current_month", "previous_month", "last_3_months", "current_quarter", "previous_quarter", "current_year"]).optional(),
+      format: z.enum(["csv", "html", "pdf"]),
+    }).refine((input) => input.datePreset ? !input.startDate && !input.endDate : Boolean(input.startDate && input.endDate), { message: "Gunakan preset review atau rentang Jakarta/WIB lengkap." })).mutation(({ ctx, input }) => {
+      if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Ekspor ringkasan retensi dibatasi untuk pemilik StoreOS." });
+      const { format, ...range } = input;
+      return runMutation("Ekspor ringkasan retensi", () => createRetentionSummaryExport(ctx.user, range, format));
+    }),
+    getMonthlyRetentionSummaryExport: protectedProcedure.input(z.object({ exportId: z.string().min(32).max(128) })).query(({ ctx, input }) => {
+      if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Ekspor ringkasan retensi dibatasi untuk pemilik StoreOS." });
+      return runMutation("Ekspor ringkasan retensi", () => getRetentionSummaryExport(ctx.user, input.exportId));
+    }),
+    verifyMonthlyRetentionSummaryExport: protectedProcedure.input(z.object({ exportId: z.string().min(32).max(128) })).mutation(({ ctx, input }) => {
+      if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Verifikasi ekspor ringkasan retensi dibatasi untuk pemilik StoreOS." });
+      return runMutation("Verifikasi ekspor ringkasan retensi", () => verifyRetentionSummaryExport(ctx.user, input.exportId));
     }),
     monthlyArtifactLifecycleHistory: protectedProcedure.input(z.object({ year: z.number().int().min(2000).max(2200), month: z.number().int().min(1).max(12) })).query(({ ctx, input }) => {
       if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Akses riwayat lifecycle laporan dibatasi untuk pemilik StoreOS." });

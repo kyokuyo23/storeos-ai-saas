@@ -2,7 +2,7 @@ import { and, count, desc, eq, gte, inArray, lt } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { drizzle } from "drizzle-orm/mysql2";
 import { nanoid } from "nanoid";
-import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, governanceAuditQrExpiryPolicies, governanceAuditQrExpiryPolicyHistory, governanceAuditQrRevocations, governanceAuditVerificationReceiptIndex, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, stockOpnameFollowUps, users } from "../drizzle/schema";
+import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, governanceAuditQrExpiryPolicies, governanceAuditQrExpiryPolicyHistory, governanceAuditQrRevocations, governanceAuditVerificationReceiptIndex, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, stockOpnameFollowUps, users, retentionSummaryExports } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import type { z } from "zod";
 import type { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput, stockOpnameFollowUpInput, stockOpnameFollowUpNoteInput, stockOpnameHistoryInput } from "./foundationSchemas";
@@ -600,4 +600,49 @@ export async function listGovernanceAuditVerificationReceiptIndex(ownerOpenId: s
   return db.select().from(governanceAuditVerificationReceiptIndex).where(
     eq(governanceAuditVerificationReceiptIndex.ownerOpenId, ownerOpenId),
   ).orderBy(desc(governanceAuditVerificationReceiptIndex.verificationAt), desc(governanceAuditVerificationReceiptIndex.id));
+}
+
+
+/** Phase 2.23 metadata-only retention summary export index (bytes live in durable storage). */
+export type RetentionSummaryExportIndexInput = {
+  ownerOpenId: string;
+  exportId: string;
+  format: "csv" | "html" | "pdf";
+  storageKey: string;
+  sha256: string;
+  byteSize: number;
+  evaluatedAt: Date;
+  scopeLabel: string;
+  datePreset: string | null;
+  rangeStartDate: string;
+  rangeEndDate: string;
+  snapshotJson: string;
+};
+
+export async function indexRetentionSummaryExport(input: RetentionSummaryExportIndexInput) {
+  const db = await requireDb();
+  const readExisting = async () => (await db.select().from(retentionSummaryExports).where(and(
+    eq(retentionSummaryExports.ownerOpenId, input.ownerOpenId),
+    eq(retentionSummaryExports.exportId, input.exportId),
+  )).limit(1))[0] ?? null;
+  const existing = await readExisting();
+  if (existing) return { outcome: "already_indexed" as const, record: existing };
+  try {
+    await db.insert(retentionSummaryExports).values(input);
+  } catch (error) {
+    const candidate = error as { code?: string; message?: string };
+    if (candidate.code !== "ER_DUP_ENTRY" && !candidate.message?.includes("Duplicate entry")) throw error;
+  }
+  const record = await readExisting();
+  if (!record) throw new Error("Indeks ekspor ringkasan retensi tidak dapat dibaca kembali.");
+  return { outcome: "indexed" as const, record };
+}
+
+/** Owner-scoped lookup: another owner's exportId is indistinguishable from an unknown one. */
+export async function getRetentionSummaryExportIndex(ownerOpenId: string, exportId: string) {
+  const db = await requireDb();
+  return (await db.select().from(retentionSummaryExports).where(and(
+    eq(retentionSummaryExports.ownerOpenId, ownerOpenId),
+    eq(retentionSummaryExports.exportId, exportId),
+  )).limit(1))[0] ?? null;
 }

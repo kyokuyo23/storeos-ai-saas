@@ -1,5 +1,6 @@
 import { parse } from "csv-parse/sync";
 import { expect, test } from "@playwright/test";
+import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 
 test.describe.configure({ mode: "serial" });
@@ -1137,4 +1138,160 @@ test("keeps governance audit filters and export actions readable on a narrow mob
   await expect(panel.getByRole("button", { name: "Simpan durasi" })).toBeVisible();
   const box = await panel.boundingBox();
   expect(box?.width).toBeLessThanOrEqual(358);
+});
+
+
+// ---------------------------------------------------------------------------------------------
+// Phase 2.23 — Retention Summary Export (owner-admin only, read-only, exact-byte SHA-256)
+// ---------------------------------------------------------------------------------------------
+const retentionExportCsvBytes = Buffer.from(`\uFEFF${[
+  ["Bagian", "Kunci", "Nilai"],
+  ["Evaluasi", "Waktu evaluasi", "2026-10-08 00:30:45 WIB"],
+  ["Klasifikasi", "Total artefak aktif", "3"],
+].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\r\n")}\r\n`, "utf8");
+const retentionExportSha = createHash("sha256").update(retentionExportCsvBytes).digest("hex");
+const retentionExportRecord = {
+  exportId: `storeos-retention-summary-csv-${retentionExportSha}`,
+  scope: "owner-scope:0123456789ab",
+  format: "csv",
+  filename: "storeos-retention-summary-2026-01-01-2026-12-31-2026-10-08.csv",
+  contentType: "text/csv;charset=utf-8",
+  evaluatedAt: "2026-10-07T17:30:45.000Z",
+  timezone: "Asia/Jakarta",
+  review: { label: "Tahun berjalan", startWib: "2026-01-01 00:00:00 WIB", endWib: "2027-01-01 00:00:00 WIB", calendarPeriodCount: 12 },
+  summary: { totalActive: 3, normal: 0, approachingThreshold: 3, eligibleForArchive: 0 },
+  byteSize: retentionExportCsvBytes.byteLength,
+  sha256: retentionExportSha,
+};
+
+async function installRetentionExportRoutes(
+  page: import("@playwright/test").Page,
+  options: { createResult?: unknown; createError?: { code: string; message: string }; verifyStatus?: string; onCreate?: (body: string) => void } = {},
+) {
+  await page.route("**/api/trpc/reports.createMonthlyRetentionSummaryExport*", async (route) => {
+    options.onCreate?.(route.request().postData() ?? "");
+    const payload = options.createError
+      ? [{ error: { json: { message: options.createError.message, code: -32603, data: { code: options.createError.code, httpStatus: 403 } } } }]
+      : [{ result: { data: { json: options.createResult ?? { outcome: "created", export: retentionExportRecord, bytesBase64: retentionExportCsvBytes.toString("base64") } } } }];
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(payload) });
+  });
+  await page.route("**/api/trpc/reports.verifyMonthlyRetentionSummaryExport*", async (route) => {
+    const status = options.verifyStatus ?? "VERIFIED";
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ result: { data: { json: { status, exportId: retentionExportRecord.exportId, format: "csv", expectedSha256: retentionExportSha, actualSha256: status === "VERIFIED" ? retentionExportSha : "f".repeat(64) } } } }]) });
+  });
+}
+
+test("exports a retention summary as the owner-admin, downloads the exact server bytes, and shows WIB metadata and VERIFIED", async ({ page }, testInfo) => {
+  let createBody = "";
+  await installArtifactOwnerRoutes(page, [storedArtifactFixture]);
+  await installRetentionExportRoutes(page, { onCreate: (body) => { createBody = body; } });
+  await page.goto("/reports?reportPreset=current_year&reportYear=2026&reportMonth=1");
+
+  const panel = page.getByLabel("Ekspor Ringkasan Retensi");
+  await expect(panel).toBeVisible();
+  await expect(panel.getByText("Tahun berjalan", { exact: true })).toBeVisible();
+  await expect(panel.getByText(/Asia\/Jakarta \(WIB\)/).first()).toBeVisible();
+  await expect(panel.getByRole("button", { name: /Ekspor CSV/ })).toBeEnabled();
+  await expect(panel.getByRole("button", { name: /Ekspor PDF/ })).toBeEnabled();
+  await expect(panel.getByRole("button", { name: /Ekspor HTML/ })).toBeEnabled();
+
+  const downloadPromise = page.waitForEvent("download");
+  await panel.getByRole("button", { name: /Ekspor CSV/ }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe(retentionExportRecord.filename);
+  expect(await download.failure()).toBeNull();
+  const savedPath = testInfo.outputPath(download.suggestedFilename());
+  await download.saveAs(savedPath);
+  const bytes = await readFile(savedPath);
+  expect(bytes.equals(retentionExportCsvBytes)).toBe(true);
+  expect(bytes.subarray(0, 3)).toEqual(Buffer.from([0xef, 0xbb, 0xbf]));
+  expect(createHash("sha256").update(bytes).digest("hex")).toBe(retentionExportSha);
+
+  const result = panel.getByLabel("Metadata ekspor ringkasan retensi");
+  await expect(result.getByText("2026-10-08 00:30:45 WIB", { exact: true })).toBeVisible();
+  await expect(result.getByText(retentionExportRecord.exportId, { exact: true })).toBeVisible();
+  await expect(result.getByText(retentionExportSha, { exact: true })).toBeVisible();
+  await expect(result.getByText(`${retentionExportRecord.byteSize} byte`, { exact: true })).toBeVisible();
+  await expect(result.getByText("owner-scope:0123456789ab", { exact: true })).toBeVisible();
+  await expect(result.getByText(/^VERIFIED/)).toBeVisible();
+
+  // The request carries only the review scope and format; scope/owner are never client-supplied.
+  expect(createBody).toContain("current_year");
+  expect(createBody).not.toMatch(/ownerOpenId|owner-1|scopeId/);
+});
+
+test("shows MISMATCH and never a success state when the stored bytes no longer match the SHA-256", async ({ page }) => {
+  await installArtifactOwnerRoutes(page, [storedArtifactFixture]);
+  await installRetentionExportRoutes(page, { verifyStatus: "MISMATCH" });
+  await page.goto("/reports?reportPreset=current_year&reportYear=2026&reportMonth=1");
+
+  const panel = page.getByLabel("Ekspor Ringkasan Retensi");
+  await panel.getByRole("button", { name: /Ekspor CSV/ }).click();
+  await expect(panel.getByText(/^MISMATCH/)).toBeVisible();
+  await expect(panel.getByText(/^VERIFIED/)).toHaveCount(0);
+  await panel.getByRole("button", { name: "Verifikasi integritas" }).click();
+  await expect(panel.getByText(/^MISMATCH/)).toBeVisible();
+});
+
+test("disables export and creates nothing for an empty review scope", async ({ page }) => {
+  let created = false;
+  await installArtifactOwnerRoutes(page, []);
+  await installRetentionExportRoutes(page, { onCreate: () => { created = true; } });
+  await page.goto("/reports?reportPreset=current_year&reportYear=2026&reportMonth=1");
+
+  const panel = page.getByLabel("Ekspor Ringkasan Retensi");
+  await expect(panel).toBeVisible();
+  await expect(panel.getByRole("button", { name: /Ekspor CSV/ })).toBeDisabled();
+  await expect(panel.getByRole("button", { name: /Ekspor PDF/ })).toBeDisabled();
+  await expect(panel.getByText(/Tidak ada artefak aktif pada periode ini/)).toBeVisible();
+  await expect(panel.getByLabel("Metadata ekspor ringkasan retensi")).toHaveCount(0);
+  expect(created).toBe(false);
+});
+
+test("reports a server-side empty outcome and an authorization error without presenting an available artifact", async ({ page }) => {
+  await installArtifactOwnerRoutes(page, [storedArtifactFixture]);
+  await installRetentionExportRoutes(page, { createResult: { outcome: "empty", evaluatedAt: "2026-10-07T17:30:45.000Z", timezone: "Asia/Jakarta", review: { label: "Tahun berjalan", startWib: null, endWib: null, calendarPeriodCount: 12 } } });
+  await page.goto("/reports?reportPreset=current_year&reportYear=2026&reportMonth=1");
+  const panel = page.getByLabel("Ekspor Ringkasan Retensi");
+  await panel.getByRole("button", { name: /Ekspor PDF/ }).click();
+  await expect(panel.getByText(/ekspor tidak dibuat/)).toBeVisible();
+  await expect(panel.getByLabel("Metadata ekspor ringkasan retensi")).toHaveCount(0);
+
+  await page.unroute("**/api/trpc/reports.createMonthlyRetentionSummaryExport*");
+  await installRetentionExportRoutes(page, { createError: { code: "FORBIDDEN", message: "Ekspor ringkasan retensi dibatasi untuk pemilik StoreOS." } });
+  await panel.getByRole("button", { name: /Ekspor CSV/ }).click();
+  await expect(panel.getByRole("alert")).toContainText("tidak diizinkan");
+  await expect(panel.getByLabel("Metadata ekspor ringkasan retensi")).toHaveCount(0);
+});
+
+test("hides retention summary export from signed-out visitors", async ({ page }) => {
+  await page.route("**/api/trpc/reports.monthlySummary*", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ result: { data: { json: reportFixture } } }]) });
+  });
+  await page.goto("/reports");
+  await expect(page.getByRole("heading", { name: "Ringkasan Manajemen Bulanan" })).toBeVisible();
+  await expect(page.getByLabel("Ekspor Ringkasan Retensi")).toHaveCount(0);
+});
+
+test("keeps retention summary export, metadata and verification usable on a narrow mobile viewport", async ({ page }) => {
+  await installArtifactOwnerRoutes(page, [storedArtifactFixture]);
+  await installRetentionExportRoutes(page);
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/reports?reportPreset=current_year&reportYear=2026&reportMonth=1");
+
+  const panel = page.getByLabel("Ekspor Ringkasan Retensi");
+  await panel.scrollIntoViewIfNeeded();
+  for (const name of [/Ekspor CSV/, /Ekspor HTML/, /Ekspor PDF/]) await expect(panel.getByRole("button", { name })).toBeVisible();
+  const downloadPromise = page.waitForEvent("download");
+  await panel.getByRole("button", { name: /Ekspor CSV/ }).click();
+  await downloadPromise;
+
+  const result = panel.getByLabel("Metadata ekspor ringkasan retensi");
+  await expect(result.getByText(retentionExportSha, { exact: true })).toBeVisible();
+  await expect(result.getByText(/^VERIFIED/)).toBeVisible();
+  await expect(result.getByRole("button", { name: "Unduh lagi" })).toBeVisible();
+  await expect(result.getByRole("button", { name: "Verifikasi integritas" })).toBeVisible();
+  const box = await result.boundingBox();
+  expect(box && box.x >= 0 && box.x + box.width <= 375).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

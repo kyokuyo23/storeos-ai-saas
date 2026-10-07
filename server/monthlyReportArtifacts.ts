@@ -114,6 +114,8 @@ export type MonthlyReportActiveArtifactSummary = {
     eligibleArtifactCount: number;
     approachingArtifactTypeCounts: Record<ArtifactKind, number>;
     oldestApproachingArtifact: { year: number; month: number; generatedAt: Date; archiveEligibleAt: Date } | null;
+    /** Additive (Phase 2.23): oldest active bundle already past the retention cutoff. */
+    oldestEligibleArtifact: { year: number; month: number; generatedAt: Date; archiveEligibleAt: Date } | null;
   };
 };
 
@@ -552,6 +554,7 @@ export async function getMonthlyReportActiveArtifactSummary(ownerOpenId = defaul
   const approaching = classified.filter(({ retention }) => retention.status === "approaching");
   const eligible = classified.filter(({ retention }) => retention.status === "eligible");
   const oldestApproaching = approaching[0] ?? null;
+  const oldestEligible = eligible[0] ?? null;
   return {
     timezone: "Asia/Jakarta",
     range,
@@ -574,6 +577,12 @@ export async function getMonthlyReportActiveArtifactSummary(ownerOpenId = defaul
         month: oldestApproaching.artifact.month,
         generatedAt: oldestApproaching.artifact.generatedAt,
         archiveEligibleAt: oldestApproaching.retention.archiveEligibleAt,
+      } : null,
+      oldestEligibleArtifact: oldestEligible ? {
+        year: oldestEligible.artifact.year,
+        month: oldestEligible.artifact.month,
+        generatedAt: oldestEligible.artifact.generatedAt,
+        archiveEligibleAt: oldestEligible.retention.archiveEligibleAt,
       } : null,
     },
   };
