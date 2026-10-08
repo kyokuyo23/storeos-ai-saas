@@ -162,6 +162,13 @@
       "when": 1787796510630,
       "tag": "0022_quick_serpent_society",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1791357132172,
+      "tag": "0023_simple_molten_man",
+      "breakpoints": true
     }
   ]
 }

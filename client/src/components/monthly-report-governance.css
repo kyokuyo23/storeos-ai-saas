@@ -524,3 +524,36 @@
   body.printing-governance-audit .governance-audit-preview ul li { display: flex !important; break-inside: avoid; }
   body.printing-governance-audit .governance-audit-preview .settings-help { display: none !important; }
 }
+
+/* Phase 2.23 retention summary export */
+.retention-export { display: grid; gap: 12px; }
+.retention-export-context { display: grid; gap: 4px; padding: 12px; border: 1px solid #d8e8e0; border-radius: 10px; background: #f8fcfa; }
+.retention-export-context span { color: #607b72; font-size: 11px; font-weight: 700; }
+.retention-export-context strong { color: #295845; font-size: 13px; }
+.retention-export-context small { color: #607b72; font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.retention-export-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.retention-export-actions .button { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; text-align: left; }
+.retention-export-actions .button small { color: inherit; opacity: .72; font-size: 10px; }
+.retention-export-actions .button:disabled { opacity: .55; cursor: not-allowed; }
+.retention-export-progress,
+.retention-export-note { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 12px; border: 1px solid #f2d59c; border-radius: 9px; background: #fffaf0; color: #8a5a10; font-size: 12px; line-height: 1.45; }
+.retention-export-progress { border-color: #cae4db; background: #f3faf6; color: #295845; }
+.retention-export-error { border-color: #f0c4c1; background: #fff0ef; color: #a33e39; }
+.retention-export-note svg { flex: 0 0 auto; margin-top: 1px; }
+.retention-export-result { display: grid; gap: 10px; padding: 12px; border: 1px solid #cae4db; border-radius: 10px; background: #f3faf6; }
+.retention-export-result-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; color: #295845; }
+.retention-export-result-heading small { color: #607b72; font-size: 11px; overflow-wrap: anywhere; }
+.retention-export-meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 12px; margin: 0; }
+.retention-export-meta > div { display: grid; gap: 2px; min-width: 0; }
+.retention-export-meta dt { color: #607b72; font-size: 10px; font-weight: 700; }
+.retention-export-meta dd { margin: 0; color: #295845; font-size: 12px; overflow-wrap: anywhere; word-break: break-all; }
+.retention-export-wide { grid-column: 1 / -1; }
+.retention-export-footnote { display: flex; align-items: flex-start; gap: 6px; margin: 0; color: #607b72; font-size: 11px; line-height: 1.45; }
+
+@media (max-width: 1020px) {
+  .retention-export-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .retention-export-actions { flex-direction: column; }
+  .retention-export-actions .button { width: 100%; justify-content: flex-start; }
+}
