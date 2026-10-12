@@ -18,10 +18,22 @@ function decodeHtml(value: string) {
  */
 export function printableMonthlyHtmlToPdf(
   printableHtml: string,
-  metadata: { title?: string; subject?: string; creationDate?: Date; /** 32 hex chars; makes the PDF trailer ID (otherwise random) deterministic. */ fileId?: string } = {},
+  metadata: {
+    title?: string;
+    subject?: string;
+    /** Date (encoded in the process timezone by jsPDF) or a PDF date string such as `D:20261012153311+07'00'`. */
+    creationDate?: Date | string;
+    /** 32 hex chars; makes the PDF trailer ID (otherwise random) deterministic. */
+    fileId?: string;
+    /** Drop <head> (title is duplicated otherwise) and separate table cells with " | " for readability. */
+    plainCells?: boolean;
+  } = {},
 ) {
+  const source = metadata.plainCells
+    ? printableHtml.replace(/<head>[\s\S]*?<\/head>/i, "").replace(/<\/t[dh]>\s*<t[dh][^>]*>/gi, " | ")
+    : printableHtml;
   const plainText = decodeHtml(
-    printableHtml
+    source
       .replace(/<style[\s\S]*?<\/style>/gi, "")
       .replace(/<script[\s\S]*?<\/script>/gi, "")
       .replace(/<(br|\/p|\/h1|\/h2|\/tr|\/li|\/table|\/ul)>/gi, "\n")

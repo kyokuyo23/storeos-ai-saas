@@ -2,6 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import * as db from "./db";
+import { isValidGovernanceAuditWibDate } from "./governanceAuditDateSearch";
 import { mapFoundationError } from "./foundationErrors";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -95,7 +96,9 @@ export const appRouter = router({
       endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
       datePreset: z.enum(["current_month", "previous_month", "last_3_months", "current_quarter", "previous_quarter", "current_year"]).optional(),
       format: z.enum(["csv", "html", "pdf"]),
-    }).refine((input) => input.datePreset ? !input.startDate && !input.endDate : Boolean(input.startDate && input.endDate), { message: "Gunakan preset review atau rentang Jakarta/WIB lengkap." })).mutation(({ ctx, input }) => {
+    }).refine((input) => input.datePreset ? !input.startDate && !input.endDate : Boolean(input.startDate && input.endDate), { message: "Gunakan preset review atau rentang Jakarta/WIB lengkap." })
+      .refine((input) => (!input.startDate || isValidGovernanceAuditWibDate(input.startDate)) && (!input.endDate || isValidGovernanceAuditWibDate(input.endDate)), { message: "Tanggal review harus tanggal kalender yang valid (YYYY-MM-DD)." })
+      .refine((input) => !input.startDate || !input.endDate || input.startDate <= input.endDate, { message: "Tanggal akhir review tidak boleh lebih awal dari tanggal mulai." })).mutation(({ ctx, input }) => {
       if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Ekspor ringkasan retensi dibatasi untuk pemilik StoreOS." });
       const { format, ...range } = input;
       return runMutation("Ekspor ringkasan retensi", () => createRetentionSummaryExport(ctx.user, range, format));

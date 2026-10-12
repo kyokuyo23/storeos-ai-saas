@@ -16,7 +16,10 @@ export const startLogin = () => {
   const oauthPortalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL;
   // Without a Manus OAuth portal (e.g. Vercel), use the owner password login page.
   if (!oauthPortalUrl) {
-    if (window.location.pathname !== "/login") window.location.href = "/login";
+    if (window.location.pathname !== "/login") {
+      const next = `${window.location.pathname}${window.location.search}`;
+      window.location.href = next && next !== "/" ? `/login?next=${encodeURIComponent(next)}` : "/login";
+    }
     return;
   }
   const appId = import.meta.env.VITE_APP_ID;

@@ -150,7 +150,9 @@ function vitePluginManusDebugCollector(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
+// Manus-only tooling (inline runtime script, debug collector) is not shipped on self-hosted builds such as Vercel.
+const isManusHosted = !process.env.VERCEL;
+const plugins = [react(), tailwindcss(), jsxLocPlugin(), ...(isManusHosted ? [vitePluginManusRuntime(), vitePluginManusDebugCollector()] : [])];
 
 export default defineConfig({
   plugins,

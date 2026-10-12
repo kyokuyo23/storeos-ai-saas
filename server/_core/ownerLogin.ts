@@ -8,6 +8,15 @@ import { sdk } from "./sdk";
 
 const digest = (value: string) => createHash("sha256").update(value).digest();
 const FAILURE_DELAY_MS = 600;
+export const MIN_OWNER_PASSWORD_LENGTH = 12;
+
+/** Why owner login is unavailable, or null when it can be used. */
+export function ownerLoginConfigProblem(env: { ownerPassword: string; ownerOpenId: string }) {
+  if (!env.ownerPassword || !env.ownerOpenId) return "Login pemilik belum dikonfigurasi (OWNER_PASSWORD / OWNER_OPEN_ID).";
+  if (env.ownerPassword.length < MIN_OWNER_PASSWORD_LENGTH) return `OWNER_PASSWORD terlalu pendek (minimal ${MIN_OWNER_PASSWORD_LENGTH} karakter).`;
+  if (env.ownerOpenId.startsWith("cron_")) return "OWNER_OPEN_ID tidak boleh diawali 'cron_'.";
+  return null;
+}
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Constant-time password comparison (both sides hashed to equal length first). */
@@ -23,12 +32,14 @@ export function ownerPasswordMatches(candidate: unknown, expected: string) {
  */
 export function registerOwnerLoginRoutes(app: Express) {
   app.get("/api/auth/owner-login", (_req: Request, res: Response) => {
-    res.json({ enabled: Boolean(ENV.ownerPassword && ENV.ownerOpenId) });
+    const problem = ownerLoginConfigProblem(ENV);
+    res.json({ enabled: !problem, ...(problem ? { problem } : {}) });
   });
 
   app.post("/api/auth/owner-login", async (req: Request, res: Response) => {
-    if (!ENV.ownerPassword || !ENV.ownerOpenId) {
-      res.status(503).json({ error: "Login pemilik belum dikonfigurasi (OWNER_PASSWORD / OWNER_OPEN_ID)." });
+    const problem = ownerLoginConfigProblem(ENV);
+    if (problem) {
+      res.status(503).json({ error: problem });
       return;
     }
     if (!ownerPasswordMatches(req.body?.password, ENV.ownerPassword)) {

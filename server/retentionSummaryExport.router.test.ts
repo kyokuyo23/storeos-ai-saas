@@ -50,6 +50,8 @@ describe("reports retention summary export authorization", () => {
     await expect(api.createMonthlyRetentionSummaryExport({ datePreset: "current_month", startDate: "2026-01-01", endDate: "2026-01-31", format: "csv" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     await expect(api.createMonthlyRetentionSummaryExport({ startDate: "2026-01-01", format: "csv" } as any)).rejects.toMatchObject({ code: "BAD_REQUEST" });
     await expect(api.createMonthlyRetentionSummaryExport({ datePreset: "current_month", format: "xlsx" } as any)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(api.createMonthlyRetentionSummaryExport({ startDate: "2026-02-30", endDate: "2026-03-31", format: "csv" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(api.createMonthlyRetentionSummaryExport({ startDate: "2026-09-30", endDate: "2026-07-01", format: "csv" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     await expect(api.verifyMonthlyRetentionSummaryExport({ exportId: "short" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(h.createRetentionSummaryExport).not.toHaveBeenCalled();
     expect(h.verifyRetentionSummaryExport).not.toHaveBeenCalled();

@@ -1,5 +1,11 @@
 import { useState } from "react";
 
+/** Only same-origin absolute paths ("/x", never "//host" or "/\\host") are allowed as a post-login target. */
+export function safeNextPath(raw: string | null) {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) return "/";
+  return raw;
+}
+
 /** Password login for deployments without Manus OAuth. */
 export default function OwnerLogin() {
   const [password, setPassword] = useState("");
@@ -17,7 +23,7 @@ export default function OwnerLogin() {
         setError(body.error ?? "Login gagal.");
         return;
       }
-      window.location.href = "/";
+      window.location.href = safeNextPath(new URLSearchParams(window.location.search).get("next"));
     } catch {
       setError("Tidak dapat menghubungi server. Coba lagi.");
     } finally {

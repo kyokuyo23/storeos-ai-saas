@@ -1166,7 +1166,7 @@ const retentionExportRecord = {
 
 async function installRetentionExportRoutes(
   page: import("@playwright/test").Page,
-  options: { createResult?: unknown; createError?: { code: string; message: string }; verifyStatus?: string; onCreate?: (body: string) => void } = {},
+  options: { createResult?: unknown; createError?: { code: string; message: string }; verifyStatus?: string; verifyError?: { code: string; message: string }; onCreate?: (body: string) => void; onVerify?: (body: string) => void } = {},
 ) {
   await page.route("**/api/trpc/reports.createMonthlyRetentionSummaryExport*", async (route) => {
     options.onCreate?.(route.request().postData() ?? "");
@@ -1176,6 +1176,11 @@ async function installRetentionExportRoutes(
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(payload) });
   });
   await page.route("**/api/trpc/reports.verifyMonthlyRetentionSummaryExport*", async (route) => {
+    options.onVerify?.(route.request().postData() ?? "");
+    if (options.verifyError) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ error: { json: { message: options.verifyError.message, code: -32603, data: { code: options.verifyError.code, httpStatus: 403 } } } }]) });
+      return;
+    }
     const status = options.verifyStatus ?? "VERIFIED";
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ result: { data: { json: { status, exportId: retentionExportRecord.exportId, format: "csv", expectedSha256: retentionExportSha, actualSha256: status === "VERIFIED" ? retentionExportSha : "f".repeat(64) } } } }]) });
   });
@@ -1294,4 +1299,35 @@ test("keeps retention summary export, metadata and verification usable on a narr
   const box = await result.boundingBox();
   expect(box && box.x >= 0 && box.x + box.width <= 375).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("re-verifies an earlier export by its Export ID without creating a new export", async ({ page }) => {
+  let created = false;
+  let verifyBody = "";
+  await installArtifactOwnerRoutes(page, [storedArtifactFixture]);
+  await installRetentionExportRoutes(page, { onCreate: () => { created = true; }, onVerify: (body) => { verifyBody = body; } });
+  await page.goto("/reports?reportPreset=current_year&reportYear=2026&reportMonth=1");
+
+  const lookup = page.getByRole("group", { name: "Verifikasi ekspor sebelumnya" });
+  const input = lookup.getByLabel("Verifikasi ekspor sebelumnya (Export ID)");
+  await input.fill("not-an-export-id");
+  await expect(lookup.getByRole("button", { name: /Verifikasi/ })).toBeDisabled();
+  await expect(lookup.getByText(/Format Export ID/)).toBeVisible();
+
+  await input.fill(retentionExportRecord.exportId);
+  await lookup.getByRole("button", { name: /Verifikasi/ }).click();
+  await expect(lookup.getByText(/^VERIFIED/)).toBeVisible();
+  expect(verifyBody).toContain(retentionExportRecord.exportId);
+  expect(created).toBe(false);
+});
+
+test("shows UNAUTHORIZED (not a generic error) when the server denies verification", async ({ page }) => {
+  await installArtifactOwnerRoutes(page, [storedArtifactFixture]);
+  await installRetentionExportRoutes(page, { verifyError: { code: "FORBIDDEN", message: "Verifikasi ekspor ringkasan retensi dibatasi untuk pemilik StoreOS." } });
+  await page.goto("/reports?reportPreset=current_year&reportYear=2026&reportMonth=1");
+  const lookup = page.getByRole("group", { name: "Verifikasi ekspor sebelumnya" });
+  await lookup.getByLabel("Verifikasi ekspor sebelumnya (Export ID)").fill(retentionExportRecord.exportId);
+  await lookup.getByRole("button", { name: /Verifikasi/ }).click();
+  await expect(lookup.getByText(/^UNAUTHORIZED/)).toBeVisible();
+  await expect(lookup.getByText(/^VERIFIED/)).toHaveCount(0);
 });

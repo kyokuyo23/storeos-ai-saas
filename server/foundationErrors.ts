@@ -2,13 +2,19 @@ import { TRPCError } from "@trpc/server";
 
 type DatabaseErrorLike = { code?: string; errno?: number; message?: string };
 
+const CONNECTION_ERROR_CODES = new Set(["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "ENOTFOUND", "PROTOCOL_CONNECTION_LOST", "ER_CON_COUNT_ERROR", "ER_ACCESS_DENIED_ERROR"]);
+
 export function mapFoundationError(error: unknown, entity: string): TRPCError {
   if (error instanceof TRPCError) return error;
   // drizzle-orm >= 0.44 wraps driver errors (DrizzleQueryError); the MySQL code/errno live on `cause`.
-  const wrapped = error as { cause?: unknown };
-  const databaseError = (wrapped?.cause && typeof wrapped.cause === "object" && ((wrapped.cause as DatabaseErrorLike).code || (wrapped.cause as DatabaseErrorLike).errno)
-    ? { ...(error as DatabaseErrorLike), code: (wrapped.cause as DatabaseErrorLike).code, errno: (wrapped.cause as DatabaseErrorLike).errno }
-    : error) as DatabaseErrorLike;
+  const outer = error as DatabaseErrorLike & { cause?: unknown };
+  const cause = outer?.cause && typeof outer.cause === "object" ? (outer.cause as DatabaseErrorLike) : null;
+  const databaseError: DatabaseErrorLike = cause && (cause.code || cause.errno)
+    ? { code: cause.code, errno: cause.errno, message: outer.message }
+    : outer;
+  if (databaseError.code && CONNECTION_ERROR_CODES.has(databaseError.code)) {
+    return new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database tidak tersedia. Silakan coba lagi." });
+  }
   if (databaseError.code === "ER_DUP_ENTRY" || databaseError.errno === 1062) {
     return new TRPCError({ code: "CONFLICT", message: `${entity} sudah ada atau menggunakan SKU yang sama.` });
   }
@@ -77,6 +83,9 @@ export function mapFoundationError(error: unknown, entity: string): TRPCError {
   }
   if (databaseError.message === "Jumlah fisik tidak boleh negatif.") {
     return new TRPCError({ code: "BAD_REQUEST", message: databaseError.message });
+  }
+  if (databaseError.message?.startsWith("Penyimpanan ekspor ringkasan retensi tidak dapat diakses")) {
+    return new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Penyimpanan ekspor tidak dapat diakses saat ini. Tidak ada data yang diubah; silakan coba lagi." });
   }
   if (databaseError.message?.includes("Database tidak tersedia")) {
     return new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database tidak tersedia. Silakan coba lagi." });

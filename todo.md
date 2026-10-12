@@ -483,3 +483,14 @@
 - [x] Add protected create/get/verify procedures returning VERIFIED, MISMATCH, NOT_FOUND (unknown or bytes unavailable), UNAUTHORIZED without repair, hash overwrite, or cross-scope disclosure
 - [x] Add responsive Reports panel with format actions, progress, empty/error states, metadata visibility, download, and verification
 - [x] Add Vitest unit/router/persistence and Playwright desktop/mobile coverage; run full Vitest, TypeScript, production build, and Playwright validation for Phase 2.23
+
+## Review ulang (Vercel + Phase 2.23)
+- [x] PDF ekspor retensi deterministik lintas zona waktu server (CreationDate WIB eksplisit)
+- [x] Label kandidat tertua "Akan memenuhi syarat arsip pada" untuk APPROACHING_THRESHOLD
+- [x] Ekspor mencantumkan bundle terverifikasi/dikecualikan
+- [x] Validasi tanggal kalender + urutan rentang → BAD_REQUEST
+- [x] UNAUTHORIZED tampil di UI; verifikasi ulang ekspor lama via Export ID (US-003)
+- [x] Status memuat/error di panel, PDF lebih terbaca, aria
+- [x] errorFormatter: SQL mentah tidak bocor; koneksi DB → SERVICE_UNAVAILABLE
+- [x] Login pemilik: sandi ≥ 12, tolak OWNER_OPEN_ID cron_, redirect next= aman
+- [x] Plugin runtime Manus tidak ikut build Vercel

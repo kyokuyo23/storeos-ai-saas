@@ -57,13 +57,23 @@ function downloadExport(record: ExportRecord, bytesBase64: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function RetentionSummaryExportPanel({ enabled, input, activeArtifactCount, scopeLabel }: { enabled: boolean; input: ReviewInput | null; activeArtifactCount: number | null; scopeLabel: string }) {
+const EXPORT_ID_PATTERN = /^storeos-retention-summary-(csv|html|pdf)-[a-f0-9]{64}$/;
+
+/** tRPC FORBIDDEN/UNAUTHORIZED from the server is shown as the UNAUTHORIZED verification result. */
+function isAccessDenied(error: unknown) {
+  const code = (error as { data?: { code?: string } } | null)?.data?.code;
+  return code === "FORBIDDEN" || code === "UNAUTHORIZED";
+}
+
+export function RetentionSummaryExportPanel({ enabled, input, activeArtifactCount, scopeLabel, summaryState = "ready" }: { enabled: boolean; input: ReviewInput | null; activeArtifactCount: number | null; scopeLabel: string; summaryState?: "loading" | "error" | "ready" }) {
   const createMutation = trpc.reports.createMonthlyRetentionSummaryExport.useMutation();
   const verifyMutation = trpc.reports.verifyMonthlyRetentionSummaryExport.useMutation();
   const [latest, setLatest] = useState<{ record: ExportRecord; bytesBase64: string } | null>(null);
   const [verification, setVerification] = useState<VerificationStatus | null>(null);
   const [notice, setNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [lookupId, setLookupId] = useState("");
+  const [lookupResult, setLookupResult] = useState<{ exportId: string; status: VerificationStatus } | null>(null);
   const inputKey = JSON.stringify(input);
   const lastInputKey = useRef(inputKey);
 
@@ -85,7 +95,20 @@ export function RetentionSummaryExportPanel({ enabled, input, activeArtifactCoun
     setVerification(null);
     verifyMutation.mutate({ exportId }, {
       onSuccess: (result) => setVerification(result.status as VerificationStatus),
-      onError: () => setNotice({ tone: "error", text: "Verifikasi tidak dapat diselesaikan. Tidak ada data yang diubah; silakan coba lagi." }),
+      onError: (error) => isAccessDenied(error) ? setVerification("UNAUTHORIZED") : setNotice({ tone: "error", text: "Verifikasi tidak dapat diselesaikan. Tidak ada data yang diubah; silakan coba lagi." }),
+    });
+  };
+
+  const trimmedLookupId = lookupId.trim();
+  const lookupValid = EXPORT_ID_PATTERN.test(trimmedLookupId);
+  const verifyExisting = () => {
+    if (!lookupValid) return;
+    setLookupResult(null);
+    verifyMutation.mutate({ exportId: trimmedLookupId }, {
+      onSuccess: (result) => setLookupResult({ exportId: trimmedLookupId, status: result.status as VerificationStatus }),
+      onError: (error) => isAccessDenied(error)
+        ? setLookupResult({ exportId: trimmedLookupId, status: "UNAUTHORIZED" })
+        : setNotice({ tone: "error", text: "Verifikasi tidak dapat diselesaikan. Tidak ada data yang diubah; silakan coba lagi." }),
     });
   };
 
@@ -128,7 +151,7 @@ export function RetentionSummaryExportPanel({ enabled, input, activeArtifactCoun
 
   const record = latest?.record;
   return <Panel title="Ekspor Ringkasan Retensi" description="Snapshot read-only klasifikasi retensi untuk periode review terpilih. Waktu evaluasi dibuat server dalam Asia/Jakarta (WIB); byte dihitung SHA-256 setelah file final dibuat.">
-    <section className="retention-export" aria-label="Ekspor Ringkasan Retensi">
+    <section className="retention-export" aria-label="Ekspor Ringkasan Retensi" aria-busy={busy}>
       <div className="retention-export-context"><span>Periode dipilih</span><strong>{scopeLabel}</strong><small>Zona waktu Asia/Jakarta (WIB) · tidak mengubah lifecycle, kebijakan retensi, atau status arsip</small></div>
       <div className="retention-export-actions" role="group" aria-label="Pilih format ekspor">
         {formatOptions.map((option) => <button key={option.format} type="button" className="button secondary" disabled={!canExport} onClick={() => create(option.format)}>
@@ -136,9 +159,12 @@ export function RetentionSummaryExportPanel({ enabled, input, activeArtifactCoun
         </button>)}
       </div>
       {createMutation.isPending && <p role="status" className="retention-export-progress"><span className="loading-dot" /> Membuat ekspor dan menghitung SHA-256…</p>}
+      {summaryState === "loading" && <p role="status" className="retention-export-progress"><span className="loading-dot" /> Memuat ringkasan artefak aktif untuk periode ini…</p>}
+      {summaryState === "error" && <p role="alert" className="retention-export-note retention-export-error"><AlertTriangle size={15} /><span>Ringkasan artefak aktif tidak dapat dimuat, sehingga ekspor dinonaktifkan. Tidak ada data yang diubah; muat ulang halaman untuk mencoba lagi.</span></p>}
+      {summaryState === "ready" && !input && <p role="status" className="retention-export-note"><AlertTriangle size={15} /><span>Pilih periode review untuk mengaktifkan ekspor.</span></p>}
       {noActive && !notice && <p role="status" className="retention-export-note"><AlertTriangle size={15} /><span>Tidak ada artefak aktif pada periode ini. Ekspor dinonaktifkan agar tidak menghasilkan data yang menyesatkan.</span></p>}
       {notice && <p role={notice.tone === "error" ? "alert" : "status"} className={notice.tone === "error" ? "retention-export-note retention-export-error" : "retention-export-note"}><AlertTriangle size={15} /><span>{notice.text}</span></p>}
-      {record && <div className="retention-export-result" aria-label="Metadata ekspor ringkasan retensi">
+      {record && <div className="retention-export-result" role="region" aria-label="Metadata ekspor ringkasan retensi">
         <div className="retention-export-result-heading"><CheckCircle2 size={16} /><strong>Ekspor berhasil dibuat</strong><small>{record.filename}</small></div>
         <dl className="retention-export-meta">
           <div><dt>Format</dt><dd>{record.format.toUpperCase()}</dd></div>
@@ -161,6 +187,15 @@ export function RetentionSummaryExportPanel({ enabled, input, activeArtifactCoun
         {verification && <p role="status" className={verificationCopy[verification].tone === "success" ? "integrity-success" : "integrity-error"}>{verificationCopy[verification].text}</p>}
         <p className="retention-export-footnote"><FileText size={13} /> Verifikasi membaca ulang byte tersimpan di server dan menghitung ulang SHA-256; tidak ada perbaikan atau perubahan otomatis.</p>
       </div>}
+      <div className="retention-export-lookup" role="group" aria-label="Verifikasi ekspor sebelumnya">
+        <label htmlFor="retention-export-lookup-id">Verifikasi ekspor sebelumnya (Export ID)</label>
+        <div className="retention-export-lookup-row">
+          <input id="retention-export-lookup-id" type="text" inputMode="text" autoComplete="off" spellCheck={false} placeholder="storeos-retention-summary-csv-…" value={lookupId} aria-invalid={trimmedLookupId.length > 0 && !lookupValid} onChange={(event) => { setLookupId(event.target.value); setLookupResult(null); }} />
+          <button type="button" className="button secondary" disabled={!lookupValid || busy} onClick={verifyExisting}><ShieldCheck size={15} /> Verifikasi</button>
+        </div>
+        {trimmedLookupId.length > 0 && !lookupValid && <small className="retention-export-lookup-hint">Format Export ID: storeos-retention-summary-&lt;csv|html|pdf&gt;-&lt;64 karakter SHA-256&gt;.</small>}
+        {lookupResult && lookupResult.exportId === trimmedLookupId && <p role="status" className={verificationCopy[lookupResult.status].tone === "success" ? "integrity-success" : "integrity-error"}>{verificationCopy[lookupResult.status].text}</p>}
+      </div>
     </section>
   </Panel>;
 }

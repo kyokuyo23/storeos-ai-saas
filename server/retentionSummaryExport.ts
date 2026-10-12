@@ -70,6 +70,9 @@ const snapshotSchema = z.object({
   formatBreakdown: z.object({ csv: perFormatSchema, html: perFormatSchema, pdf: perFormatSchema }),
   oldestCandidate: candidateSchema.nullable(),
   retentionThreshold: z.object({ value: z.number().int(), unit: z.literal("months"), warningWindowDays: z.number().int() }),
+  // Bundles in scope that failed integrity verification are excluded from the counts above;
+  // disclosed so a total is never presented without its exclusions. Optional: older snapshots lack it.
+  integrity: z.object({ verifiedBundleCount: z.number().int(), excludedBundleCount: z.number().int() }).optional(),
 });
 
 export type RetentionSummarySnapshot = z.infer<typeof snapshotSchema>;
@@ -195,6 +198,7 @@ export function buildRetentionSummarySnapshot(
     formatBreakdown: { csv: perFormat("csv"), html: perFormat("html"), pdf: perFormat("pdf") },
     oldestCandidate: oldestCandidateFrom(summary),
     retentionThreshold: { value: summary.retention.retentionMonths, unit: "months", warningWindowDays: summary.retention.archiveWarningWindowDays },
+    integrity: { verifiedBundleCount: summary.integrity.verifiedBundleCount, excludedBundleCount: summary.integrity.excludedBundleCount },
   };
 }
 
@@ -218,6 +222,12 @@ export function retentionSummaryRows(snapshot: RetentionSummarySnapshot): Row[] 
     ["Klasifikasi", `${CLASSIFICATION_LABEL.APPROACHING_THRESHOLD} (APPROACHING_THRESHOLD)`, snapshot.summary.approachingThreshold],
     ["Klasifikasi", `${CLASSIFICATION_LABEL.ELIGIBLE_FOR_ARCHIVE} (ELIGIBLE_FOR_ARCHIVE)`, snapshot.summary.eligibleForArchive],
   ];
+  if (snapshot.integrity) {
+    rows.push(
+      ["Integritas", "Bundle terverifikasi (dihitung)", snapshot.integrity.verifiedBundleCount],
+      ["Integritas", "Bundle dikecualikan (hilang/rusak, tidak dihitung)", snapshot.integrity.excludedBundleCount],
+    );
+  }
   for (const format of RETENTION_SUMMARY_EXPORT_FORMATS) {
     const entry = snapshot.formatBreakdown[format];
     rows.push(
@@ -237,7 +247,9 @@ export function retentionSummaryRows(snapshot: RetentionSummarySnapshot): Row[] 
       ["Konteks retensi", "Kandidat tertua · Klasifikasi", `${CLASSIFICATION_LABEL[candidate.classification]} (${candidate.classification})`],
       ["Konteks retensi", "Kandidat tertua · Periode laporan", `${candidate.year}-${String(candidate.month).padStart(2, "0")}`],
       ["Konteks retensi", "Kandidat tertua · Dibuat", formatRetentionSummaryWib(candidate.generatedAt)],
-      ["Konteks retensi", "Kandidat tertua · Memenuhi syarat arsip sejak", formatRetentionSummaryWib(candidate.archiveEligibleAt)],
+      candidate.classification === "ELIGIBLE_FOR_ARCHIVE"
+        ? ["Konteks retensi", "Kandidat tertua · Memenuhi syarat arsip sejak", formatRetentionSummaryWib(candidate.archiveEligibleAt)]
+        : ["Konteks retensi", "Kandidat tertua · Akan memenuhi syarat arsip pada", formatRetentionSummaryWib(candidate.archiveEligibleAt)],
     );
   } else {
     rows.push(["Konteks retensi", "Kandidat tertua", "Tidak ada"]);
@@ -264,12 +276,21 @@ export function buildRetentionSummaryHtml(snapshot: RetentionSummarySnapshot) {
   return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>StoreOS Retention Summary Export</title><style>body{font-family:Arial,sans-serif;color:#17251f;font-size:12px;padding:24px}h1{font-size:18px;margin:0 0 6px}p{margin:3px 0}table{border-collapse:collapse;width:100%;margin-top:16px}th,td{border:1px solid #cbd8d0;padding:6px;vertical-align:top;text-align:left;word-break:break-word}th{background:#edf6f0}@media print{body{padding:0}tr{page-break-inside:avoid}}</style></head><body><h1>StoreOS Retention Summary Export</h1><p><strong>Waktu evaluasi:</strong> ${escapeHtml(formatRetentionSummaryWib(snapshot.evaluatedAt))}</p><p><strong>Timezone:</strong> Asia/Jakarta</p><table><thead><tr>${RETENTION_SUMMARY_CSV_HEADER.map((heading) => `<th>${heading}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></body></html>`;
 }
 
+/** PDF date in WIB: `D:YYYYMMDDHHmmss+07'00'`, independent of the process timezone. */
+export function pdfWibDate(value: Date | string) {
+  const wib = formatRetentionSummaryWib(value); // YYYY-MM-DD HH:mm:ss WIB
+  return `D:${wib.slice(0, 4)}${wib.slice(5, 7)}${wib.slice(8, 10)}${wib.slice(11, 13)}${wib.slice(14, 16)}${wib.slice(17, 19)}+07'00'`;
+}
+
 export function buildRetentionSummaryPdfBytes(snapshot: RetentionSummarySnapshot) {
   const html = buildRetentionSummaryHtml(snapshot);
   return printableMonthlyHtmlToPdf(html, {
     title: "StoreOS Retention Summary Export",
     subject: "Read-only owner-admin retention summary snapshot",
-    creationDate: new Date(snapshot.evaluatedAt),
+    // Explicit WIB PDF date string: jsPDF would otherwise encode the *server* timezone,
+    // making bytes (and the exportId) differ between hosts for the same snapshot.
+    creationDate: pdfWibDate(snapshot.evaluatedAt),
+    plainCells: true,
     // Deterministic trailer ID so identical snapshots produce identical bytes.
     fileId: createHash("sha256").update(html).digest("hex").slice(0, 32).toUpperCase(),
   });
