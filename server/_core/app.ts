@@ -29,7 +29,8 @@ export function createApp() {
       return;
     }
     try {
-      const user = await sdk.authenticateRequest(req);
+      let user: Awaited<ReturnType<typeof sdk.authenticateRequest>> | null = null;
+      try { user = await sdk.authenticateRequest(req); } catch { user = null; }
       if (!user) {
         res.status(401).send("Authentication required");
         return;

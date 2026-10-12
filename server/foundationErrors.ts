@@ -4,7 +4,11 @@ type DatabaseErrorLike = { code?: string; errno?: number; message?: string };
 
 export function mapFoundationError(error: unknown, entity: string): TRPCError {
   if (error instanceof TRPCError) return error;
-  const databaseError = error as DatabaseErrorLike;
+  // drizzle-orm >= 0.44 wraps driver errors (DrizzleQueryError); the MySQL code/errno live on `cause`.
+  const wrapped = error as { cause?: unknown };
+  const databaseError = (wrapped?.cause && typeof wrapped.cause === "object" && ((wrapped.cause as DatabaseErrorLike).code || (wrapped.cause as DatabaseErrorLike).errno)
+    ? { ...(error as DatabaseErrorLike), code: (wrapped.cause as DatabaseErrorLike).code, errno: (wrapped.cause as DatabaseErrorLike).errno }
+    : error) as DatabaseErrorLike;
   if (databaseError.code === "ER_DUP_ENTRY" || databaseError.errno === 1062) {
     return new TRPCError({ code: "CONFLICT", message: `${entity} sudah ada atau menggunakan SKU yang sama.` });
   }
@@ -63,6 +67,15 @@ export function mapFoundationError(error: unknown, entity: string): TRPCError {
     return new TRPCError({ code: "CONFLICT", message: "Tambahan pembayaran untuk penukaran ini sudah dicatat." });
   }
   if (databaseError.message?.startsWith("Stok bahan tidak mencukupi:")) {
+    return new TRPCError({ code: "BAD_REQUEST", message: databaseError.message });
+  }
+  if (databaseError.message === "Stok tidak boleh menjadi negatif.") {
+    return new TRPCError({ code: "BAD_REQUEST", message: "Stok tidak boleh menjadi negatif. Kurangi jumlah yang dikeluarkan." });
+  }
+  if (databaseError.message === "Bahan tidak boleh dihitung lebih dari satu kali.") {
+    return new TRPCError({ code: "BAD_REQUEST", message: databaseError.message });
+  }
+  if (databaseError.message === "Jumlah fisik tidak boleh negatif.") {
     return new TRPCError({ code: "BAD_REQUEST", message: databaseError.message });
   }
   if (databaseError.message?.includes("Database tidak tersedia")) {

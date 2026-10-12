@@ -21,4 +21,15 @@ describe("StoreOS foundation database error mapping", () => {
     expect(error.code).toBe("INTERNAL_SERVER_ERROR");
     expect(error.message).toBe("Bahan gagal disimpan. Silakan coba lagi.");
   });
+  it("unwraps drizzle-wrapped driver errors (cause) so duplicates and FK failures keep their meaning", () => {
+    const duplicate = mapFoundationError(Object.assign(new Error("Failed query: insert into categories"), { cause: { code: "ER_DUP_ENTRY", errno: 1062 } }), "Kategori");
+    expect(duplicate.code).toBe("CONFLICT");
+    const foreignKey = mapFoundationError(Object.assign(new Error("Failed query"), { cause: { errno: 1452 } }), "Resep");
+    expect(foreignKey.code).toBe("BAD_REQUEST");
+    expect(mapFoundationError(Object.assign(new Error("Failed query"), { cause: new Error("socket hang up") }), "Bahan").code).toBe("INTERNAL_SERVER_ERROR");
+  });
+  it("maps negative-stock and opname input errors to a clear client error", () => {
+    expect(mapFoundationError(new Error("Stok tidak boleh menjadi negatif."), "Pergerakan stok").code).toBe("BAD_REQUEST");
+    expect(mapFoundationError(new Error("Bahan tidak boleh dihitung lebih dari satu kali."), "Stock opname").code).toBe("BAD_REQUEST");
+  });
 });
