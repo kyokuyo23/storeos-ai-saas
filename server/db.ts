@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, inArray, lt } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, lt, asc } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -454,15 +454,26 @@ export async function listSales() {
 }
 
 const defaults = { businessName: "Kopi Nusantara", storeLocation: "Cibitung Bekasi", currency: "IDR", timezone: "Asia/Jakarta", opnameWarningAgeDays: 3, opnameCriticalAgeDays: 7, inventoryVarianceAbsoluteTolerance: 0.001, inventoryVariancePercentageTolerance: 0 };
+/**
+ * Business settings are a singleton (row id 1). Concurrent first loads used to race and insert two
+ * default rows, and unordered `limit 1` reads could then return different rows to get/update.
+ */
+const SETTINGS_ID = 1;
+async function readSettings(db: Awaited<ReturnType<typeof requireDb>>) {
+  return (await db.select().from(businessSettings).orderBy(asc(businessSettings.id)).limit(1))[0];
+}
 export async function getSettings() {
-  const db = await requireDb(); const existing = await db.select().from(businessSettings).limit(1);
-  if (existing[0]) return existing[0];
-  const result = await db.insert(businessSettings).values(defaults).returning({ insertId: businessSettings.id });
-  return (await db.select().from(businessSettings).where(eq(businessSettings.id, Number(result[0].insertId))).limit(1))[0];
+  const db = await requireDb();
+  const existing = await readSettings(db);
+  if (existing) return existing;
+  await db.insert(businessSettings).values({ id: SETTINGS_ID, ...defaults }).onConflictDoNothing({ target: businessSettings.id });
+  return (await readSettings(db))!;
 }
 export async function updateSettings(input: z.infer<typeof settingsInput>) {
-  const db = await requireDb(); const existing = await db.select().from(businessSettings).limit(1);
-  if (existing[0]) await db.update(businessSettings).set(input).where(eq(businessSettings.id, existing[0].id)); else await db.insert(businessSettings).values(input);
+  const db = await requireDb();
+  const existing = await readSettings(db);
+  if (existing) await db.update(businessSettings).set(input).where(eq(businessSettings.id, existing.id));
+  else await db.insert(businessSettings).values({ id: SETTINGS_ID, ...input }).onConflictDoUpdate({ target: businessSettings.id, set: input });
   return getSettings();
 }
 
