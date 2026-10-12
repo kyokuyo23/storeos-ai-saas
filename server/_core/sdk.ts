@@ -170,8 +170,9 @@ class SDKServer {
     return this.signSession(
       {
         openId,
-        appId: ENV.appId,
-        name: options.name || "",
+        // Self-hosted (non-Manus) deployments have no VITE_APP_ID; verifySession requires a non-empty appId.
+        appId: ENV.appId || "storeos",
+        name: options.name || "Pemilik",
       },
       options
     );

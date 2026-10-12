@@ -3,6 +3,16 @@
 // Downloads return /manus-storage/{key} paths served via 307 redirect.
 
 import { ENV } from "./_core/env";
+import * as db from "./db";
+
+/** Manus Forge when configured; otherwise bytes live in the application database (e.g. Vercel + TiDB). */
+const useForge = () => Boolean(ENV.forgeApiUrl && ENV.forgeApiKey);
+
+function notFound() {
+  const error = new Error("Stored artifact was not found");
+  (error as Error & { code?: string }).code = "STORAGE_NOT_FOUND";
+  return error;
+}
 
 function getForgeConfig() {
   const forgeUrl = ENV.forgeApiUrl;
@@ -33,6 +43,11 @@ export async function storagePut(
   data: Buffer | Uint8Array | string,
   contentType = "application/octet-stream",
 ): Promise<{ key: string; url: string }> {
+  if (!useForge()) {
+    const key = appendHashSuffix(normalizeKey(relKey));
+    await db.putStoredObject(key, Buffer.from(typeof data === "string" ? Buffer.from(data, "utf8") : data), contentType);
+    return { key, url: `db-storage://${key}` };
+  }
   const { forgeUrl, forgeKey } = getForgeConfig();
   const key = appendHashSuffix(normalizeKey(relKey));
 
@@ -103,6 +118,11 @@ export async function storageGetSignedUrl(relKey: string): Promise<string> {
  */
 export async function storageGetBytes(relKey: string): Promise<{ key: string; data: Buffer; contentType: string | null }> {
   const key = normalizeKey(relKey);
+  if (!useForge()) {
+    const row = await db.getStoredObject(key);
+    if (!row) throw notFound();
+    return { key, data: Buffer.from(row.data), contentType: row.contentType };
+  }
   const signedUrl = await storageGetSignedUrl(key);
   const response = await fetch(signedUrl);
   if (response.status === 404) {

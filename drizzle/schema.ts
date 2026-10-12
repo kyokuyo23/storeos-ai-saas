@@ -1,4 +1,6 @@
-import { boolean, decimal, index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { boolean, customType, decimal, index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+
+const longblob = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "longblob" });
 
 /** Retained for framework compatibility; the Step 2 user experience has no authentication screens. */
 export const users = mysqlTable("users", {
@@ -367,6 +369,20 @@ export type ExchangeItemIngredient = typeof exchangeItemIngredients.$inferSelect
 export type ExchangeSettlement = typeof exchangeSettlements.$inferSelect;
 export type Recipe = typeof recipes.$inferSelect;
 export type RecipeItem = typeof recipeItems.$inferSelect;
+/** Self-hosted storage fallback (used when Manus Forge storage is not configured): exact bytes, private to the server. */
+export const storedObjects = mysqlTable("storedObjects", {
+  id: int("id").autoincrement().primaryKey(),
+  storageKey: varchar("storageKey", { length: 512 }).notNull(),
+  contentType: varchar("contentType", { length: 128 }).notNull(),
+  byteSize: int("byteSize").notNull(),
+  data: longblob("data").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("stored_objects_key_unique").on(table.storageKey),
+]);
+
 export type BusinessSettings = typeof businessSettings.$inferSelect;
 export type MonthlyReportArtifact = typeof monthlyReportArtifacts.$inferSelect;
 export type RetentionSummaryExportRow = typeof retentionSummaryExports.$inferSelect;
+
+export type StoredObjectRow = typeof storedObjects.$inferSelect;

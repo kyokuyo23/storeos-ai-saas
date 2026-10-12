@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
+import { registerOwnerLoginRoutes } from "./ownerLogin";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -17,6 +18,7 @@ export function createApp() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  registerOwnerLoginRoutes(app);
   app.post("/api/scheduled/monthly-management-report", handleAutomatedMonthlyReport);
   app.get("/api/reports/monthly-artifacts/:year/:month/:kind", async (req, res) => {
     const year = Number(req.params.year);

@@ -5,6 +5,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Foundation from "./pages/Foundation";
 import { GovernanceAuditQrVerification } from "./pages/GovernanceAuditQrVerification";
 import { StockOpnameHistory } from "./components/StockOpnameHistory";
+import OwnerLogin from "./pages/OwnerLogin";
 import { Route, Switch } from "wouter";
 
 function Router() {
@@ -19,6 +20,7 @@ function Router() {
     <Route path="/alerts" component={() => <Foundation page="alerts" />} />
     <Route path="/insights" component={() => <Foundation page="insights" />} />
     <Route path="/reports" component={() => <Foundation page="reports" />} />
+    <Route path="/login" component={OwnerLogin} />
     <Route path="/verify" component={GovernanceAuditQrVerification} />
     <Route component={() => <Foundation page="dashboard" />} />
   </Switch>;

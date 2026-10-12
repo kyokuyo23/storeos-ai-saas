@@ -2,7 +2,7 @@ import { and, count, desc, eq, gte, inArray, lt } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { drizzle } from "drizzle-orm/mysql2";
 import { nanoid } from "nanoid";
-import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, governanceAuditQrExpiryPolicies, governanceAuditQrExpiryPolicyHistory, governanceAuditQrRevocations, governanceAuditVerificationReceiptIndex, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, stockOpnameFollowUps, users, retentionSummaryExports } from "../drizzle/schema";
+import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, governanceAuditQrExpiryPolicies, governanceAuditQrExpiryPolicyHistory, governanceAuditQrRevocations, governanceAuditVerificationReceiptIndex, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, stockOpnameFollowUps, users, retentionSummaryExports, storedObjects } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import type { z } from "zod";
 import type { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput, stockOpnameFollowUpInput, stockOpnameFollowUpNoteInput, stockOpnameHistoryInput } from "./foundationSchemas";
@@ -645,4 +645,14 @@ export async function getRetentionSummaryExportIndex(ownerOpenId: string, export
     eq(retentionSummaryExports.ownerOpenId, ownerOpenId),
     eq(retentionSummaryExports.exportId, exportId),
   )).limit(1))[0] ?? null;
+}
+
+/** Self-hosted object storage (no Manus Forge): write-once exact bytes keyed by a unique storage key. */
+export async function putStoredObject(storageKey: string, data: Buffer, contentType: string) {
+  const db = await requireDb();
+  await db.insert(storedObjects).values({ storageKey, contentType, byteSize: data.byteLength, data });
+}
+export async function getStoredObject(storageKey: string) {
+  const db = await requireDb();
+  return (await db.select().from(storedObjects).where(eq(storedObjects.storageKey, storageKey)).limit(1))[0] ?? null;
 }

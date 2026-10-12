@@ -10,10 +10,19 @@ Branch: `vercel-deploy`. Vercel membaca `vercel.json`: frontend (`dist/public`) 
 ## Environment Variables (Settings → Environment Variables)
 | Nama | Wajib | Keterangan |
 |---|---|---|
-| `DATABASE_URL` | ya | MySQL (mis. TiDB Cloud, Railway, Aiven). Jalankan `pnpm db:push` sekali ke database ini. |
-| `JWT_SECRET` | ya | String acak panjang untuk cookie sesi. |
-| `OWNER_OPEN_ID` | ya | openId pemilik/owner-admin. |
-| `VITE_APP_ID`, `OAUTH_SERVER_URL` | login | Login saat ini memakai OAuth Manus; di luar Manus perlu diganti. |
-| `BUILT_IN_FORGE_API_URL`, `BUILT_IN_FORGE_API_KEY` | export/artefak | Storage Forge milik Manus; di luar Manus ganti `server/storage.ts` ke S3/Vercel Blob. |
+| `DATABASE_URL` | ya | MySQL. Untuk TiDB Cloud Serverless tambahkan SSL di ujung URL: `mysql://USER:PASS@HOST:4000/DB?ssl={"rejectUnauthorized":true}` |
+| `JWT_SECRET` | ya | String acak panjang (cookie sesi). |
+| `OWNER_OPEN_ID` | ya | ID tetap pemilik, mis. `owner-1`. Akun ini otomatis admin. |
+| `OWNER_PASSWORD` | ya | Kata sandi login pemilik di halaman `/login`. |
 
-Tanpa `DATABASE_URL` halaman tampil tetapi data gagal dimuat. Tanpa login dan storage yang berfungsi, fitur owner-admin (termasuk Phase 2.23) belum dapat dipakai.
+Tidak perlu `VITE_APP_ID`, `OAUTH_SERVER_URL`, atau `BUILT_IN_FORGE_*`. Tanpa Forge, file ekspor dan arsip laporan disimpan (byte persis) di tabel `storedObjects` pada database yang sama. Jika kedua variabel Forge diisi, Forge tetap dipakai.
+
+## Setup database (sekali)
+Dari komputer atau Codespaces: `DATABASE_URL='...' pnpm db:push`. Ini menerapkan semua migrasi, termasuk `0023` (indeks ekspor retensi) dan `0024` (penyimpanan objek).
+
+## Login
+Buka `https://<domain>/login`, masukkan `OWNER_PASSWORD`. Sesi berlaku 1 tahun di cookie. Mengganti `OWNER_PASSWORD` tidak mengeluarkan sesi lama; ganti `JWT_SECRET` untuk memaksa semua sesi keluar.
+
+## Catatan
+- Pembuatan arsip laporan bulanan otomatis (`/api/scheduled/monthly-management-report`) memakai cron Manus dan tidak berjalan di Vercel. Di Vercel, daftar arsip akan kosong sampai pembuatan arsip dijadwalkan dengan cara lain.
+- Analitik Umami hanya dimuat bila `VITE_ANALYTICS_ENDPOINT` dan `VITE_ANALYTICS_WEBSITE_ID` diisi.
