@@ -2,7 +2,11 @@ import { TRPCError } from "@trpc/server";
 
 type DatabaseErrorLike = { code?: string; errno?: number; message?: string };
 
-const CONNECTION_ERROR_CODES = new Set(["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "ENOTFOUND", "PROTOCOL_CONNECTION_LOST", "ER_CON_COUNT_ERROR", "ER_ACCESS_DENIED_ERROR"]);
+const CONNECTION_ERROR_CODES = new Set([
+  "ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "ENOTFOUND", "CONNECT_TIMEOUT", "CONNECTION_CLOSED", "CONNECTION_ENDED", "CONNECTION_DESTROYED",
+  "PROTOCOL_CONNECTION_LOST", "ER_CON_COUNT_ERROR", "ER_ACCESS_DENIED_ERROR",
+  "53300", "57P01", "57P03", "08000", "08001", "08003", "08006", "28P01",
+]);
 
 export function mapFoundationError(error: unknown, entity: string): TRPCError {
   if (error instanceof TRPCError) return error;
@@ -15,10 +19,11 @@ export function mapFoundationError(error: unknown, entity: string): TRPCError {
   if (databaseError.code && CONNECTION_ERROR_CODES.has(databaseError.code)) {
     return new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database tidak tersedia. Silakan coba lagi." });
   }
-  if (databaseError.code === "ER_DUP_ENTRY" || databaseError.errno === 1062) {
+  // PostgreSQL SQLSTATE: 23505 unique_violation, 23503 foreign_key_violation (MySQL codes kept for compatibility).
+  if (databaseError.code === "23505" || databaseError.code === "ER_DUP_ENTRY" || databaseError.errno === 1062) {
     return new TRPCError({ code: "CONFLICT", message: `${entity} sudah ada atau menggunakan SKU yang sama.` });
   }
-  if (databaseError.code === "ER_NO_REFERENCED_ROW_2" || databaseError.errno === 1452) {
+  if (databaseError.code === "23503" || databaseError.code === "ER_NO_REFERENCED_ROW_2" || databaseError.errno === 1452) {
     return new TRPCError({ code: "BAD_REQUEST", message: `Referensi ${entity.toLowerCase()} tidak valid. Silakan periksa data yang dipilih.` });
   }
   if (databaseError.message === "Bahan tidak ditemukan.") {

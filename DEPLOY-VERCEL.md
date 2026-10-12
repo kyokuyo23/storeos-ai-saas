@@ -10,15 +10,21 @@ Branch: `vercel-deploy`. Vercel membaca `vercel.json`: frontend (`dist/public`) 
 ## Environment Variables (Settings → Environment Variables)
 | Nama | Wajib | Keterangan |
 |---|---|---|
-| `DATABASE_URL` | ya | MySQL. Untuk TiDB Cloud Serverless tambahkan SSL di ujung URL: `mysql://USER:PASS@HOST:4000/DB?ssl={"rejectUnauthorized":true}` |
+| `DATABASE_URL` | ya | Supabase (PostgreSQL) lewat **Transaction pooler** (port **6543**), plus `?sslmode=require`. Contoh: `postgresql://postgres.<ref>:<PASSWORD>@aws-0-<region>.pooler.supabase.com:6543/postgres?sslmode=require` (Supabase → Connect → Transaction pooler). |
 | `JWT_SECRET` | ya | String acak panjang (cookie sesi). |
 | `OWNER_OPEN_ID` | ya | ID tetap pemilik, mis. `owner-1` (tidak boleh diawali `cron_`). Akun ini otomatis admin. |
 | `OWNER_PASSWORD` | ya | Kata sandi login pemilik di `/login`, **minimal 12 karakter**, acak. Login ditolak jika lebih pendek. |
 
 Tidak perlu `VITE_APP_ID`, `OAUTH_SERVER_URL`, atau `BUILT_IN_FORGE_*`. Tanpa Forge, file ekspor dan arsip laporan disimpan (byte persis) di tabel `storedObjects` pada database yang sama. Jika kedua variabel Forge diisi, Forge tetap dipakai.
 
-## Setup database (sekali)
-Dari komputer atau Codespaces: `DATABASE_URL='...' pnpm db:push`. Ini menerapkan semua migrasi, termasuk `0023` (indeks ekspor retensi) dan `0024` (penyimpanan objek).
+## Setup database Supabase (sekali) — pilih SATU cara
+Skema ada di `supabase/migrations/` (dibuat dari `drizzle/pg/`). Jangan jalankan dua cara sekaligus (tabel akan dibuat dua kali dan migrasi kedua gagal).
+
+1. **SQL Editor (paling mudah):** Supabase → SQL Editor → tempel isi `supabase/migrations/20261012000000_storeos_init.sql` → Run, lalu `20261012000100_storeos_enable_rls.sql` → Run.
+2. **Integrasi GitHub Supabase:** Project Settings → Integrations → GitHub → pilih repo `kyokuyo23/storeos-ai-saas`, Supabase directory `.`, production branch = branch yang dipakai Vercel, aktifkan **Deploy to production**. Migrasi di `supabase/migrations/` dijalankan otomatis saat push.
+3. **Drizzle (developer):** `DATABASE_URL='<session pooler / direct URL, port 5432>' pnpm drizzle-kit migrate` (memakai `drizzle/pg/`).
+
+Migrasi kedua mengaktifkan Row Level Security di semua tabel tanpa policy: Data API Supabase (anon key) tidak bisa membaca/menulis tabel StoreOS, sedangkan server StoreOS (pemilik tabel) tetap bisa. Folder `drizzle/mysql-legacy/` hanya arsip skema MySQL lama (Manus).
 
 ## Login
 Buka `https://<domain>/login`, masukkan `OWNER_PASSWORD`. Sesi berlaku 1 tahun di cookie. Mengganti `OWNER_PASSWORD` tidak mengeluarkan sesi lama; ganti `JWT_SECRET` untuk memaksa semua sesi keluar.
@@ -30,7 +36,8 @@ Buka `https://<domain>/login`, masukkan `OWNER_PASSWORD`. Sesi berlaku 1 tahun d
 
 ## Batas platform
 - Respons fungsi Vercel maksimal 4,5 MB. Ekspor dan arsip saat ini berukuran beberapa KB; berkas ratusan KB pun aman.
-- TiDB membatasi satu baris sekitar 6 MB (penyimpanan objek di tabel `storedObjects`).
+- File ekspor/arsip disimpan sebagai `bytea` di tabel `storedObjects`; ukurannya beberapa KB sehingga jauh di bawah batas Supabase.
+- Paket gratis Supabase dapat menjeda proyek yang lama tidak aktif; cek kebijakan terbaru di dashboard Supabase.
 
 ## Catatan
 - Pembuatan arsip laporan bulanan otomatis (`/api/scheduled/monthly-management-report`) memakai cron Manus dan tidak berjalan di Vercel. Di Vercel, daftar arsip akan kosong sampai pembuatan arsip dijadwalkan dengan cara lain.

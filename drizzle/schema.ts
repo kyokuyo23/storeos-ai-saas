@@ -1,30 +1,48 @@
-import { boolean, customType, decimal, index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { boolean, customType, index, integer, numeric, pgEnum, pgTable, text, timestamp as pgTimestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 
-const longblob = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "longblob" });
+/**
+ * PostgreSQL (Supabase) schema. Ported 1:1 from the original MySQL schema:
+ * - TIMESTAMP -> timestamptz(0): exact instants, second precision like MySQL TIMESTAMP.
+ * - DECIMAL(p,s) -> numeric(p,s) read as JS numbers.
+ * - ENUM columns -> named PostgreSQL enum types.
+ * - ON UPDATE CURRENT_TIMESTAMP -> application-side $onUpdate.
+ */
+const timestamp = (name: string) => pgTimestamp(name, { withTimezone: true, precision: 0, mode: "date" });
+const int = (name: string) => integer(name);
+const id = () => integer("id").primaryKey().generatedByDefaultAsIdentity();
+const decimal = (name: string, config: { precision: number; scale: number; mode: "number" }) => numeric(name, { precision: config.precision, scale: config.scale, mode: "number" });
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
+
+export const userRole = pgEnum("user_role", ["user", "admin"]);
+export const saleStatus = pgEnum("sale_status", ["completed", "partially_refunded", "voided", "refunded"]);
+export const paymentMethod = pgEnum("payment_method", ["cash", "card"]);
+export const stockMovementType = pgEnum("stock_movement_type", ["purchase", "adjustment", "waste", "opname", "sale", "void", "refund", "partial_refund", "exchange_return", "exchange_sale"]);
+export const opnameFollowUpStatus = pgEnum("opname_follow_up_status", ["needs_follow_up", "in_progress", "resolved"]);
+export const artifactLifecycleStatus = pgEnum("artifact_lifecycle_status", ["generated", "verified", "retained", "eligible_for_archive", "archived"]);
 
 /** Retained for framework compatibility; the Step 2 user experience has no authentication screens. */
-export const users = mysqlTable("users", {
-  id: int("id").autoincrement().primaryKey(),
+export const users = pgTable("users", {
+  id: id(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  role: userRole("role").default("user").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
-export const categories = mysqlTable("categories", {
-  id: int("id").autoincrement().primaryKey(),
+export const categories = pgTable("categories", {
+  id: id(),
   name: varchar("name", { length: 120 }).notNull().unique(),
   description: text("description"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
 });
 
-export const products = mysqlTable("products", {
-  id: int("id").autoincrement().primaryKey(),
+export const products = pgTable("products", {
+  id: id(),
   categoryId: int("categoryId").notNull().references(() => categories.id, { onDelete: "restrict" }),
   name: varchar("name", { length: 180 }).notNull(),
   sku: varchar("sku", { length: 80 }).unique(),
@@ -34,11 +52,11 @@ export const products = mysqlTable("products", {
   unit: varchar("unit", { length: 40 }).notNull(),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
 }, (table) => [index("products_category_idx").on(table.categoryId)]);
 
-export const ingredients = mysqlTable("ingredients", {
-  id: int("id").autoincrement().primaryKey(),
+export const ingredients = pgTable("ingredients", {
+  id: id(),
   name: varchar("name", { length: 180 }).notNull().unique(),
   unit: varchar("unit", { length: 40 }).notNull(),
   costPerUnit: decimal("costPerUnit", { precision: 14, scale: 2, mode: "number" }).notNull(),
@@ -46,13 +64,13 @@ export const ingredients = mysqlTable("ingredients", {
   currentStock: decimal("currentStock", { precision: 14, scale: 3, mode: "number" }).default(0).notNull(),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
 });
 
-export const sales = mysqlTable("sales", {
-  id: int("id").autoincrement().primaryKey(),
+export const sales = pgTable("sales", {
+  id: id(),
   receiptNumber: varchar("receiptNumber", { length: 64 }).notNull().unique(),
-  status: mysqlEnum("status", ["completed", "partially_refunded", "voided", "refunded"]).default("completed").notNull(),
+  status: saleStatus("status").default("completed").notNull(),
   total: decimal("total", { precision: 14, scale: 2, mode: "number" }).notNull(),
   completedAt: timestamp("completedAt").defaultNow().notNull(),
   reversedAt: timestamp("reversedAt"),
@@ -60,8 +78,8 @@ export const sales = mysqlTable("sales", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
-export const saleItems = mysqlTable("saleItems", {
-  id: int("id").autoincrement().primaryKey(),
+export const saleItems = pgTable("saleItems", {
+  id: id(),
   saleId: int("saleId").notNull().references(() => sales.id, { onDelete: "restrict" }),
   productId: int("productId").notNull().references(() => products.id, { onDelete: "restrict" }),
   quantity: int("quantity").notNull(),
@@ -71,8 +89,8 @@ export const saleItems = mysqlTable("saleItems", {
 }, (table) => [index("sale_items_sale_idx").on(table.saleId), index("sale_items_product_idx").on(table.productId)]);
 
 /** Immutable per-unit recipe snapshot, retained so refunds follow the recipe used at sale time. */
-export const saleItemIngredients = mysqlTable("saleItemIngredients", {
-  id: int("id").autoincrement().primaryKey(),
+export const saleItemIngredients = pgTable("saleItemIngredients", {
+  id: id(),
   saleItemId: int("saleItemId").notNull().references(() => saleItems.id, { onDelete: "restrict" }),
   ingredientId: int("ingredientId").notNull().references(() => ingredients.id, { onDelete: "restrict" }),
   unitQuantity: decimal("unitQuantity", { precision: 14, scale: 3, mode: "number" }).notNull(),
@@ -81,8 +99,8 @@ export const saleItemIngredients = mysqlTable("saleItemIngredients", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => [index("sale_item_ingredients_item_idx").on(table.saleItemId), index("sale_item_ingredients_ingredient_idx").on(table.ingredientId)]);
 
-export const partialRefunds = mysqlTable("partialRefunds", {
-  id: int("id").autoincrement().primaryKey(),
+export const partialRefunds = pgTable("partialRefunds", {
+  id: id(),
   saleId: int("saleId").notNull().references(() => sales.id, { onDelete: "restrict" }),
   saleItemId: int("saleItemId").notNull().references(() => saleItems.id, { onDelete: "restrict" }),
   quantity: int("quantity").notNull(),
@@ -91,8 +109,8 @@ export const partialRefunds = mysqlTable("partialRefunds", {
 }, (table) => [index("partial_refunds_sale_idx").on(table.saleId), index("partial_refunds_item_idx").on(table.saleItemId)]);
 
 /** A return from one original sale line combined with one or more replacement products. */
-export const exchanges = mysqlTable("exchanges", {
-  id: int("id").autoincrement().primaryKey(),
+export const exchanges = pgTable("exchanges", {
+  id: id(),
   saleId: int("saleId").notNull().references(() => sales.id, { onDelete: "restrict" }),
   saleItemId: int("saleItemId").notNull().references(() => saleItems.id, { onDelete: "restrict" }),
   returnedQuantity: int("returnedQuantity").notNull(),
@@ -104,8 +122,8 @@ export const exchanges = mysqlTable("exchanges", {
 }, (table) => [index("exchanges_sale_idx").on(table.saleId), index("exchanges_sale_item_idx").on(table.saleItemId)]);
 
 /** Replacement products issued in an exchange, with their sale-time price snapshots. */
-export const exchangeItems = mysqlTable("exchangeItems", {
-  id: int("id").autoincrement().primaryKey(),
+export const exchangeItems = pgTable("exchangeItems", {
+  id: id(),
   exchangeId: int("exchangeId").notNull().references(() => exchanges.id, { onDelete: "restrict" }),
   productId: int("productId").notNull().references(() => products.id, { onDelete: "restrict" }),
   quantity: int("quantity").notNull(),
@@ -115,8 +133,8 @@ export const exchangeItems = mysqlTable("exchangeItems", {
 }, (table) => [index("exchange_items_exchange_idx").on(table.exchangeId), index("exchange_items_product_idx").on(table.productId)]);
 
 /** Immutable per-unit recipe snapshot for each replacement product issued in an exchange. */
-export const exchangeItemIngredients = mysqlTable("exchangeItemIngredients", {
-  id: int("id").autoincrement().primaryKey(),
+export const exchangeItemIngredients = pgTable("exchangeItemIngredients", {
+  id: id(),
   exchangeItemId: int("exchangeItemId").notNull().references(() => exchangeItems.id, { onDelete: "restrict" }),
   ingredientId: int("ingredientId").notNull().references(() => ingredients.id, { onDelete: "restrict" }),
   unitQuantity: decimal("unitQuantity", { precision: 14, scale: 3, mode: "number" }).notNull(),
@@ -126,22 +144,22 @@ export const exchangeItemIngredients = mysqlTable("exchangeItemIngredients", {
 }, (table) => [index("exchange_item_ingredients_item_idx").on(table.exchangeItemId), index("exchange_item_ingredients_ingredient_idx").on(table.ingredientId)]);
 
 /** A single full payment collected when an exchange has a positive payment adjustment. */
-export const exchangeSettlements = mysqlTable("exchangeSettlements", {
-  id: int("id").autoincrement().primaryKey(),
+export const exchangeSettlements = pgTable("exchangeSettlements", {
+  id: id(),
   exchangeId: int("exchangeId").notNull().unique().references(() => exchanges.id, { onDelete: "restrict" }),
   amount: decimal("amount", { precision: 14, scale: 2, mode: "number" }).notNull(),
-  paymentMethod: mysqlEnum("paymentMethod", ["cash", "card"]).notNull(),
+  paymentMethod: paymentMethod("paymentMethod").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
-export const stockMovements = mysqlTable("stockMovements", {
-  id: int("id").autoincrement().primaryKey(),
+export const stockMovements = pgTable("stockMovements", {
+  id: id(),
   ingredientId: int("ingredientId").notNull().references(() => ingredients.id, { onDelete: "restrict" }),
   saleId: int("saleId").references(() => sales.id, { onDelete: "restrict" }),
   saleItemId: int("saleItemId").references(() => saleItems.id, { onDelete: "restrict" }),
   partialRefundId: int("partialRefundId").references(() => partialRefunds.id, { onDelete: "restrict" }),
   exchangeId: int("exchangeId").references(() => exchanges.id, { onDelete: "restrict" }),
-  type: mysqlEnum("type", ["purchase", "adjustment", "waste", "opname", "sale", "void", "refund", "partial_refund", "exchange_return", "exchange_sale"]).notNull(),
+  type: stockMovementType("type").notNull(),
   quantityDelta: decimal("quantityDelta", { precision: 14, scale: 3, mode: "number" }).notNull(),
   balanceAfter: decimal("balanceAfter", { precision: 14, scale: 3, mode: "number" }).notNull(),
   note: text("note"),
@@ -150,17 +168,17 @@ export const stockMovements = mysqlTable("stockMovements", {
 }, (table) => [index("stock_movements_ingredient_occurred_idx").on(table.ingredientId, table.occurredAt), index("stock_movements_sale_idx").on(table.saleId), index("stock_movements_sale_item_idx").on(table.saleItemId), index("stock_movements_exchange_idx").on(table.exchangeId)]);
 
 /** Follow-up metadata only; the immutable inventory audit remains in stockMovements. */
-export const stockOpnameFollowUps = mysqlTable("stockOpnameFollowUps", {
-  id: int("id").autoincrement().primaryKey(),
+export const stockOpnameFollowUps = pgTable("stockOpnameFollowUps", {
+  id: id(),
   auditReference: varchar("auditReference", { length: 80 }).notNull().unique(),
-  status: mysqlEnum("status", ["needs_follow_up", "in_progress", "resolved"]).default("needs_follow_up").notNull(),
+  status: opnameFollowUpStatus("status").default("needs_follow_up").notNull(),
   followUpNote: text("followUpNote"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
 });
 
-export const monthlyReportArtifacts = mysqlTable("monthlyReportArtifacts", {
-  id: int("id").autoincrement().primaryKey(),
+export const monthlyReportArtifacts = pgTable("monthlyReportArtifacts", {
+  id: id(),
   /** The single-store owner identity. Legacy Phase 2.2 rows use the safe legacy scope. */
   ownerOpenId: varchar("ownerOpenId", { length: 64 }).default("legacy-single-store").notNull(),
   year: int("year").notNull(),
@@ -182,7 +200,7 @@ export const monthlyReportArtifacts = mysqlTable("monthlyReportArtifacts", {
   pdfSha256: varchar("pdfSha256", { length: 64 }).notNull(),
   pdfBytes: int("pdfBytes").notNull(),
   /** Governance state is additive and never changes the immutable report content. */
-  lifecycleStatus: mysqlEnum("lifecycleStatus", ["generated", "verified", "retained", "eligible_for_archive", "archived"]).default("retained").notNull(),
+  lifecycleStatus: artifactLifecycleStatus("lifecycleStatus").default("retained").notNull(),
   verifiedAt: timestamp("verifiedAt"),
   retainedAt: timestamp("retainedAt"),
   archiveEligibleAt: timestamp("archiveEligibleAt"),
@@ -199,11 +217,11 @@ export const monthlyReportArtifacts = mysqlTable("monthlyReportArtifacts", {
 ]);
 
 /** Immutable lifecycle audit trail for managed report artifacts. */
-export const monthlyReportArtifactLifecycleEvents = mysqlTable("monthlyReportArtifactLifecycleEvents", {
-  id: int("id").autoincrement().primaryKey(),
+export const monthlyReportArtifactLifecycleEvents = pgTable("monthlyReportArtifactLifecycleEvents", {
+  id: id(),
   artifactId: int("artifactId").notNull().references(() => monthlyReportArtifacts.id, { onDelete: "restrict" }),
   ownerOpenId: varchar("ownerOpenId", { length: 64 }).notNull(),
-  lifecycleStatus: mysqlEnum("lifecycleStatus", ["generated", "verified", "retained", "eligible_for_archive", "archived"]).notNull(),
+  lifecycleStatus: artifactLifecycleStatus("lifecycleStatus").notNull(),
   occurredAt: timestamp("occurredAt").defaultNow().notNull(),
   reason: varchar("reason", { length: 160 }),
   /** Application-generated actor label; no credential or storage identity is recorded. */
@@ -222,25 +240,25 @@ export const monthlyReportArtifactLifecycleEvents = mysqlTable("monthlyReportArt
   uniqueIndex("monthly_report_artifact_lifecycle_event_key_unique").on(table.artifactId, table.eventKey),
 ]);
 
-export const recipes = mysqlTable("recipes", {
-  id: int("id").autoincrement().primaryKey(),
+export const recipes = pgTable("recipes", {
+  id: id(),
   productId: int("productId").notNull().unique().references(() => products.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 180 }).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
 });
 
-export const recipeItems = mysqlTable("recipeItems", {
-  id: int("id").autoincrement().primaryKey(),
+export const recipeItems = pgTable("recipeItems", {
+  id: id(),
   recipeId: int("recipeId").notNull().references(() => recipes.id, { onDelete: "cascade" }),
   ingredientId: int("ingredientId").notNull().references(() => ingredients.id, { onDelete: "restrict" }),
   quantity: decimal("quantity", { precision: 14, scale: 3, mode: "number" }).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
 }, (table) => [index("recipe_items_recipe_idx").on(table.recipeId), index("recipe_items_ingredient_idx").on(table.ingredientId)]);
 
-export const businessSettings = mysqlTable("businessSettings", {
-  id: int("id").autoincrement().primaryKey(),
+export const businessSettings = pgTable("businessSettings", {
+  id: id(),
   businessName: varchar("businessName", { length: 160 }).notNull(),
   storeLocation: varchar("storeLocation", { length: 200 }).notNull(),
   currency: varchar("currency", { length: 12 }).notNull(),
@@ -250,20 +268,20 @@ export const businessSettings = mysqlTable("businessSettings", {
   inventoryVarianceAbsoluteTolerance: decimal("inventoryVarianceAbsoluteTolerance", { precision: 14, scale: 3, mode: "number" }).default(0.001).notNull(),
   inventoryVariancePercentageTolerance: decimal("inventoryVariancePercentageTolerance", { precision: 6, scale: 3, mode: "number" }).default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
 });
 
-export const governanceAuditQrExpiryPolicies = mysqlTable("governanceAuditQrExpiryPolicies", {
-  id: int("id").autoincrement().primaryKey(),
+export const governanceAuditQrExpiryPolicies = pgTable("governanceAuditQrExpiryPolicies", {
+  id: id(),
   ownerOpenId: varchar("ownerOpenId", { length: 64 }).notNull(),
   validityMinutes: int("validityMinutes").default(30).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
 }, (table) => [uniqueIndex("governance_audit_qr_expiry_owner_unique").on(table.ownerOpenId)]);
 
 /** Append-only owner audit trail for effective Governance Audit QR expiry-policy changes. */
-export const governanceAuditQrExpiryPolicyHistory = mysqlTable("governanceAuditQrExpiryPolicyHistory", {
-  id: int("id").autoincrement().primaryKey(),
+export const governanceAuditQrExpiryPolicyHistory = pgTable("governanceAuditQrExpiryPolicyHistory", {
+  id: id(),
   ownerOpenId: varchar("ownerOpenId", { length: 64 }).notNull(),
   eventId: varchar("eventId", { length: 48 }).notNull(),
   previousValidityMinutes: int("previousValidityMinutes").notNull(),
@@ -277,8 +295,8 @@ export const governanceAuditQrExpiryPolicyHistory = mysqlTable("governanceAuditQ
 ]);
 
 /** Immutable governance state for a single opaque QR verification reference. */
-export const governanceAuditQrRevocations = mysqlTable("governanceAuditQrRevocations", {
-  id: int("id").autoincrement().primaryKey(),
+export const governanceAuditQrRevocations = pgTable("governanceAuditQrRevocations", {
+  id: id(),
   ownerOpenId: varchar("ownerOpenId", { length: 64 }).notNull(),
   referenceId: varchar("referenceId", { length: 40 }).notNull(),
   exportId: varchar("exportId", { length: 128 }).notNull(),
@@ -298,8 +316,8 @@ export const governanceAuditQrRevocations = mysqlTable("governanceAuditQrRevocat
  * exact-byte governance export verification. This intentionally stores only
  * query metadata and integrity descriptors, never the downloadable bytes.
  */
-export const governanceAuditVerificationReceiptIndex = mysqlTable("governanceAuditVerificationReceiptIndex", {
-  id: int("id").autoincrement().primaryKey(),
+export const governanceAuditVerificationReceiptIndex = pgTable("governanceAuditVerificationReceiptIndex", {
+  id: id(),
   ownerOpenId: varchar("ownerOpenId", { length: 64 }).notNull(),
   receiptId: varchar("receiptId", { length: 160 }).notNull(),
   receiptFormat: varchar("receiptFormat", { length: 8 }).notNull(),
@@ -332,8 +350,8 @@ export const governanceAuditVerificationReceiptIndex = mysqlTable("governanceAud
 ]);
 
 /** Phase 2.23: metadata-only index of retention summary exports; artifact bytes stay in durable storage. */
-export const retentionSummaryExports = mysqlTable("retentionSummaryExports", {
-  id: int("id").autoincrement().primaryKey(),
+export const retentionSummaryExports = pgTable("retentionSummaryExports", {
+  id: id(),
   ownerOpenId: varchar("ownerOpenId", { length: 64 }).notNull(),
   exportId: varchar("exportId", { length: 128 }).notNull(),
   format: varchar("format", { length: 8 }).notNull(),
@@ -370,12 +388,12 @@ export type ExchangeSettlement = typeof exchangeSettlements.$inferSelect;
 export type Recipe = typeof recipes.$inferSelect;
 export type RecipeItem = typeof recipeItems.$inferSelect;
 /** Self-hosted storage fallback (used when Manus Forge storage is not configured): exact bytes, private to the server. */
-export const storedObjects = mysqlTable("storedObjects", {
-  id: int("id").autoincrement().primaryKey(),
+export const storedObjects = pgTable("storedObjects", {
+  id: id(),
   storageKey: varchar("storageKey", { length: 512 }).notNull(),
   contentType: varchar("contentType", { length: 128 }).notNull(),
   byteSize: int("byteSize").notNull(),
-  data: longblob("data").notNull(),
+  data: bytea("data").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => [
   uniqueIndex("stored_objects_key_unique").on(table.storageKey),

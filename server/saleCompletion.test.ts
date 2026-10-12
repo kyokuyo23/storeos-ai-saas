@@ -1,3 +1,4 @@
+import { pgValues, pgWhere } from "./testing/pgFakes";
 import { describe, expect, it } from "vitest";
 import { completeSaleInTransaction } from "./db";
 
@@ -7,7 +8,7 @@ function transactionDouble(selections: unknown[][]) {
   let insertId = 51;
   const tx = {
     select: () => ({ from: () => ({ where: async () => selections.shift() ?? [] }) }),
-    insert: () => ({ values: async (values: unknown) => { inserts.push(values); return [{ insertId: insertId++ }]; } }),
+    insert: () => ({ values: pgValues(async (values: unknown) => { inserts.push(values); return [{ insertId: insertId++ }]; }) }),
     update: () => ({ set: (values: unknown) => ({ where: async () => { updates.push(values); } }) }),
   };
   return { tx, inserts, updates };

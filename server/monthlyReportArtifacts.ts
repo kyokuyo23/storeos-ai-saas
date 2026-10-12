@@ -347,7 +347,7 @@ async function recordLifecycleEvent(
     return true;
   } catch (error) {
     const candidate = error as { code?: string; message?: string };
-    if (candidate.code === "ER_DUP_ENTRY" || candidate.message?.includes("Duplicate entry")) return false;
+    if (candidate.code === "23505" || (candidate as { cause?: { code?: string } }).cause?.code === "23505") return false;
     throw error;
   }
 }
@@ -419,7 +419,7 @@ export async function persistMonthlyReportArtifacts(report: MonthlyReport) {
       lifecycleStatus: "retained",
       verifiedAt: generatedAt,
       retainedAt: generatedAt,
-    });
+    }).returning({ insertId: monthlyReportArtifacts.id });
     const id = Number(result[0].insertId);
     const inserted = (await db.select().from(monthlyReportArtifacts).where(eq(monthlyReportArtifacts.id, id)).limit(1))[0];
     if (!inserted) throw new Error("Monthly report artifact record was not created");
@@ -802,10 +802,11 @@ export async function markMonthlyReportArtifactsEligibleForArchive(
     .filter((artifact) => belongsToOwnerScope(artifact, ownerOpenId) && isProductionArtifact(artifact) && artifact.lifecycleStatus === "retained");
   let affectedRows = 0;
   for (const artifact of candidates) {
-    const result = await db.update(monthlyReportArtifacts).set({ lifecycleStatus: "eligible_for_archive", archiveEligibleAt: now })
-      .where(and(eq(monthlyReportArtifacts.id, artifact.id), eq(monthlyReportArtifacts.lifecycleStatus, "retained")));
-    const header = Array.isArray(result) ? result[0] : result;
-    const applied = typeof (header as { affectedRows?: unknown } | undefined)?.affectedRows === "number" ? (header as { affectedRows: number }).affectedRows > 0 : true;
+    // Conditional update; RETURNING tells us whether this call won the transition (no duplicate events).
+    const updated = await db.update(monthlyReportArtifacts).set({ lifecycleStatus: "eligible_for_archive", archiveEligibleAt: now })
+      .where(and(eq(monthlyReportArtifacts.id, artifact.id), eq(monthlyReportArtifacts.lifecycleStatus, "retained")))
+      .returning({ id: monthlyReportArtifacts.id });
+    const applied = updated.length > 0;
     if (applied) {
       affectedRows += 1;
       await recordLifecycleEvent(db, artifact, "eligible_for_archive", now, { reason: "retention_window_elapsed", actor: "retention-governance", source: "retention_policy" });
@@ -823,10 +824,10 @@ export async function archiveEligibleMonthlyReportArtifacts(now = new Date(), ow
     .filter((artifact) => artifact.lifecycleStatus === "eligible_for_archive" && belongsToOwnerScope(artifact, ownerOpenId) && isProductionArtifact(artifact));
   let affectedRows = 0;
   for (const artifact of candidates) {
-    const result = await db.update(monthlyReportArtifacts).set({ lifecycleStatus: "archived", archivedAt: now, archiveReason: "retention_window_elapsed", retiredAt: now })
-      .where(and(eq(monthlyReportArtifacts.id, artifact.id), eq(monthlyReportArtifacts.lifecycleStatus, "eligible_for_archive"), isNull(monthlyReportArtifacts.retiredAt)));
-    const header = Array.isArray(result) ? result[0] : result;
-    const applied = typeof (header as { affectedRows?: unknown } | undefined)?.affectedRows === "number" ? (header as { affectedRows: number }).affectedRows > 0 : true;
+    const updated = await db.update(monthlyReportArtifacts).set({ lifecycleStatus: "archived", archivedAt: now, archiveReason: "retention_window_elapsed", retiredAt: now })
+      .where(and(eq(monthlyReportArtifacts.id, artifact.id), eq(monthlyReportArtifacts.lifecycleStatus, "eligible_for_archive"), isNull(monthlyReportArtifacts.retiredAt)))
+      .returning({ id: monthlyReportArtifacts.id });
+    const applied = updated.length > 0;
     if (applied) {
       affectedRows += 1;
       await recordLifecycleEvent(db, artifact, "archived", now, { reason: "binary_access_revoked_audit_metadata_preserved", actor: "retention-governance", source: "retention_policy" });
@@ -885,11 +886,9 @@ export async function archiveMonthlyReportArtifactWithOwnerApproval(
       eq(monthlyReportArtifacts.lifecycleStatus, "eligible_for_archive"),
       isNull(monthlyReportArtifacts.archivedAt),
       isNull(monthlyReportArtifacts.retiredAt),
-    ));
-  const header = Array.isArray(update) ? update[0] : update;
-  const affectedRows = typeof (header as { affectedRows?: unknown } | undefined)?.affectedRows === "number"
-    ? (header as { affectedRows: number }).affectedRows
-    : 1;
+    ))
+    .returning({ id: monthlyReportArtifacts.id });
+  const affectedRows = update.length;
   if (affectedRows < 1) {
     const latest = (await db.select().from(monthlyReportArtifacts).where(eq(monthlyReportArtifacts.id, artifact.id)).limit(1))[0];
     if (latest?.archivedAt || latest?.retiredAt || latest?.lifecycleStatus === "archived") {

@@ -1,3 +1,4 @@
+import { pgValues, pgWhere } from "./testing/pgFakes";
 import { describe, expect, it } from "vitest";
 import { reverseSaleInTransaction, reverseSaleWithClient } from "./db";
 
@@ -7,7 +8,7 @@ function transactionDouble(selections: unknown[][]) {
   const queryResult = (rows: unknown[]) => Object.assign(Promise.resolve(rows), { limit: async () => rows });
   const tx = {
     select: () => ({ from: () => ({ where: () => queryResult(selections.shift() ?? []) }) }),
-    insert: () => ({ values: async (values: unknown) => { inserts.push(values); return [{ insertId: 1 }]; } }),
+    insert: () => ({ values: pgValues(async (values: unknown) => { inserts.push(values); return [{ insertId: 1 }]; }) }),
     update: () => ({ set: (values: unknown) => ({ where: async () => { updates.push(values); } }) }),
   };
   return { tx, inserts, updates };
@@ -60,7 +61,7 @@ describe("sale reversal transaction", () => {
         if (values.currentStock !== undefined) state.stocks[ingredientUpdateIndex++] = values.currentStock;
         if (values.status) state.status = values.status;
       } }) }),
-      insert: () => ({ values: async () => { throw new Error("Audit gagal ditulis."); } }),
+      insert: () => ({ values: pgValues(async () => { throw new Error("Audit gagal ditulis."); }) }),
     };
     const client = { transaction: async (callback: (transaction: typeof tx) => Promise<unknown>) => {
       const before = snapshot();

@@ -1,6 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const { artifactRows, lifecycleEvents, objects, storagePut, storageGetBytes, db, updateWhere } = vi.hoisted(() => {
+  // PostgreSQL-shaped drizzle doubles (inlined: vi.hoisted runs before imports).
+  const pgValues = <A extends unknown[], T>(fn: (...args: A) => Promise<T>) => (...args: A) => { const promise = fn(...args); return Object.assign(promise, { returning: () => promise, onConflictDoUpdate: () => promise, onConflictDoNothing: () => promise }); };
+  const pgWhere = <A extends unknown[], T>(fn: (...args: A) => Promise<T> | T) => (...args: A) => { const promise = Promise.resolve(fn(...args)); return Object.assign(promise, { returning: () => promise.then((result) => { const affected = (result as { affectedRows?: number } | undefined)?.affectedRows; return typeof affected === "number" ? Array.from({ length: affected }, (_, index) => ({ id: index + 1 })) : [{ id: 1 }]; }) }); };
   const artifactRows: any[] = [];
   const lifecycleEvents: any[] = [];
   const objects = new Map<string, Buffer>();
@@ -38,7 +41,7 @@ const { artifactRows, lifecycleEvents, objects, storagePut, storageGetBytes, db,
   const db = {
     select: () => ({ from: (table: any) => selectRows(table) }),
     insert: () => ({
-      values: async (value: any) => {
+      values: pgValues(async (value: any) => {
         if ("artifactId" in value) {
           lifecycleEvents.push({ id: lifecycleEvents.length + 1, ...value });
           return [{ insertId: lifecycleEvents.length }];
@@ -56,9 +59,9 @@ const { artifactRows, lifecycleEvents, objects, storagePut, storageGetBytes, db,
           createdAt: new Date("2026-02-01T00:15:00.000Z"),
         });
         return [{ insertId: artifactRows.length }];
-      },
+      }),
     }),
-    update: () => ({ set: (values: any) => ({ where: () => updateWhere(values) }) }),
+    update: () => ({ set: (values: any) => ({ where: pgWhere(() => updateWhere(values)) }) }),
   };
   return { artifactRows, lifecycleEvents, objects, storagePut, storageGetBytes, db, updateWhere };
 });

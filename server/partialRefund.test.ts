@@ -1,3 +1,4 @@
+import { pgValues, pgWhere } from "./testing/pgFakes";
 import { describe, expect, it } from "vitest";
 import { partialRefundInTransaction, partialRefundWithClient } from "./db";
 
@@ -8,7 +9,7 @@ function transactionDouble(selections: unknown[][]) {
   const queryResult = (rows: unknown[]) => Object.assign(Promise.resolve(rows), { limit: async () => rows });
   const tx = {
     select: () => ({ from: () => ({ where: () => queryResult(selections.shift() ?? []) }) }),
-    insert: () => ({ values: async (values: unknown) => { inserts.push(values); return [{ insertId: insertId++ }]; } }),
+    insert: () => ({ values: pgValues(async (values: unknown) => { inserts.push(values); return [{ insertId: insertId++ }]; }) }),
     update: () => ({ set: (values: unknown) => ({ where: async () => { updates.push(values); } }) }),
   };
   return { tx, inserts, updates };
@@ -50,7 +51,7 @@ describe("partial sale-line refunds", () => {
     const tx = {
       select: (() => { const rows = [[{ id: 51, receiptNumber: "TRX-01", status: "completed" }], [{ id: 61, productId: 1, quantity: 2 }], [{ ingredientId: 11, unitQuantity: 0.2 }], [], [{ id: 11, currentStock: 1.6 }]]; let index = 0; return () => ({ from: () => ({ where: () => Object.assign(Promise.resolve(rows[index++] ?? []), { limit: async () => rows[index - 1] ?? [] }) }) }); })(),
       update: () => ({ set: (values: { currentStock?: number; status?: string }) => ({ where: async () => { if (values.currentStock !== undefined) state.stock = values.currentStock; if (values.status) state.status = values.status; } }) }),
-      insert: (() => { let count = 0; return () => ({ values: async () => { count += 1; if (count === 1) { state.refundRecorded = true; return [{ insertId: 71 }]; } throw new Error("Audit gagal ditulis."); } }); })(),
+      insert: (() => { let count = 0; return () => ({ values: pgValues(async () => { count += 1; if (count === 1) { state.refundRecorded = true; return [{ insertId: 71 }]; } throw new Error("Audit gagal ditulis."); }) }); })(),
     };
     const client = { transaction: async (callback: (transaction: typeof tx) => Promise<unknown>) => { const before = { ...state }; try { return await callback(tx); } catch (error) { Object.assign(state, before); throw error; } } };
     await expect(partialRefundWithClient(client, { saleId: 51, saleItemId: 61, quantity: 1 })).rejects.toThrow("Audit gagal ditulis.");

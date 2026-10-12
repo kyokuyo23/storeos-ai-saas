@@ -1,0 +1,3 @@
+# Minimal Supabase CLI / GitHub integration config for StoreOS.
+# Schema changes live in supabase/migrations (generated from drizzle/pg). Seeds are not used.
+project_id = "storeos"

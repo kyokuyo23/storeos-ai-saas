@@ -11,7 +11,8 @@ type StoredReceipt = {
 
 const persistedRows: StoredReceipt[] = [];
 
-vi.mock("drizzle-orm/mysql2", () => ({
+vi.mock("postgres", () => ({ default: () => ({}) }));
+vi.mock("drizzle-orm/postgres-js", () => ({
   drizzle: () => ({
     select: () => ({
       from: () => ({
@@ -27,7 +28,7 @@ vi.mock("drizzle-orm/mysql2", () => ({
     insert: () => ({
       values: async (input: Omit<StoredReceipt, "id" | "createdAt">) => {
         if (persistedRows.some((row) => row.ownerOpenId === input.ownerOpenId && row.receiptSha256 === input.receiptSha256)) {
-          throw Object.assign(new Error("Duplicate entry"), { code: "ER_DUP_ENTRY" });
+          throw Object.assign(new Error("Duplicate entry"), { code: "23505" });
         }
         persistedRows.push({ ...input, id: persistedRows.length + 1, createdAt: new Date("2026-08-27T00:00:00.000Z") });
       },

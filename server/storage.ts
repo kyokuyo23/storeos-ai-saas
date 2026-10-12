@@ -5,7 +5,7 @@
 import { ENV } from "./_core/env";
 import * as db from "./db";
 
-/** Manus Forge when configured; otherwise bytes live in the application database (e.g. Vercel + TiDB). */
+/** Manus Forge when configured; otherwise bytes live in the application database (e.g. Vercel + Supabase). */
 const useForge = () => Boolean(ENV.forgeApiUrl && ENV.forgeApiKey);
 
 function notFound() {

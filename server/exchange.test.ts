@@ -1,3 +1,4 @@
+import { pgValues, pgWhere } from "./testing/pgFakes";
 import { describe, expect, it } from "vitest";
 import { exchangeInTransaction, exchangeWithClient } from "./db";
 
@@ -9,7 +10,7 @@ function transactionDouble(selections: unknown[][], failAtInsert?: number) {
   const queryResult = (rows: unknown[]) => Object.assign(Promise.resolve(rows), { limit: async () => rows });
   const tx = {
     select: () => ({ from: () => ({ where: () => queryResult(selections.shift() ?? []) }) }),
-    insert: () => ({ values: async (values: unknown) => { insertCount += 1; if (failAtInsert === insertCount) throw new Error("Audit penukaran gagal ditulis."); inserts.push(values); return [{ insertId: insertId++ }]; } }),
+    insert: () => ({ values: pgValues(async (values: unknown) => { insertCount += 1; if (failAtInsert === insertCount) throw new Error("Audit penukaran gagal ditulis."); inserts.push(values); return [{ insertId: insertId++ }]; }) }),
     update: () => ({ set: (values: unknown) => ({ where: async () => { updates.push(values); } }) }),
   };
   return { tx, inserts, updates };

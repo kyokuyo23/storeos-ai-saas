@@ -10,7 +10,8 @@ export function isRawInternalError(cause: unknown) {
   return Boolean(
     candidate.message?.startsWith("Failed query")
     || candidate.sqlMessage
-    || (typeof candidate.code === "string" && candidate.code.startsWith("ER_"))
+    || (typeof candidate.code === "string" && (candidate.code.startsWith("ER_") || /^[0-9A-Z]{5}$/.test(candidate.code)))
+    || Boolean((candidate as { severity?: unknown; routine?: unknown }).severity && (candidate as { routine?: unknown }).routine)
     || (candidate.cause && typeof candidate.cause === "object" && ((candidate.cause as { sqlMessage?: unknown }).sqlMessage || typeof (candidate.cause as { code?: unknown }).code === "string")),
   );
 }

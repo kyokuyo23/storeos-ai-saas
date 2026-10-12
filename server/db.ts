@@ -1,6 +1,7 @@
 import { and, count, desc, eq, gte, inArray, lt } from "drizzle-orm";
 import { createHash } from "node:crypto";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import { nanoid } from "nanoid";
 import { businessSettings, categories, exchangeItemIngredients, exchangeItems, exchanges, exchangeSettlements, governanceAuditQrExpiryPolicies, governanceAuditQrExpiryPolicyHistory, governanceAuditQrRevocations, governanceAuditVerificationReceiptIndex, ingredients, InsertUser, partialRefunds, products, recipeItems, recipes, saleItemIngredients, saleItems, sales, stockMovements, stockOpnameFollowUps, users, retentionSummaryExports, storedObjects } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -15,9 +16,16 @@ import { GOVERNANCE_AUDIT_QR_DEFAULT_VALIDITY_MINUTES, isValidGovernanceAuditQrV
 import { normalizeGovernanceAuditQrRevocationReason } from "./governanceAuditQrRevocation";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+
+/** PostgreSQL unique_violation (23505), directly or wrapped by drizzle's DrizzleQueryError.cause. */
+export function isUniqueViolation(error: unknown) {
+  const candidate = error as { code?: string; cause?: { code?: string } } | null;
+  return candidate?.code === "23505" || candidate?.cause?.code === "23505";
+}
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
-    try { _db = drizzle(process.env.DATABASE_URL); }
+    // prepare:false is required behind Supabase's transaction pooler (Supavisor, port 6543).
+    try { _db = drizzle(postgres(process.env.DATABASE_URL, { prepare: false, max: 5 })); }
     catch (error) { console.warn("[Database] Failed to connect:", error); _db = null; }
   }
   return _db;
@@ -38,7 +46,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   });
   values.role = user.role ?? (user.openId === ENV.ownerOpenId ? "admin" : "user");
   updateSet.role = values.role;
-  await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+  await db.insert(users).values(values).onConflictDoUpdate({ target: users.openId, set: updateSet });
 }
 export async function getUserByOpenId(openId: string) {
   const db = await getDb();
@@ -49,7 +57,7 @@ export async function getUserByOpenId(openId: string) {
 export async function listCategories() { return (await requireDb()).select().from(categories).orderBy(categories.name); }
 export async function createCategory(input: z.infer<typeof categoryInput>) {
   const db = await requireDb();
-  const result = await db.insert(categories).values({ name: input.name, description: input.description || null });
+  const result = await db.insert(categories).values({ name: input.name, description: input.description || null }).returning({ insertId: categories.id });
   return (await db.select().from(categories).where(eq(categories.id, Number(result[0].insertId))).limit(1))[0];
 }
 export async function listProducts() {
@@ -58,13 +66,13 @@ export async function listProducts() {
 }
 export async function createProduct(input: z.infer<typeof productInput>) {
   const db = await requireDb();
-  return Number((await db.insert(products).values({ ...input, sku: input.sku || null, description: input.description || null }))[0].insertId);
+  return Number((await db.insert(products).values({ ...input, sku: input.sku || null, description: input.description || null }).returning({ insertId: products.id }))[0].insertId);
 }
 export async function updateProduct(id: number, input: z.infer<typeof productInput>) {
   await (await requireDb()).update(products).set({ ...input, sku: input.sku || null, description: input.description || null }).where(eq(products.id, id));
 }
 export async function listIngredients() { return (await requireDb()).select().from(ingredients).orderBy(ingredients.name); }
-export async function createIngredient(input: z.infer<typeof ingredientInput>) { return Number((await (await requireDb()).insert(ingredients).values(input))[0].insertId); }
+export async function createIngredient(input: z.infer<typeof ingredientInput>) { return Number((await (await requireDb()).insert(ingredients).values(input).returning({ insertId: ingredients.id }))[0].insertId); }
 export async function updateIngredient(id: number, input: z.infer<typeof ingredientInput>) { await (await requireDb()).update(ingredients).set(input).where(eq(ingredients.id, id)); }
 export async function listStockMovements() {
   const db = await requireDb();
@@ -89,7 +97,7 @@ export async function updateStockOpnameFollowUp(input: z.infer<typeof stockOpnam
   if (!session) throw new Error("Sesi opname dengan referensi audit tersebut tidak ditemukan.");
   if (session.differenceItems === 0) throw new Error("Status tindak lanjut hanya tersedia untuk sesi yang memiliki selisih stok.");
   const db = await requireDb();
-  await db.insert(stockOpnameFollowUps).values({ auditReference: session.reference, status: input.status }).onDuplicateKeyUpdate({ set: { status: input.status } });
+  await db.insert(stockOpnameFollowUps).values({ auditReference: session.reference, status: input.status }).onConflictDoUpdate({ target: stockOpnameFollowUps.auditReference, set: { status: input.status } });
   return { reference: session.reference, status: input.status };
 }
 
@@ -99,7 +107,7 @@ export async function updateStockOpnameFollowUpNote(input: z.infer<typeof stockO
   if (session.differenceItems === 0) throw new Error("Catatan tindak lanjut hanya tersedia untuk sesi yang memiliki selisih stok.");
   const db = await requireDb();
   const followUpNote = input.note?.trim() || null;
-  await db.insert(stockOpnameFollowUps).values({ auditReference: session.reference, followUpNote }).onDuplicateKeyUpdate({ set: { followUpNote } });
+  await db.insert(stockOpnameFollowUps).values({ auditReference: session.reference, followUpNote }).onConflictDoUpdate({ target: stockOpnameFollowUps.auditReference, set: { followUpNote } });
   return { reference: session.reference, followUpNote };
 }
 
@@ -118,7 +126,7 @@ export async function recordStockMovement(input: z.infer<typeof stockMovementInp
     if (!ingredient) throw new Error("Bahan tidak ditemukan.");
     const movement = resolveStockMovement(ingredient.currentStock, input);
     await tx.update(ingredients).set({ currentStock: movement.balanceAfter }).where(eq(ingredients.id, ingredient.id));
-    const result = await tx.insert(stockMovements).values({ ingredientId: ingredient.id, type: input.type, quantityDelta: movement.quantityDelta, balanceAfter: movement.balanceAfter, note: input.note || null });
+    const result = await tx.insert(stockMovements).values({ ingredientId: ingredient.id, type: input.type, quantityDelta: movement.quantityDelta, balanceAfter: movement.balanceAfter, note: input.note || null }).returning({ insertId: stockMovements.id });
     return { id: Number(result[0].insertId), ...movement };
   });
 }
@@ -148,7 +156,7 @@ export async function saveRecipe(input: z.infer<typeof recipeInput>) {
     const existing = await tx.select().from(recipes).where(eq(recipes.productId, input.productId)).limit(1);
     const recipeId = existing[0]?.id;
     if (recipeId) { await tx.update(recipes).set({ name: input.name }).where(eq(recipes.id, recipeId)); await tx.delete(recipeItems).where(eq(recipeItems.recipeId, recipeId)); }
-    const activeRecipeId = recipeId ?? Number((await tx.insert(recipes).values({ productId: input.productId, name: input.name }))[0].insertId);
+    const activeRecipeId = recipeId ?? Number((await tx.insert(recipes).values({ productId: input.productId, name: input.name }).returning({ insertId: recipes.id }))[0].insertId);
     await tx.insert(recipeItems).values(input.items.map((item) => ({ recipeId: activeRecipeId, ingredientId: item.ingredientId, quantity: item.quantity })));
   });
 }
@@ -172,12 +180,12 @@ export async function completeSaleInTransaction(tx: any, input: z.infer<typeof s
   const productById = new Map(productRows.map((product) => [product.id, product]));
   const ingredientById = new Map(ingredientRows.map((ingredient) => [ingredient.id, ingredient]));
   const total = Number(lines.reduce((sum, line) => sum + ((productById.get(line.productId)?.sellingPrice ?? 0) * line.quantity), 0).toFixed(2));
-  const saleResult = await tx.insert(sales).values({ receiptNumber, total });
+  const saleResult = await tx.insert(sales).values({ receiptNumber, total }).returning({ insertId: sales.id });
   const saleId = Number(saleResult[0].insertId);
   const saleLineRecords: Array<{ saleItemId: number; productId: number; quantity: number }> = [];
   for (const line of lines) {
     const product = productById.get(line.productId)!;
-    const saleItemResult = await tx.insert(saleItems).values({ saleId, productId: product.id, quantity: line.quantity, unitPrice: product.sellingPrice, lineTotal: Number((product.sellingPrice * line.quantity).toFixed(2)) });
+    const saleItemResult = await tx.insert(saleItems).values({ saleId, productId: product.id, quantity: line.quantity, unitPrice: product.sellingPrice, lineTotal: Number((product.sellingPrice * line.quantity).toFixed(2)) }).returning({ insertId: saleItems.id });
     const saleItemId = Number(saleItemResult[0].insertId);
     saleLineRecords.push({ saleItemId, productId: product.id, quantity: line.quantity });
     const recipe = recipesForSale.find((candidate) => candidate.productId === product.id)!;
@@ -243,7 +251,7 @@ export async function partialRefundInTransaction(tx: any, input: z.infer<typeof 
   const remainingQuantity = saleItem.quantity - refundedQuantity - exchangedQuantity;
   if (input.quantity > remainingQuantity) throw new Error(`Jumlah refund melebihi sisa item (${remainingQuantity}).`);
   const ingredientById = new Map(ingredientRows.map((ingredient) => [ingredient.id, ingredient]));
-  const refundResult = await tx.insert(partialRefunds).values({ saleId: sale.id, saleItemId: saleItem.id, quantity: input.quantity, reason: input.reason || null });
+  const refundResult = await tx.insert(partialRefunds).values({ saleId: sale.id, saleItemId: saleItem.id, quantity: input.quantity, reason: input.reason || null }).returning({ insertId: partialRefunds.id });
   const partialRefundId = Number(refundResult[0].insertId);
   const restorations = ingredientIds.map((ingredientId) => {
     const quantityDelta = restoreByIngredient.get(ingredientId)!;
@@ -306,12 +314,12 @@ export async function exchangeInTransaction(tx: any, input: z.infer<typeof excha
   const returnedTotal = Number((saleItem.unitPrice * input.returnedQuantity).toFixed(2));
   const replacementTotal = Number(replacementLines.reduce((sum, line) => sum + productById.get(line.productId)!.sellingPrice * line.quantity, 0).toFixed(2));
   const paymentAdjustment = Number((replacementTotal - returnedTotal).toFixed(2));
-  const exchangeResult = await tx.insert(exchanges).values({ saleId: sale.id, saleItemId: saleItem.id, returnedQuantity: input.returnedQuantity, returnedTotal, replacementTotal, paymentAdjustment, reason: input.reason || null });
+  const exchangeResult = await tx.insert(exchanges).values({ saleId: sale.id, saleItemId: saleItem.id, returnedQuantity: input.returnedQuantity, returnedTotal, replacementTotal, paymentAdjustment, reason: input.reason || null }).returning({ insertId: exchanges.id });
   const exchangeId = Number(exchangeResult[0].insertId);
   const issuedItems: Array<{ exchangeItemId: number; productId: number; quantity: number }> = [];
   for (const line of replacementLines) {
     const product = productById.get(line.productId)!;
-    const exchangeItemResult = await tx.insert(exchangeItems).values({ exchangeId, productId: product.id, quantity: line.quantity, unitPrice: product.sellingPrice, lineTotal: Number((product.sellingPrice * line.quantity).toFixed(2)) });
+    const exchangeItemResult = await tx.insert(exchangeItems).values({ exchangeId, productId: product.id, quantity: line.quantity, unitPrice: product.sellingPrice, lineTotal: Number((product.sellingPrice * line.quantity).toFixed(2)) }).returning({ insertId: exchangeItems.id });
     const exchangeItemId = Number(exchangeItemResult[0].insertId);
     issuedItems.push({ exchangeItemId, productId: product.id, quantity: line.quantity });
     const recipe = replacementRecipes.find((candidate) => candidate.productId === product.id)!;
@@ -351,7 +359,7 @@ export async function settleExchangeInTransaction(tx: any, input: z.infer<typeof
   if (sale.status === "voided" || sale.status === "refunded") throw new Error("Transaksi sudah dibatalkan atau direfund.");
   const existing = await tx.select().from(exchangeSettlements).where(eq(exchangeSettlements.exchangeId, exchange.id)) as Array<{ id: number }>;
   if (existing.length) throw new Error("Pembayaran tambahan penukaran sudah dicatat.");
-  const result = await tx.insert(exchangeSettlements).values({ exchangeId: exchange.id, amount: exchange.paymentAdjustment, paymentMethod: input.paymentMethod });
+  const result = await tx.insert(exchangeSettlements).values({ exchangeId: exchange.id, amount: exchange.paymentAdjustment, paymentMethod: input.paymentMethod }).returning({ insertId: exchangeSettlements.id });
   return { id: Number(result[0].insertId), exchangeId: exchange.id, amount: exchange.paymentAdjustment, paymentMethod: input.paymentMethod };
 }
 export async function settleExchangeWithClient(client: { transaction: (callback: (tx: any) => Promise<any>) => Promise<any> }, input: z.infer<typeof exchangeSettlementInput>) { return client.transaction((tx) => settleExchangeInTransaction(tx, input)); }
@@ -449,7 +457,7 @@ const defaults = { businessName: "Kopi Nusantara", storeLocation: "Cibitung Beka
 export async function getSettings() {
   const db = await requireDb(); const existing = await db.select().from(businessSettings).limit(1);
   if (existing[0]) return existing[0];
-  const result = await db.insert(businessSettings).values(defaults);
+  const result = await db.insert(businessSettings).values(defaults).returning({ insertId: businessSettings.id });
   return (await db.select().from(businessSettings).where(eq(businessSettings.id, Number(result[0].insertId))).limit(1))[0];
 }
 export async function updateSettings(input: z.infer<typeof settingsInput>) {
@@ -538,7 +546,7 @@ export async function revokeGovernanceAuditQrReference(input: {
     });
   } catch (error) {
     const candidate = error as { code?: string; message?: string };
-    if (candidate.code === "ER_DUP_ENTRY" || candidate.message?.includes("Duplicate entry")) {
+    if (isUniqueViolation(candidate)) {
       const duplicate = await getGovernanceAuditQrRevocation(input.ownerOpenId, input.referenceId);
       if (duplicate) return { outcome: "already_revoked" as const, revocation: duplicate };
     }
@@ -588,7 +596,7 @@ export async function indexGovernanceAuditVerificationReceipt(input: GovernanceA
     await db.insert(governanceAuditVerificationReceiptIndex).values(input);
   } catch (error) {
     const candidate = error as { code?: string; message?: string };
-    if (candidate.code !== "ER_DUP_ENTRY" && !candidate.message?.includes("Duplicate entry")) throw error;
+    if (!isUniqueViolation(candidate)) throw error;
   }
   const receipt = await readExisting();
   if (!receipt) throw new Error("Indeks receipt verifikasi tidak dapat dibaca kembali.");
@@ -631,7 +639,7 @@ export async function indexRetentionSummaryExport(input: RetentionSummaryExportI
     await db.insert(retentionSummaryExports).values(input);
   } catch (error) {
     const candidate = error as { code?: string; message?: string };
-    if (candidate.code !== "ER_DUP_ENTRY" && !candidate.message?.includes("Duplicate entry")) throw error;
+    if (!isUniqueViolation(candidate)) throw error;
   }
   const record = await readExisting();
   if (!record) throw new Error("Indeks ekspor ringkasan retensi tidak dapat dibaca kembali.");

@@ -9,7 +9,8 @@ vi.mock("drizzle-orm", async (importOriginal) => {
   // Capture column/value pairs from eq() so the fake DB can apply the owner-scoped predicate.
   return { ...actual, eq: (column: { name?: string }, value: string) => ({ __eq: [column.name, value] }), and: (...parts: Array<{ __eq: [string, string] }>) => ({ __and: parts }) };
 });
-vi.mock("drizzle-orm/mysql2", () => ({
+vi.mock("postgres", () => ({ default: () => ({}) }));
+vi.mock("drizzle-orm/postgres-js", () => ({
   drizzle: () => ({
     select: () => ({
       from: () => ({
@@ -25,7 +26,7 @@ vi.mock("drizzle-orm/mysql2", () => ({
     insert: () => ({
       values: async (input: Omit<Row, "id" | "createdAt">) => {
         if (persistedRows.some((row) => row.ownerOpenId === input.ownerOpenId && row.exportId === input.exportId)) {
-          throw Object.assign(new Error("Duplicate entry"), { code: "ER_DUP_ENTRY" });
+          throw Object.assign(new Error("Duplicate entry"), { code: "23505" });
         }
         persistedRows.push({ ...input, id: persistedRows.length + 1, createdAt: new Date("2026-10-07T00:00:00.000Z") });
       },
