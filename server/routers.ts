@@ -3,6 +3,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import * as db from "./db";
 import { isValidGovernanceAuditWibDate } from "./governanceAuditDateSearch";
+import { getStoreAlerts, getStoreInsights } from "./storeOperations";
 import { mapFoundationError } from "./foundationErrors";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -58,6 +59,12 @@ export const appRouter = router({
   recipe: router({
     list: publicProcedure.query(() => db.listRecipes()),
     save: publicProcedure.input(recipeInput).mutation(({ input }) => runMutation("Resep", () => db.saveRecipe(input))),
+  }),
+  alerts: router({
+    list: publicProcedure.query(() => runMutation("Alert toko", () => getStoreAlerts())),
+  }),
+  insights: router({
+    overview: publicProcedure.input(z.object({ days: z.union([z.literal(7), z.literal(30), z.literal(90)]) }).optional()).query(({ input }) => runMutation("Insight toko", () => getStoreInsights(input?.days ?? 30))),
   }),
   dashboard: router({
     dailySettlements: publicProcedure.input(settlementDateRangeInput.optional()).query(({ input }) => db.getDailySettlementSummary(input)),

@@ -10,9 +10,9 @@ const items: Array<{ page: FoundationPage; label: string; href: string; icon: ty
   { page: "products", label: "Products", href: "/products", icon: Package, ready: true },
   { page: "inventory", label: "Inventory", href: "/inventory", icon: Box, ready: true },
   { page: "sales", label: "Sales", href: "/sales", icon: BarChart3, ready: true },
-  { page: "alerts", label: "Alerts", href: "/alerts", icon: AlertTriangle },
-  { page: "insights", label: "AI Insights", href: "/insights", icon: Sparkles },
-  { page: "reports", label: "Reports", href: "/reports", icon: ClipboardList },
+  { page: "alerts", label: "Alerts", href: "/alerts", icon: AlertTriangle, ready: true },
+  { page: "insights", label: "Insights", href: "/insights", icon: Sparkles, ready: true },
+  { page: "reports", label: "Reports", href: "/reports", icon: ClipboardList, ready: true },
   { page: "settings", label: "Settings", href: "/settings", icon: Settings, ready: true },
 ];
 

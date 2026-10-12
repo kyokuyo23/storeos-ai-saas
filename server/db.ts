@@ -675,3 +675,14 @@ export async function getStoredObject(storageKey: string) {
   const db = await requireDb();
   return (await db.select().from(storedObjects).where(eq(storedObjects.storageKey, storageKey)).limit(1))[0] ?? null;
 }
+
+/** Net recipe consumption per ingredient in [start, end): sales/exchange issues minus voids/refunds/returns. */
+export async function getIngredientConsumption(start: Date, end: Date) {
+  const db = await requireDb();
+  const rows = await db.select({ ingredientId: stockMovements.ingredientId, quantityDelta: stockMovements.quantityDelta })
+    .from(stockMovements)
+    .where(and(gte(stockMovements.occurredAt, start), lt(stockMovements.occurredAt, end), inArray(stockMovements.type, ["sale", "exchange_sale", "void", "refund", "partial_refund", "exchange_return"])));
+  const consumption = new Map<number, number>();
+  for (const row of rows) consumption.set(row.ingredientId, (consumption.get(row.ingredientId) ?? 0) - row.quantityDelta);
+  return consumption;
+}
