@@ -13,6 +13,7 @@ import { InventoryManagement } from "@/components/InventoryManagement";
 import { SalePOS, SalesHistory } from "@/components/SalePOS";
 import { MonthlyReport } from "@/components/MonthlyReport";
 import { DashboardAlertsPanel, StoreAlertsPage, StoreInsightsPage } from "@/components/StoreOperations";
+import { UserAccountsPage } from "@/components/UserAccounts";
 import "@/lib/opnameDashboardLinks.css";
 
 const formatCurrency = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
@@ -181,4 +182,4 @@ function SettingsPage() {
 
 function ComingSoon({ page }: { page: FoundationPage }) { const labels: Record<string, string> = { pos: "POS", sales: "Sales", alerts: "Alerts", insights: "AI Insights", reports: "Reports" }; return <AppShell active={page} eyebrow="StoreOS AI" title={labels[page]}><PageHeader eyebrow="COMING SOON" title={labels[page]} description="Modul ini sengaja ditunda sampai fondasi master data selesai." /><Panel><EmptyState title="Coming Soon" description="Fitur ini belum dibangun pada Step 2. Tidak ada fungsi demo atau data buatan di halaman ini." icon={Settings2} /></Panel></AppShell>; }
 
-export default function Foundation({ page }: { page: FoundationPage }) { if (page === "dashboard") return <Dashboard />; if (page === "products") return <Products />; if (page === "inventory") return <InventoryManagement />; if (page === "pos") return <SalePOS />; if (page === "sales") return <SalesHistory />; if (page === "reports") return <MonthlyReport />; if (page === "alerts") return <StoreAlertsPage />; if (page === "insights") return <StoreInsightsPage />; if (page === "settings") return <SettingsPage />; return <ComingSoon page={page} />; }
+export default function Foundation({ page }: { page: FoundationPage }) { if (page === "dashboard") return <Dashboard />; if (page === "products") return <Products />; if (page === "inventory") return <InventoryManagement />; if (page === "pos") return <SalePOS />; if (page === "sales") return <SalesHistory />; if (page === "reports") return <MonthlyReport />; if (page === "alerts") return <StoreAlertsPage />; if (page === "insights") return <StoreInsightsPage />; if (page === "settings") return <SettingsPage />; if (page === "users") return <UserAccountsPage />; return <ComingSoon page={page} />; }

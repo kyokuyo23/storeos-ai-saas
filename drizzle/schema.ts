@@ -20,7 +20,7 @@ export const stockMovementType = pgEnum("stock_movement_type", ["purchase", "adj
 export const opnameFollowUpStatus = pgEnum("opname_follow_up_status", ["needs_follow_up", "in_progress", "resolved"]);
 export const artifactLifecycleStatus = pgEnum("artifact_lifecycle_status", ["generated", "verified", "retained", "eligible_for_archive", "archived"]);
 
-/** Retained for framework compatibility; the Step 2 user experience has no authentication screens. */
+/** Owner-admin (OWNER_OPEN_ID) and member (staff) accounts. */
 export const users = pgTable("users", {
   id: id(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),
@@ -28,6 +28,13 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: userRole("role").default("user").notNull(),
+  /** Member (staff) accounts only: login name, scrypt password hash, active flag and a session version
+   *  that is bumped on password reset / deactivation to invalidate existing sessions. The owner logs in
+   *  with OWNER_PASSWORD and leaves these null. */
+  username: varchar("username", { length: 32 }).unique(),
+  passwordHash: text("passwordHash"),
+  isActive: boolean("isActive").default(true).notNull(),
+  sessionVersion: integer("sessionVersion").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),

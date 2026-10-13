@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, inArray, lt, asc } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNotNull, lt, asc, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -54,6 +54,35 @@ export async function getUserByOpenId(openId: string) {
   const db = await getDb();
   if (!db) return undefined;
   return (await db.select().from(users).where(eq(users.openId, openId)).limit(1))[0];
+}
+
+// ---- Member (staff) accounts, managed by the owner-admin ----
+const memberColumns = { id: users.id, name: users.name, username: users.username, isActive: users.isActive, lastSignedIn: users.lastSignedIn, createdAt: users.createdAt };
+export async function getMemberByUsername(username: string) {
+  return (await (await requireDb()).select().from(users).where(eq(users.username, username)).limit(1))[0];
+}
+export async function listMemberAccounts() {
+  const db = await requireDb();
+  return db.select(memberColumns).from(users).where(and(eq(users.role, "user"), isNotNull(users.username))).orderBy(asc(users.username));
+}
+export async function createMemberAccount(input: { name: string; username: string; passwordHash: string }) {
+  const db = await requireDb();
+  const [row] = await db.insert(users).values({ openId: `member_${nanoid(24)}`, name: input.name, username: input.username, passwordHash: input.passwordHash, role: "user", loginMethod: "password", isActive: true, sessionVersion: 1 }).returning(memberColumns);
+  return row;
+}
+/** Only member rows (role user with a username) can be changed here; returns false when no such member. */
+export async function setMemberPassword(id: number, passwordHash: string) {
+  const db = await requireDb();
+  const rows = await db.update(users).set({ passwordHash, sessionVersion: sql`${users.sessionVersion} + 1` }).where(and(eq(users.id, id), eq(users.role, "user"), isNotNull(users.username))).returning({ id: users.id });
+  return rows.length > 0;
+}
+export async function setMemberActive(id: number, isActive: boolean) {
+  const db = await requireDb();
+  const rows = await db.update(users).set({ isActive, sessionVersion: sql`${users.sessionVersion} + 1` }).where(and(eq(users.id, id), eq(users.role, "user"), isNotNull(users.username))).returning({ id: users.id });
+  return rows.length > 0;
+}
+export async function recordMemberSignIn(id: number) {
+  await (await requireDb()).update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, id));
 }
 
 export async function listCategories() { return (await requireDb()).select().from(categories).orderBy(categories.name); }

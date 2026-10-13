@@ -7,6 +7,8 @@ import { getStoreAlerts, getStoreInsights } from "./storeOperations";
 import { archiveMonthlyManagementReport, isCompletedJakartaMonth } from "./automatedMonthlyReports";
 import { mapFoundationError } from "./foundationErrors";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { ENV } from "./_core/env";
+import { hashPassword, memberActiveInput, memberCreateInput, memberPasswordInput, publicUser } from "./userAccounts";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, monthlyReportInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput, stockOpnameFollowUpInput, stockOpnameFollowUpNoteInput, stockOpnameHistoryInput } from "./foundationSchemas";
@@ -21,6 +23,12 @@ import { GOVERNANCE_AUDIT_QR_REVOCATION_REASON_MAX_LENGTH } from "./governanceAu
 import { generateGovernanceAuditQrPolicyAuditArtifact, getGovernanceAuditQrPolicyAuditExport, verifyGovernanceAuditQrPolicyAuditBytes } from "./governanceAuditQrPolicyAuditExport";
 import { generateGovernanceAuditQrPolicyReceiptAuditArtifact, getGovernanceAuditQrPolicyReceiptAuditExport, verifyGovernanceAuditQrPolicyReceiptAuditBytes } from "./governanceAuditQrPolicyReceiptAuditExport";
 
+/** Owner-admin only (role admin + configured OWNER_OPEN_ID); members get FORBIDDEN. */
+const ownerProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Hanya pemilik toko yang dapat melakukan ini." });
+  return next();
+});
+
 const idInput = z.object({ id: z.number().int().positive() });
 const runMutation = async <T>(entity: string, operation: () => Promise<T>) => {
   try { return await operation(); } catch (error) { throw mapFoundationError(error, entity); }
@@ -29,51 +37,51 @@ const runMutation = async <T>(entity: string, operation: () => Promise<T>) => {
 export const appRouter = router({
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query((opts) => opts.ctx.user),
+    me: publicProcedure.query(({ ctx }) => (ctx.user ? publicUser(ctx.user, ENV.ownerOpenId) : null)),
     logout: publicProcedure.mutation(({ ctx }) => { ctx.res.clearCookie(COOKIE_NAME, { ...getSessionCookieOptions(ctx.req), maxAge: -1 }); return { success: true } as const; }),
   }),
   category: router({
-    list: publicProcedure.query(() => db.listCategories()),
-    create: publicProcedure.input(categoryInput).mutation(({ input }) => runMutation("Kategori", () => db.createCategory(input))),
+    list: protectedProcedure.query(() => db.listCategories()),
+    create: protectedProcedure.input(categoryInput).mutation(({ input }) => runMutation("Kategori", () => db.createCategory(input))),
   }),
   product: router({
-    list: publicProcedure.query(() => db.listProducts()),
-    financialDetail: publicProcedure.input(productFinancialInput).query(({ input }) => runMutation("Produk", () => db.getProductFinancialDetail(input))),
-    create: publicProcedure.input(productInput).mutation(({ input }) => runMutation("Produk", () => db.createProduct(input))),
-    update: publicProcedure.input(idInput.extend({ data: productInput })).mutation(({ input }) => runMutation("Produk", () => db.updateProduct(input.id, input.data))),
+    list: protectedProcedure.query(() => db.listProducts()),
+    financialDetail: protectedProcedure.input(productFinancialInput).query(({ input }) => runMutation("Produk", () => db.getProductFinancialDetail(input))),
+    create: protectedProcedure.input(productInput).mutation(({ input }) => runMutation("Produk", () => db.createProduct(input))),
+    update: protectedProcedure.input(idInput.extend({ data: productInput })).mutation(({ input }) => runMutation("Produk", () => db.updateProduct(input.id, input.data))),
   }),
   ingredient: router({
-    list: publicProcedure.query(() => db.listIngredients()),
-    create: publicProcedure.input(ingredientInput).mutation(({ input }) => runMutation("Bahan", () => db.createIngredient(input))),
-    update: publicProcedure.input(idInput.extend({ data: ingredientInput })).mutation(({ input }) => runMutation("Bahan", () => db.updateIngredient(input.id, input.data))),
+    list: protectedProcedure.query(() => db.listIngredients()),
+    create: protectedProcedure.input(ingredientInput).mutation(({ input }) => runMutation("Bahan", () => db.createIngredient(input))),
+    update: protectedProcedure.input(idInput.extend({ data: ingredientInput })).mutation(({ input }) => runMutation("Bahan", () => db.updateIngredient(input.id, input.data))),
   }),
   stockMovement: router({
-    list: publicProcedure.query(() => db.listStockMovements()),
-    intelligence: publicProcedure.input(inventoryIntelligenceInput.optional()).query(({ input }) => db.getInventoryIntelligence(input)),
-    drillDown: publicProcedure.input(inventoryMovementDrillDownInput).query(({ input }) => runMutation("Bahan", () => db.getIngredientMovementDrillDown(input))),
-    record: publicProcedure.input(stockMovementInput).mutation(({ input }) => runMutation("Pergerakan stok", () => db.recordStockMovement(input))),
-    recordOpnameBatch: publicProcedure.input(stockOpnameBatchInput).mutation(({ input }) => runMutation("Stock opname", () => db.recordStockOpnameBatch(input))),
-    opnameSessions: publicProcedure.input(stockOpnameHistoryInput.optional()).query(({ input }) => db.listStockOpnameSessions(input)),
-    updateOpnameFollowUp: publicProcedure.input(stockOpnameFollowUpInput).mutation(({ input }) => runMutation("Tindak lanjut opname", () => db.updateStockOpnameFollowUp(input))),
-    updateOpnameFollowUpNote: publicProcedure.input(stockOpnameFollowUpNoteInput).mutation(({ input }) => runMutation("Catatan tindak lanjut opname", () => db.updateStockOpnameFollowUpNote(input))),
+    list: protectedProcedure.query(() => db.listStockMovements()),
+    intelligence: protectedProcedure.input(inventoryIntelligenceInput.optional()).query(({ input }) => db.getInventoryIntelligence(input)),
+    drillDown: protectedProcedure.input(inventoryMovementDrillDownInput).query(({ input }) => runMutation("Bahan", () => db.getIngredientMovementDrillDown(input))),
+    record: protectedProcedure.input(stockMovementInput).mutation(({ input }) => runMutation("Pergerakan stok", () => db.recordStockMovement(input))),
+    recordOpnameBatch: protectedProcedure.input(stockOpnameBatchInput).mutation(({ input }) => runMutation("Stock opname", () => db.recordStockOpnameBatch(input))),
+    opnameSessions: protectedProcedure.input(stockOpnameHistoryInput.optional()).query(({ input }) => db.listStockOpnameSessions(input)),
+    updateOpnameFollowUp: protectedProcedure.input(stockOpnameFollowUpInput).mutation(({ input }) => runMutation("Tindak lanjut opname", () => db.updateStockOpnameFollowUp(input))),
+    updateOpnameFollowUpNote: protectedProcedure.input(stockOpnameFollowUpNoteInput).mutation(({ input }) => runMutation("Catatan tindak lanjut opname", () => db.updateStockOpnameFollowUpNote(input))),
   }),
   recipe: router({
-    list: publicProcedure.query(() => db.listRecipes()),
-    save: publicProcedure.input(recipeInput).mutation(({ input }) => runMutation("Resep", () => db.saveRecipe(input))),
+    list: protectedProcedure.query(() => db.listRecipes()),
+    save: protectedProcedure.input(recipeInput).mutation(({ input }) => runMutation("Resep", () => db.saveRecipe(input))),
   }),
   alerts: router({
-    list: publicProcedure.query(() => runMutation("Alert toko", () => getStoreAlerts())),
+    list: protectedProcedure.query(() => runMutation("Alert toko", () => getStoreAlerts())),
   }),
   insights: router({
-    overview: publicProcedure.input(z.object({ days: z.union([z.literal(7), z.literal(30), z.literal(90)]) }).optional()).query(({ input }) => runMutation("Insight toko", () => getStoreInsights(input?.days ?? 30))),
+    overview: protectedProcedure.input(z.object({ days: z.union([z.literal(7), z.literal(30), z.literal(90)]) }).optional()).query(({ input }) => runMutation("Insight toko", () => getStoreInsights(input?.days ?? 30))),
   }),
   dashboard: router({
-    dailySettlements: publicProcedure.input(settlementDateRangeInput.optional()).query(({ input }) => db.getDailySettlementSummary(input)),
-    financials: publicProcedure.input(settlementDateRangeInput.optional()).query(({ input }) => db.getFinancialDashboard(input)),
-    openOpnameSessions: publicProcedure.query(() => db.getOpenStockOpnameSummary()),
+    dailySettlements: protectedProcedure.input(settlementDateRangeInput.optional()).query(({ input }) => db.getDailySettlementSummary(input)),
+    financials: protectedProcedure.input(settlementDateRangeInput.optional()).query(({ input }) => db.getFinancialDashboard(input)),
+    openOpnameSessions: protectedProcedure.query(() => db.getOpenStockOpnameSummary()),
   }),
   reports: router({
-    monthlySummary: publicProcedure.input(monthlyReportInput).query(({ input }) => runMutation("Laporan bulanan", () => getMonthlyManagementReport(input))),
+    monthlySummary: protectedProcedure.input(monthlyReportInput).query(({ input }) => runMutation("Laporan bulanan", () => getMonthlyManagementReport(input))),
     monthlyArtifacts: protectedProcedure.input(z.object({
       year: z.number().int().min(2000).max(2200).optional(),
       month: z.number().int().min(1).max(12).optional(),
@@ -307,16 +315,33 @@ export const appRouter = router({
     }),
   }),
   sale: router({
-    list: publicProcedure.query(() => db.listSales()),
-    complete: publicProcedure.input(saleCompletionInput).mutation(({ input }) => runMutation("Penjualan", () => db.completeSale(input))),
-    reverse: publicProcedure.input(saleReversalInput).mutation(({ input }) => runMutation("Pembatalan transaksi", () => db.reverseSale(input))),
-    partialRefund: publicProcedure.input(partialRefundInput).mutation(({ input }) => runMutation("Refund sebagian", () => db.partialRefundSaleItem(input))),
-    exchange: publicProcedure.input(exchangeInput).mutation(({ input }) => runMutation("Penukaran item", () => db.exchangeSaleItem(input))),
-    settleExchange: publicProcedure.input(exchangeSettlementInput).mutation(({ input }) => runMutation("Pembayaran penukaran", () => db.settleExchange(input))),
+    list: protectedProcedure.query(() => db.listSales()),
+    complete: protectedProcedure.input(saleCompletionInput).mutation(({ input }) => runMutation("Penjualan", () => db.completeSale(input))),
+    reverse: protectedProcedure.input(saleReversalInput).mutation(({ input }) => runMutation("Pembatalan transaksi", () => db.reverseSale(input))),
+    partialRefund: protectedProcedure.input(partialRefundInput).mutation(({ input }) => runMutation("Refund sebagian", () => db.partialRefundSaleItem(input))),
+    exchange: protectedProcedure.input(exchangeInput).mutation(({ input }) => runMutation("Penukaran item", () => db.exchangeSaleItem(input))),
+    settleExchange: protectedProcedure.input(exchangeSettlementInput).mutation(({ input }) => runMutation("Pembayaran penukaran", () => db.settleExchange(input))),
+  }),
+  users: router({
+    list: ownerProcedure.query(() => db.listMemberAccounts()),
+    create: ownerProcedure.input(memberCreateInput).mutation(async ({ input }) => {
+      if (await db.getMemberByUsername(input.username)) throw new TRPCError({ code: "CONFLICT", message: "Nama pengguna sudah dipakai." });
+      const passwordHash = await hashPassword(input.password);
+      return runMutation("Pengguna", () => db.createMemberAccount({ name: input.name, username: input.username, passwordHash }));
+    }),
+    resetPassword: ownerProcedure.input(memberPasswordInput).mutation(async ({ input }) => {
+      const passwordHash = await hashPassword(input.password);
+      if (!(await runMutation("Pengguna", () => db.setMemberPassword(input.id, passwordHash)))) throw new TRPCError({ code: "NOT_FOUND", message: "Pengguna tidak ditemukan." });
+      return { success: true } as const;
+    }),
+    setActive: ownerProcedure.input(memberActiveInput).mutation(async ({ input }) => {
+      if (!(await runMutation("Pengguna", () => db.setMemberActive(input.id, input.isActive)))) throw new TRPCError({ code: "NOT_FOUND", message: "Pengguna tidak ditemukan." });
+      return { success: true } as const;
+    }),
   }),
   settings: router({
-    get: publicProcedure.query(() => db.getSettings()),
-    update: publicProcedure.input(settingsInput).mutation(({ input }) => runMutation("Pengaturan", () => db.updateSettings(input))),
+    get: protectedProcedure.query(() => db.getSettings()),
+    update: ownerProcedure.input(settingsInput).mutation(({ input }) => runMutation("Pengaturan", () => db.updateSettings(input))),
   }),
 });
 export type AppRouter = typeof appRouter;

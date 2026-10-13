@@ -22,6 +22,8 @@ export type SessionPayload = {
   openId: string;
   appId: string;
   name: string;
+  /** Member accounts: users.sessionVersion at sign-in; a later bump (password reset, deactivation) revokes the session. */
+  sv?: number;
 };
 
 const EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
@@ -165,7 +167,7 @@ class SDKServer {
    */
   async createSessionToken(
     openId: string,
-    options: { expiresInMs?: number; name?: string } = {}
+    options: { expiresInMs?: number; name?: string; sessionVersion?: number } = {}
   ): Promise<string> {
     return this.signSession(
       {
@@ -173,6 +175,7 @@ class SDKServer {
         // Self-hosted (non-Manus) deployments have no VITE_APP_ID; verifySession requires a non-empty appId.
         appId: ENV.appId || "storeos",
         name: options.name || "Pemilik",
+        ...(options.sessionVersion !== undefined ? { sv: options.sessionVersion } : {}),
       },
       options
     );
@@ -191,6 +194,7 @@ class SDKServer {
       openId: payload.openId,
       appId: payload.appId,
       name: payload.name,
+      ...(payload.sv !== undefined ? { sv: payload.sv } : {}),
     })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
       .setExpirationTime(expirationSeconds)
@@ -199,7 +203,7 @@ class SDKServer {
 
   async verifySession(
     cookieValue: string | undefined | null
-  ): Promise<{ openId: string; appId: string; name: string } | null> {
+  ): Promise<{ openId: string; appId: string; name: string; sv?: number } | null> {
     if (!cookieValue) {
       console.warn("[Auth] Missing session cookie");
       return null;
@@ -210,7 +214,7 @@ class SDKServer {
       const { payload } = await jwtVerify(cookieValue, secretKey, {
         algorithms: ["HS256"],
       });
-      const { openId, appId, name } = payload as Record<string, unknown>;
+      const { openId, appId, name, sv } = payload as Record<string, unknown>;
 
       if (
         !isNonEmptyString(openId) ||
@@ -225,6 +229,7 @@ class SDKServer {
         openId,
         appId,
         name,
+        ...(typeof sv === "number" ? { sv } : {}),
       };
     } catch (error) {
       console.warn("[Auth] Session verification failed", String(error));
@@ -310,6 +315,12 @@ class SDKServer {
 
     if (!user) {
       throw ForbiddenError("User not found");
+    }
+
+    // Member (staff) accounts: deactivation or a password reset bumps sessionVersion and revokes old sessions.
+    if (user.passwordHash) {
+      if (!user.isActive || session.sv !== user.sessionVersion) throw ForbiddenError("Member session revoked");
+      return user;
     }
 
     await db.upsertUser({
