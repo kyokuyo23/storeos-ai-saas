@@ -1,3 +1,4 @@
+import { Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 
 /** Only same-origin absolute paths ("/x", never "//host" or "/\\host") are allowed as a post-login target. */
@@ -11,6 +12,7 @@ export default function OwnerLogin() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -35,7 +37,12 @@ export default function OwnerLogin() {
     <form onSubmit={submit} aria-label="Masuk sebagai pemilik" style={{ width: "100%", maxWidth: 360, background: "#fff", borderRadius: 14, padding: 24, boxShadow: "0 8px 30px rgba(18,58,44,.12)", display: "grid", gap: 14 }}>
       <div><h1 style={{ margin: 0, fontSize: 22, color: "#123a2c" }}>StoreOS</h1><p style={{ margin: "4px 0 0", color: "#5b6b63", fontSize: 14 }}>Masuk sebagai pemilik</p></div>
       <label style={{ display: "grid", gap: 6, fontSize: 14 }}>Kata sandi
-        <input type="password" autoComplete="current-password" autoFocus required value={password} onChange={(event) => setPassword(event.target.value)} style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #c9d3cd", fontSize: 16 }} />
+        <span style={{ position: "relative", display: "block" }}>
+          <input type={showPassword ? "text" : "password"} autoComplete="current-password" autoCapitalize="off" autoCorrect="off" spellCheck={false} autoFocus required value={password} onChange={(event) => setPassword(event.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "10px 44px 10px 12px", borderRadius: 8, border: "1px solid #c9d3cd", fontSize: 16 }} />
+          <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"} aria-pressed={showPassword} title={showPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"} style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", width: 36, height: 36, display: "grid", placeItems: "center", border: 0, background: "transparent", color: "#5b6b63", cursor: "pointer", borderRadius: 6 }}>
+            {showPassword ? <EyeOff size={18} aria-hidden /> : <Eye size={18} aria-hidden />}
+          </button>
+        </span>
       </label>
       {error && <p role="alert" style={{ margin: 0, color: "#b3261e", fontSize: 14 }}>{error}</p>}
       <button type="submit" className="button primary" disabled={busy || !password}>{busy ? "Memeriksa…" : "Masuk"}</button>
