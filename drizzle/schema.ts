@@ -281,6 +281,9 @@ export const businessSettings = pgTable("businessSettings", {
   inventoryVariancePercentageTolerance: decimal("inventoryVariancePercentageTolerance", { precision: 6, scale: 3, mode: "number" }).default(0).notNull(),
   /** Phase 2.24: fixed cash float (modal kas) in the drawer at the start of every shift. */
   shiftOpeningCash: decimal("shiftOpeningCash", { precision: 14, scale: 2, mode: "number" }).default(0).notNull(),
+  /** Store logo (PNG/JPEG/WebP bytes in storedObjects); null = default icon. */
+  logoStorageKey: varchar("logoStorageKey", { length: 512 }),
+  logoUpdatedAt: timestamp("logoUpdatedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
 });

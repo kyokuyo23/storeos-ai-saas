@@ -8,6 +8,7 @@ import { archiveMonthlyManagementReport, isCompletedJakartaMonth } from "./autom
 import { mapFoundationError } from "./foundationErrors";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { ENV } from "./_core/env";
+import { getBranding, logoInput, removeStoreLogo, setStoreLogo } from "./branding";
 import { getShiftCheck, listShiftCheckIngredients, listShiftChecks, reviewShiftCheck, setIngredientShiftCheck, shiftCheckListInput, shiftCheckReviewInput, shiftCheckSubmitInput, submitShiftCheck } from "./shiftChecks";
 import { canManageStore, hashPassword, isStoreOwner, memberAccessInput, memberActiveInput, memberCreateInput, memberPasswordInput, publicUser } from "./userAccounts";
 import { systemRouter } from "./_core/systemRouter";
@@ -367,6 +368,9 @@ export const appRouter = router({
   settings: router({
     get: protectedProcedure.query(() => db.getSettings()),
     update: managerProcedure.input(settingsInput).mutation(({ input }) => runMutation("Pengaturan", () => db.updateSettings(input))),
+    branding: protectedProcedure.query(() => runMutation("Branding", () => getBranding())),
+    setLogo: managerProcedure.input(logoInput).mutation(({ input }) => runMutation("Logo", () => setStoreLogo(input))),
+    removeLogo: managerProcedure.mutation(() => runMutation("Logo", () => removeStoreLogo())),
   }),
 });
 export type AppRouter = typeof appRouter;

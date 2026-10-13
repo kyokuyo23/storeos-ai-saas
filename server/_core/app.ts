@@ -11,6 +11,7 @@ import { canAccessMonthlyReportArtifacts, readVerifiedMonthlyReportArtifact, typ
 import { sdk } from "./sdk";
 import { ENV } from "./env";
 import { getShiftCheckPhoto } from "../shiftChecks";
+import { getBranding, getStoreLogo } from "../branding";
 import { canManageStore } from "../userAccounts";
 
 /** Builds the API-only Express app (no listen, no static/Vite). Shared by the Node server and Vercel. */
@@ -24,6 +25,26 @@ export function createApp() {
   registerOwnerLoginRoutes(app);
   app.post("/api/scheduled/monthly-management-report", handleAutomatedMonthlyReport);
   app.get("/api/scheduled/monthly-management-report", handleVercelCronMonthlyReport);
+  // Store name + logo are public so the login page can show them before sign-in.
+  app.get("/api/branding", async (_req, res) => {
+    try { res.setHeader("Cache-Control", "no-cache"); res.json(await getBranding()); }
+    catch { res.status(503).json({ error: "Branding tidak tersedia." }); }
+  });
+  app.get("/api/branding/logo", async (req, res) => {
+    try {
+      const logo = await getStoreLogo();
+      if (!logo) { res.status(404).send("No logo"); return; }
+      res.setHeader("Content-Type", logo.contentType);
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      // Versioned URLs (?v=updatedAt) are immutable; the bare URL revalidates.
+      res.setHeader("Cache-Control", req.query.v ? "public, max-age=31536000, immutable" : "no-cache");
+      res.send(Buffer.from(logo.data));
+    } catch (error) {
+      console.error("[Branding] logo failed", error);
+      res.status(503).send("Logo temporarily unavailable");
+    }
+  });
+
   // Phase 2.24 shift-check photo evidence: owner/sysadmin or the cashier who submitted it.
   app.get("/api/shift-checks/photos/:photoId", async (req, res) => {
     const photoId = Number(req.params.photoId);
