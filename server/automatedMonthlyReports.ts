@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { sdk } from "./_core/sdk";
 import { getMonthlyManagementReport, monthlyReportToCsv, resolveJakartaMonth } from "./monthlyReports";
 import { persistMonthlyReportArtifacts } from "./monthlyReportArtifacts";
@@ -64,11 +65,11 @@ export function monthlyReportToPrintableHtml(report: Awaited<ReturnType<typeof g
     ["Exchange Impact", report.financial.exchangeImpact],
   ];
   const inventoryRows: Array<[string, string | number]> = [
-    ["Opening Stock", report.inventory.openingStock],
-    ["Closing Stock", report.inventory.closingStock],
-    ["Expected Stock", report.inventory.expectedStock],
-    ["Actual Stock", report.inventory.actualStock],
-    ["Total Variance", report.inventory.totalVariance],
+    ["Opening Stock Value (Rp)", report.inventory.openingStockValue],
+    ["Closing Stock Value (Rp)", report.inventory.closingStockValue],
+    ["Expected Closing Stock Value (Rp)", report.inventory.expectedClosingStockValue],
+    ["Actual Closing Stock Value (Rp)", report.inventory.actualClosingStockValue],
+    ["Total Variance Value (Rp)", report.inventory.totalVarianceValue],
     ["Out-of-Tolerance Item Count", report.inventory.outOfToleranceItemCount],
     ["High-Value Variance Count", report.inventory.highValueVarianceCount],
     ["Recurring High Variance Ingredient Count", report.inventory.recurringHighVarianceIngredientCount],
@@ -142,3 +143,41 @@ export function getMonthlyHeartbeatDefinition() {
 }
 
 export { resolveJakartaMonth };
+
+
+/** Generates and durably stores the archive bundle for one completed Jakarta month (idempotent per period). */
+export async function archiveMonthlyManagementReport(year: number, month: number) {
+  const artifacts = await generateAutomatedMonthlyManagementReport(year, month);
+  const persisted = await persistMonthlyReportArtifacts(artifacts);
+  return { period: artifacts.report.period, generatedAt: artifacts.generatedAt, created: persisted.created, artifact: persisted.artifact };
+}
+
+/** True when the Jakarta calendar month has fully ended at `now` (archives are only for completed months). */
+export function isCompletedJakartaMonth(year: number, month: number, now = new Date()) {
+  return resolveJakartaMonth(year, month).end.getTime() <= now.getTime();
+}
+
+/** Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`; refuse when the secret is unset. */
+export function isAuthorizedVercelCron(authorization: string | undefined, secret = process.env.CRON_SECRET ?? "") {
+  if (!secret || typeof authorization !== "string") return false;
+  const digest = (value: string) => createHash("sha256").update(value).digest();
+  return timingSafeEqual(digest(authorization), digest(`Bearer ${secret}`));
+}
+
+/**
+ * Vercel Cron entry point (GET). Runs daily at 00:10 WIB; only the Jakarta first day archives the
+ * previous completed month, every other day is a no-op. Re-running is safe: periods are write-once.
+ */
+export async function handleVercelCronMonthlyReport(req: Request, res: Response) {
+  if (!isAuthorizedVercelCron(req.headers.authorization)) return res.status(401).json({ error: "unauthorized" });
+  try {
+    const now = new Date();
+    if (!isJakartaFirstCalendarDay(now)) return res.json({ ok: true, skipped: true, reason: "outside_jakarta_month_boundary" });
+    const target = resolvePreviousCompletedJakartaMonth(now);
+    const result = await archiveMonthlyManagementReport(target.year, target.month);
+    return res.json({ ok: true, period: result.period, created: result.created });
+  } catch (error) {
+    console.error("[VercelCronMonthlyReport]", error);
+    return res.status(500).json({ error: "monthly report archive failed", timestamp: new Date().toISOString() });
+  }
+}

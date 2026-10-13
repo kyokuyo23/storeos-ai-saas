@@ -21,11 +21,11 @@ export type MonthlyReportExportData = {
     exchangeImpact: number;
   };
   inventory: {
-    openingStock: number;
-    closingStock: number;
-    expectedStock: number;
-    actualStock: number;
-    totalVariance: number;
+    openingStockValue: number;
+    closingStockValue: number;
+    expectedClosingStockValue: number;
+    actualClosingStockValue: number;
+    totalVarianceValue: number;
     outOfToleranceItemCount: number;
     highValueVarianceCount: number;
     recurringHighVarianceIngredientCount: number;
@@ -53,11 +53,11 @@ const rowsFor = (report: MonthlyReportExportData): Array<Array<string | number>>
   ["Exchange Impact", report.financial.exchangeImpact],
   [],
   ["Inventory", "Nilai"],
-  ["Opening Stock", report.inventory.openingStock],
-  ["Closing Stock", report.inventory.closingStock],
-  ["Expected Stock", report.inventory.expectedStock],
-  ["Actual Stock", report.inventory.actualStock],
-  ["Total Variance", report.inventory.totalVariance],
+  ["Opening Stock Value (Rp)", report.inventory.openingStockValue],
+  ["Closing Stock Value (Rp)", report.inventory.closingStockValue],
+  ["Expected Closing Stock Value (Rp)", report.inventory.expectedClosingStockValue],
+  ["Actual Closing Stock Value (Rp)", report.inventory.actualClosingStockValue],
+  ["Total Variance Value (Rp)", report.inventory.totalVarianceValue],
   ["Out-of-Tolerance Item Count", report.inventory.outOfToleranceItemCount],
   ["High-Value Variance Count", report.inventory.highValueVarianceCount],
   ["Recurring High Variance Ingredient Count", report.inventory.recurringHighVarianceIngredientCount],
@@ -75,8 +75,13 @@ export function buildMonthlyReportCsv(report: MonthlyReportExportData): string {
   return `\uFEFF${body}\r\n`;
 }
 
+/** PRD FR-3 standard file name stem: StoreOS_Monthly_Report_YYYY-MM. */
+export function monthlyReportFileStem(year: number, month: number): string {
+  return `StoreOS_Monthly_Report_${year}-${String(month).padStart(2, "0")}`;
+}
+
 export function monthlyReportCsvFilename(report: MonthlyReportExportData): string {
-  return `storeos-monthly-${report.period.year}-${String(report.period.month).padStart(2, "0")}.csv`;
+  return `${monthlyReportFileStem(report.period.year, report.period.month)}.csv`;
 }
 
 export function downloadMonthlyReportCsv(report: MonthlyReportExportData): void {
@@ -90,5 +95,12 @@ export function downloadMonthlyReportCsv(report: MonthlyReportExportData): void 
 
 export function printMonthlyReport(report: MonthlyReportExportData | undefined): void {
   if (!report) return;
+  // Browsers use the document title as the default "Save as PDF" file name.
+  if (typeof document !== "undefined" && typeof window.addEventListener === "function") {
+    const previousTitle = document.title;
+    document.title = monthlyReportFileStem(report.period.year, report.period.month);
+    const restore = () => { document.title = previousTitle; window.removeEventListener("afterprint", restore); };
+    window.addEventListener("afterprint", restore);
+  }
   window.print();
 }

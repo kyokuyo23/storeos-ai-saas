@@ -99,3 +99,17 @@ describe("rolling Jakarta periods", () => {
     });
   });
 });
+
+describe("monthly archive automation", () => {
+  it("only accepts the exact Vercel cron bearer secret and refuses when the secret is unset", async () => {
+    const { isAuthorizedVercelCron, isCompletedJakartaMonth } = await import("./automatedMonthlyReports");
+    expect(isAuthorizedVercelCron("Bearer s3cret-value", "s3cret-value")).toBe(true);
+    expect(isAuthorizedVercelCron("Bearer wrong", "s3cret-value")).toBe(false);
+    expect(isAuthorizedVercelCron(undefined, "s3cret-value")).toBe(false);
+    expect(isAuthorizedVercelCron("Bearer ", "")).toBe(false);
+    const now = new Date("2026-10-31T17:05:00Z"); // 2026-11-01 00:05 WIB
+    expect(isCompletedJakartaMonth(2026, 10, now)).toBe(true);
+    expect(isCompletedJakartaMonth(2026, 11, now)).toBe(false);
+    expect(isCompletedJakartaMonth(2026, 10, new Date("2026-10-31T16:59:59Z"))).toBe(false);
+  });
+});

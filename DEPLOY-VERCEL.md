@@ -13,6 +13,7 @@ Branch: `vercel-deploy`. Vercel membaca `vercel.json`: frontend (`dist/public`) 
 | `DATABASE_URL` | ya | Supabase (PostgreSQL) lewat **Transaction pooler** (port **6543**), plus `?sslmode=require`. Contoh: `postgresql://postgres.<ref>:<PASSWORD>@aws-0-<region>.pooler.supabase.com:6543/postgres?sslmode=require` (Supabase → Connect → Transaction pooler). |
 | `JWT_SECRET` | ya | String acak panjang (cookie sesi). |
 | `OWNER_OPEN_ID` | ya | ID tetap pemilik, mis. `owner-1` (tidak boleh diawali `cron_`). Akun ini otomatis admin. |
+| `CRON_SECRET` | ya (arsip otomatis) | String acak (min. 16 karakter). Vercel Cron mengirimkannya sebagai `Authorization: Bearer …` ke `/api/scheduled/monthly-management-report`; tanpa variabel ini cron ditolak (401). |
 | `OWNER_PASSWORD` | ya | Kata sandi login pemilik di `/login`, **minimal 12 karakter**, acak. Login ditolak jika lebih pendek. |
 
 Tidak perlu `VITE_APP_ID`, `OAUTH_SERVER_URL`, atau `BUILT_IN_FORGE_*`. Tanpa Forge, file ekspor dan arsip laporan disimpan (byte persis) di tabel `storedObjects` pada database yang sama. Jika kedua variabel Forge diisi, Forge tetap dipakai.
@@ -40,5 +41,5 @@ Buka `https://<domain>/login`, masukkan `OWNER_PASSWORD`. Sesi berlaku 1 tahun d
 - Paket gratis Supabase dapat menjeda proyek yang lama tidak aktif; cek kebijakan terbaru di dashboard Supabase.
 
 ## Catatan
-- Pembuatan arsip laporan bulanan otomatis (`/api/scheduled/monthly-management-report`) memakai cron Manus dan tidak berjalan di Vercel. Di Vercel, daftar arsip akan kosong sampai pembuatan arsip dijadwalkan dengan cara lain.
+- Arsip laporan bulanan: `vercel.json` menjadwalkan Vercel Cron setiap hari 17:10 UTC (00:10 WIB); hanya pada tanggal 1 (WIB) arsip bulan sebelumnya dibuat, hari lain dilewati. Pemilik juga bisa membuat arsip bulan yang sudah selesai secara manual di Reports → Artefak laporan tersimpan → **Buat arsip**. Arsip bersifat write-once per bulan.
 - Analitik Umami hanya dimuat bila `VITE_ANALYTICS_ENDPOINT` dan `VITE_ANALYTICS_WEBSITE_ID` diisi.

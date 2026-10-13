@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import * as db from "./db";
 import { isValidGovernanceAuditWibDate } from "./governanceAuditDateSearch";
 import { getStoreAlerts, getStoreInsights } from "./storeOperations";
+import { archiveMonthlyManagementReport, isCompletedJakartaMonth } from "./automatedMonthlyReports";
 import { mapFoundationError } from "./foundationErrors";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -97,6 +98,11 @@ export const appRouter = router({
     }).refine((input) => input.datePreset ? !input.startDate && !input.endDate : Boolean(input.startDate && input.endDate), { message: "Gunakan preset review atau rentang Jakarta/WIB lengkap." })).query(({ ctx, input }) => {
       if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Ringkasan artefak laporan dibatasi untuk pemilik StoreOS." });
       return runMutation("Ringkasan artefak aktif", () => getMonthlyReportActiveArtifactSummary(ctx.user.openId, input));
+    }),
+    generateMonthlyArtifact: protectedProcedure.input(z.object({ year: z.number().int().min(2000).max(2100), month: z.number().int().min(1).max(12) })).mutation(({ ctx, input }) => {
+      if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Pembuatan arsip laporan dibatasi untuk pemilik StoreOS." });
+      if (!isCompletedJakartaMonth(input.year, input.month)) throw new TRPCError({ code: "BAD_REQUEST", message: "Arsip hanya dapat dibuat untuk bulan Jakarta/WIB yang sudah selesai." });
+      return runMutation("Arsip laporan bulanan", () => archiveMonthlyManagementReport(input.year, input.month));
     }),
     createMonthlyRetentionSummaryExport: protectedProcedure.input(z.object({
       startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),

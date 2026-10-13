@@ -38,6 +38,9 @@ function addProduct(products: Map<number, ProductPerformance>, product: Omit<Pro
 export function summarizeFinancialSales(sales: FinancialSale[]) {
   const totals = blankTotals();
   const products = new Map<number, ProductPerformance>();
+  // SRS 2.2 Gross Sales: original line value (quantity x unit price) of every non-reversed sale,
+  // before partial refunds and exchanges. Net Revenue (= revenue) is what remains after them.
+  const grossSales = round(sales.filter((sale) => sale.status !== "voided" && sale.status !== "refunded").reduce((sum, sale) => sum + sale.lines.reduce((lineSum, line) => lineSum + line.unitPrice * line.quantity, 0), 0));
   const saleSummaries = sales.map((sale) => {
     const saleGross = round(sale.total ?? sale.lines.reduce((sum, line) => sum + line.lineTotal, 0));
     const partialRefundValue = round(sale.lines.reduce((sum, line) => sum + line.unitPrice * line.refundedQuantity, 0));
@@ -84,7 +87,7 @@ export function summarizeFinancialSales(sales: FinancialSale[]) {
   totals.grossProfit = round(totals.revenue - totals.cogs);
   totals.grossMargin = percentage(totals.grossProfit, totals.revenue);
   const productPerformance = Array.from(products.values()).map((product) => ({ ...product, quantity: round(product.quantity, 3), revenue: round(product.revenue), cogs: round(product.cogs), grossProfit: round(product.revenue - product.cogs), grossMargin: percentage(product.revenue - product.cogs, product.revenue) })).sort((left, right) => right.grossProfit - left.grossProfit || right.revenue - left.revenue || left.productName.localeCompare(right.productName, "id-ID"));
-  return { ...totals, productPerformance, saleSummaries };
+  return { ...totals, grossSales, productPerformance, saleSummaries };
 }
 
 export function summarizeProductFinancialDetail(productId: number, sales: Array<FinancialSale & { receiptNumber?: string }>) {

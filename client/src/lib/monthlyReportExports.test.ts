@@ -31,11 +31,11 @@ const report: MonthlyReportExportData = {
     exchangeImpact: 0,
   },
   inventory: {
-    openingStock: 100,
-    closingStock: 82,
-    expectedStock: 80,
-    actualStock: 82,
-    totalVariance: 2,
+    openingStockValue: 100,
+    closingStockValue: 82,
+    expectedClosingStockValue: 80,
+    actualClosingStockValue: 82,
+    totalVarianceValue: 2,
     outOfToleranceItemCount: 1,
     highValueVarianceCount: 1,
     recurringHighVarianceIngredientCount: 1,
@@ -71,7 +71,7 @@ describe("monthly report browser exports", () => {
   });
 
   it("uses an exact year-month filename and triggers a browser download", () => {
-    expect(monthlyReportCsvFilename(report)).toBe("storeos-monthly-2026-01.csv");
+    expect(monthlyReportCsvFilename(report)).toBe("StoreOS_Monthly_Report_2026-01.csv");
 
     const createObjectURL = vi.fn(() => "blob:storeos-monthly");
     const revokeObjectURL = vi.fn();
@@ -86,7 +86,7 @@ describe("monthly report browser exports", () => {
     expect(createElement).toHaveBeenCalledWith("a");
     expect(createObjectURL).toHaveBeenCalledOnce();
     expect(anchor.href).toBe("blob:storeos-monthly");
-    expect(anchor.download).toBe("storeos-monthly-2026-01.csv");
+    expect(anchor.download).toBe("StoreOS_Monthly_Report_2026-01.csv");
     expect(click).toHaveBeenCalledOnce();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:storeos-monthly");
   });

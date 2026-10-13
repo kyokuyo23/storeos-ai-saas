@@ -60,10 +60,13 @@ export async function getMonthlyManagementReport(input: { year: number; month: n
   const monthSessions = sessions.filter((session) => session.occurredAt >= period.start && session.occurredAt < period.end);
   const openFollowUpCount = monthSessions.filter((session) => session.followUpStatus === "needs_follow_up" || session.followUpStatus === "in_progress").length;
   const highValueCount = currentInventory.rows.filter((row) => row.varianceExcessValue > 0).length;
-  const totalVariance = round(currentInventory.rows.reduce((sum, row) => sum + row.variance, 0), 3);
-  const openingStock = round(currentInventory.rows.reduce((sum, row) => sum + row.openingStock, 0), 3);
-  const closingStock = round(currentInventory.rows.reduce((sum, row) => sum + row.actualClosingStock, 0), 3);
-  const expectedStock = round(currentInventory.rows.reduce((sum, row) => sum + row.expectedClosingStock, 0), 3);
+  // PRD: stock is reported as Rupiah value (quantity x ingredient cost per unit). Quantities in different
+  // units (gram, ml, pcs) cannot be summed meaningfully, so every aggregate is a valuation.
+  const valueOf = (pick: (row: (typeof currentInventory.rows)[number]) => number) => round(currentInventory.rows.reduce((sum, row) => sum + pick(row) * row.costPerUnit, 0));
+  const openingStockValue = valueOf((row) => row.openingStock);
+  const actualClosingStockValue = valueOf((row) => row.actualClosingStock);
+  const expectedClosingStockValue = valueOf((row) => row.expectedClosingStock);
+  const totalVarianceValue = round(currentInventory.rows.reduce((sum, row) => sum + row.varianceValue, 0));
   const auditNotes = monthSessions.flatMap((session) => [
     session.note ? { reference: session.reference, type: "session" as const, note: session.note } : null,
     session.followUpNote ? { reference: session.reference, type: "follow_up" as const, note: session.followUpNote } : null,
@@ -73,7 +76,7 @@ export async function getMonthlyManagementReport(input: { year: number; month: n
     generatedAt: new Date().toISOString(),
     auditNotes,
     financial: {
-      grossSales: financial.revenue,
+      grossSales: financial.grossSales,
       netRevenue: financial.revenue,
       cogs: financial.cogs,
       grossProfit: financial.grossProfit,
@@ -84,11 +87,11 @@ export async function getMonthlyManagementReport(input: { year: number; month: n
       exchangeImpact: financial.exchangeImpact,
     },
     inventory: {
-      openingStock,
-      closingStock,
-      expectedStock,
-      actualStock: closingStock,
-      totalVariance,
+      openingStockValue,
+      closingStockValue: actualClosingStockValue,
+      expectedClosingStockValue,
+      actualClosingStockValue,
+      totalVarianceValue,
       outOfToleranceItemCount: currentInventory.rows.filter((row) => !row.withinTolerance).length,
       highValueVarianceCount: highValueCount,
       recurringHighVarianceIngredientCount: recurringCount,
@@ -119,11 +122,11 @@ export function monthlyReportToCsv(report: Awaited<ReturnType<typeof getMonthlyM
     ["Exchange Impact", report.financial.exchangeImpact],
     [],
     ["Inventory", "Nilai"],
-    ["Opening Stock", report.inventory.openingStock],
-    ["Closing Stock", report.inventory.closingStock],
-    ["Expected Stock", report.inventory.expectedStock],
-    ["Actual Stock", report.inventory.actualStock],
-    ["Total Variance", report.inventory.totalVariance],
+    ["Opening Stock Value (Rp)", report.inventory.openingStockValue],
+    ["Closing Stock Value (Rp)", report.inventory.closingStockValue],
+    ["Expected Closing Stock Value (Rp)", report.inventory.expectedClosingStockValue],
+    ["Actual Closing Stock Value (Rp)", report.inventory.actualClosingStockValue],
+    ["Total Variance Value (Rp)", report.inventory.totalVarianceValue],
     ["Out-of-Tolerance Item Count", report.inventory.outOfToleranceItemCount],
     ["High-Value Variance Count", report.inventory.highValueVarianceCount],
     ["Recurring High Variance Ingredient Count", report.inventory.recurringHighVarianceIngredientCount],

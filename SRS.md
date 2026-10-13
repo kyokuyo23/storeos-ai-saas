@@ -8,7 +8,7 @@
 
 ## 1. System Overview & Architecture Compliance
 
-StoreOS Phase 2.1 builds directly upon the validated StoreOS MVP architecture. It utilizes the tRPC 11 contract-first procedure pattern, connecting React 19 frontend components to robust Express/Drizzle backend procedures backed by MySQL/TiDB. The system maintains strict separation between immutable transactional records (sales, sale lines, stock movements, opname sessions) and analytical read models.
+StoreOS Phase 2.1 builds directly upon the validated StoreOS MVP architecture. It utilizes the tRPC 11 contract-first procedure pattern, connecting React 19 frontend components to robust Express/Drizzle backend procedures backed by PostgreSQL (Supabase); originally MySQL/TiDB. The system maintains strict separation between immutable transactional records (sales, sale lines, stock movements, opname sessions) and analytical read models.
 
 ---
 

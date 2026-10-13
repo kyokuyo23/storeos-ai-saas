@@ -6,7 +6,7 @@ import { registerOwnerLoginRoutes } from "./ownerLogin";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { handleAutomatedMonthlyReport } from "../automatedMonthlyReports";
+import { handleAutomatedMonthlyReport, handleVercelCronMonthlyReport } from "../automatedMonthlyReports";
 import { canAccessMonthlyReportArtifacts, readVerifiedMonthlyReportArtifact, type ArtifactKind } from "../monthlyReportArtifacts";
 import { sdk } from "./sdk";
 
@@ -20,6 +20,7 @@ export function createApp() {
   registerOAuthRoutes(app);
   registerOwnerLoginRoutes(app);
   app.post("/api/scheduled/monthly-management-report", handleAutomatedMonthlyReport);
+  app.get("/api/scheduled/monthly-management-report", handleVercelCronMonthlyReport);
   app.get("/api/reports/monthly-artifacts/:year/:month/:kind", async (req, res) => {
     const year = Number(req.params.year);
     const month = Number(req.params.month);
@@ -53,7 +54,7 @@ export function createApp() {
       res.set({
         "Content-Type": contentType,
         "Content-Length": String(result.data.byteLength),
-        "Content-Disposition": `attachment; filename="storeos-management-report-${year}-${String(month).padStart(2, "0")}.${extension}"`,
+        "Content-Disposition": `attachment; filename="StoreOS_Monthly_Report_${year}-${String(month).padStart(2, "0")}.${extension}"`,
         "Cache-Control": "no-store",
       });
       res.status(200).send(result.data);

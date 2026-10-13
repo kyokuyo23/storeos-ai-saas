@@ -26,11 +26,11 @@ const reportFixture = {
     exchangeImpact: 10000,
   },
   inventory: {
-    openingStock: 100,
-    closingStock: 82,
-    expectedStock: 84,
-    actualStock: 82,
-    totalVariance: -2,
+    openingStockValue: 100,
+    closingStockValue: 82,
+    expectedClosingStockValue: 84,
+    actualClosingStockValue: 82,
+    totalVarianceValue: -2,
     outOfToleranceItemCount: 1,
     highValueVarianceCount: 1,
     recurringHighVarianceIngredientCount: 1,
@@ -60,7 +60,7 @@ test("downloads a non-empty monthly CSV with exact scope and quoted sections", a
   await page.getByRole("button", { name: "CSV" }).click();
   const download = await downloadPromise;
 
-  expect(download.suggestedFilename()).toBe("storeos-monthly-2026-01.csv");
+  expect(download.suggestedFilename()).toBe("StoreOS_Monthly_Report_2026-01.csv");
   expect(await download.failure()).toBeNull();
 
   const downloadedPath = testInfo.outputPath(download.suggestedFilename());
@@ -660,7 +660,7 @@ test("downloads a checksum-verified stored CSV through the controlled report end
     return route.fulfill({
       status: 200,
       contentType: "text/csv; charset=utf-8",
-      headers: { "content-disposition": "attachment; filename=\"storeos-management-report-2026-01.csv\"", "cache-control": "no-store" },
+      headers: { "content-disposition": "attachment; filename=\"StoreOS_Monthly_Report_2026-01.csv\"", "cache-control": "no-store" },
       body: storedCsv,
     });
   });
@@ -670,7 +670,7 @@ test("downloads a checksum-verified stored CSV through the controlled report end
   await page.getByRole("button", { name: "Unduh CSV" }).click();
   const download = await downloadPromise;
   expect(artifactRequests).toEqual(["http://127.0.0.1:4173/api/reports/monthly-artifacts/2026/1/csv"]);
-  expect(download.suggestedFilename()).toBe("storeos-management-report-2026-01.csv");
+  expect(download.suggestedFilename()).toBe("StoreOS_Monthly_Report_2026-01.csv");
   const path = testInfo.outputPath(download.suggestedFilename());
   await download.saveAs(path);
   const data = await readFile(path, "utf8");

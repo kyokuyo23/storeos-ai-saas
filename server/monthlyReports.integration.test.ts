@@ -100,8 +100,12 @@ describe("Phase 2.1 non-empty monthly report integration fixtures", () => {
   it("reconciles persisted-shaped sales with Financial Core, including recipe COGS and reversal workflows", async () => {
     const report = await getMonthlyManagementReport({ year: 2026, month: 1 });
     const expected = summarizeFinancialSales(financialSales);
-    expect(report.financial.grossSales).toBe(expected.revenue);
+    // SRS 2.2: Gross = original lines of non-reversed sales (2x50 + 1x30 + 3x50 = 280);
+    // Net = Gross minus the partial refund (50) and the exchange (returned 50, replacement 30) = 210.
+    expect(report.financial.grossSales).toBe(280);
+    expect(report.financial.grossSales).toBe(expected.grossSales);
     expect(report.financial.netRevenue).toBe(expected.revenue);
+    expect(report.financial.netRevenue).toBe(210);
     expect(report.financial.cogs).toBe(expected.cogs);
     expect(report.financial.grossProfit).toBe(expected.grossProfit);
     expect(report.financial.grossMargin).toBe(expected.grossMargin);
@@ -122,11 +126,12 @@ describe("Phase 2.1 non-empty monthly report integration fixtures", () => {
 
   it("reconciles opening, expected, actual, variance, tolerance, high-value, and recurring inventory metrics", async () => {
     const report = await getMonthlyManagementReport({ year: 2026, month: 1 });
-    expect(report.inventory.openingStock).toBe(15);
-    expect(report.inventory.expectedStock).toBe(14);
-    expect(report.inventory.closingStock).toBe(11);
-    expect(report.inventory.actualStock).toBe(11);
-    expect(report.inventory.totalVariance).toBe(-3);
+    // PRD valuations in Rupiah: kopi Rp10/kg, susu Rp4/liter.
+    expect(report.inventory.openingStockValue).toBe(120); // 10 kg x 10 + 5 l x 4
+    expect(report.inventory.expectedClosingStockValue).toBe(116); // 10 x 10 + 4 x 4
+    expect(report.inventory.closingStockValue).toBe(86); // 7 x 10 + 4 x 4
+    expect(report.inventory.actualClosingStockValue).toBe(86);
+    expect(report.inventory.totalVarianceValue).toBe(-30); // kopi -3 kg x 10
     expect(report.inventory.outOfToleranceItemCount).toBe(1);
     expect(report.inventory.highValueVarianceCount).toBe(1);
     expect(report.inventory.recurringHighVarianceIngredientCount).toBe(1);

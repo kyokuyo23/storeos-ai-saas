@@ -102,7 +102,7 @@ function generatedReport(overrides: { year?: number; month?: number; generatedAt
       generatedAt,
       auditNotes: [{ reference: "OPN-01", type: "follow_up", note: "Periksa selisih" }],
       financial: { grossSales: 0, netRevenue: 0, cogs: 0, grossProfit: 0, grossMargin: 0, salesTransactionCount: 0, refundValue: 0, voidValue: 0, exchangeImpact: 0 },
-      inventory: { openingStock: 0, closingStock: 0, expectedStock: 0, actualStock: 0, totalVariance: 0, outOfToleranceItemCount: 0, highValueVarianceCount: 0, recurringHighVarianceIngredientCount: 0, stockOpnameSessionCount: 0, openStockOpnameFollowUpCount: 0 },
+      inventory: { openingStockValue: 0, closingStockValue: 0, expectedClosingStockValue: 0, actualClosingStockValue: 0, totalVarianceValue: 0, outOfToleranceItemCount: 0, highValueVarianceCount: 0, recurringHighVarianceIngredientCount: 0, stockOpnameSessionCount: 0, openStockOpnameFollowUpCount: 0 },
       source: { financial: "Financial Core", inventory: "Inventory Intelligence", auditNotes: "Stock Opname + Follow-up", recurringVariancePeriods: [] },
     },
     csv: overrides.csv ?? `\ufeff"Periode mulai","${year}-${String(month).padStart(2, "0")}-01"\n"Audit Notes","Periksa selisih"\n`,
