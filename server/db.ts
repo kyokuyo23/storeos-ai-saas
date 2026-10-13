@@ -24,8 +24,10 @@ export function isUniqueViolation(error: unknown) {
 }
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
-    // prepare:false is required behind Supabase's transaction pooler (Supavisor, port 6543).
-    try { _db = drizzle(postgres(process.env.DATABASE_URL, { prepare: false, max: 5 })); }
+    // Supabase transaction pooler (Supavisor, port 6543): no prepared statements, and no query
+    // pipelining (max_pipeline: 1). postgres.js pipelines extra queries onto busy connections by
+    // default; through Supavisor that stalls concurrent requests until the function times out.
+    try { _db = drizzle(postgres(process.env.DATABASE_URL, { prepare: false, max: 10, max_pipeline: 1, idle_timeout: 20, connect_timeout: 10 } as postgres.Options<Record<string, postgres.PostgresType>>)); }
     catch (error) { console.warn("[Database] Failed to connect:", error); _db = null; }
   }
   return _db;
