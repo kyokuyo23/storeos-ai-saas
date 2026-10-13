@@ -22,7 +22,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 /** Constant-time password comparison (both sides hashed to equal length first). */
 export function ownerPasswordMatches(candidate: unknown, expected: string) {
   if (typeof candidate !== "string" || !expected) return false;
-  return timingSafeEqual(digest(candidate), digest(expected));
+  return timingSafeEqual(digest(candidate.trim()), digest(expected));
 }
 
 /**
