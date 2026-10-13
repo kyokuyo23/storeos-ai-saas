@@ -8,7 +8,8 @@ import { archiveMonthlyManagementReport, isCompletedJakartaMonth } from "./autom
 import { mapFoundationError } from "./foundationErrors";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { ENV } from "./_core/env";
-import { canManageStore, hashPassword, memberAccessInput, memberActiveInput, memberCreateInput, memberPasswordInput, publicUser } from "./userAccounts";
+import { getShiftCheck, listShiftCheckIngredients, listShiftChecks, reviewShiftCheck, setIngredientShiftCheck, shiftCheckListInput, shiftCheckReviewInput, shiftCheckSubmitInput, submitShiftCheck } from "./shiftChecks";
+import { canManageStore, hashPassword, isStoreOwner, memberAccessInput, memberActiveInput, memberCreateInput, memberPasswordInput, publicUser } from "./userAccounts";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, monthlyReportInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput, stockOpnameFollowUpInput, stockOpnameFollowUpNoteInput, stockOpnameHistoryInput } from "./foundationSchemas";
@@ -55,6 +56,23 @@ export const appRouter = router({
     list: protectedProcedure.query(() => db.listIngredients()),
     create: protectedProcedure.input(ingredientInput).mutation(({ input }) => runMutation("Bahan", () => db.createIngredient(input))),
     update: protectedProcedure.input(idInput.extend({ data: ingredientInput })).mutation(({ input }) => runMutation("Bahan", () => db.updateIngredient(input.id, input.data))),
+    setShiftCheck: managerProcedure.input(idInput.extend({ shiftCheck: z.boolean() })).mutation(({ input }) => runMutation("Bahan", () => setIngredientShiftCheck(input.id, input.shiftCheck))),
+  }),
+  shiftCheck: router({
+    /** Blind count: names and units only, never system balances. */
+    items: protectedProcedure.query(() => runMutation("Cek shift", () => listShiftCheckIngredients())),
+    submit: protectedProcedure.input(shiftCheckSubmitInput).mutation(({ ctx, input }) => runMutation("Cek shift", () => submitShiftCheck(ctx.user, input))),
+    list: protectedProcedure.input(shiftCheckListInput).query(({ ctx, input }) => runMutation("Cek shift", () => listShiftChecks({
+      status: input?.status,
+      ...(canManageStore(ctx.user, ENV.ownerOpenId) ? {} : { submittedByUserId: ctx.user.id }),
+    }))),
+    get: protectedProcedure.input(idInput).query(async ({ ctx, input }) => {
+      const check = await runMutation("Cek shift", () => getShiftCheck(input.id));
+      if (!check) throw new TRPCError({ code: "NOT_FOUND", message: "Cek shift tidak ditemukan." });
+      if (check.submittedByUserId !== ctx.user.id && !canManageStore(ctx.user, ENV.ownerOpenId)) throw new TRPCError({ code: "FORBIDDEN", message: "Anda hanya dapat melihat cek shift Anda sendiri." });
+      return check;
+    }),
+    review: managerProcedure.input(shiftCheckReviewInput).mutation(({ ctx, input }) => runMutation("Cek shift", () => reviewShiftCheck({ ...ctx.user, canReviewOwn: isStoreOwner(ctx.user, ENV.ownerOpenId) }, input))),
   }),
   stockMovement: router({
     list: protectedProcedure.query(() => db.listStockMovements()),

@@ -9,6 +9,9 @@ import { createContext } from "./context";
 import { handleAutomatedMonthlyReport, handleVercelCronMonthlyReport } from "../automatedMonthlyReports";
 import { canAccessMonthlyReportArtifacts, readVerifiedMonthlyReportArtifact, type ArtifactKind } from "../monthlyReportArtifacts";
 import { sdk } from "./sdk";
+import { ENV } from "./env";
+import { getShiftCheckPhoto } from "../shiftChecks";
+import { canManageStore } from "../userAccounts";
 
 /** Builds the API-only Express app (no listen, no static/Vite). Shared by the Node server and Vercel. */
 export function createApp() {
@@ -21,6 +24,26 @@ export function createApp() {
   registerOwnerLoginRoutes(app);
   app.post("/api/scheduled/monthly-management-report", handleAutomatedMonthlyReport);
   app.get("/api/scheduled/monthly-management-report", handleVercelCronMonthlyReport);
+  // Phase 2.24 shift-check photo evidence: owner/sysadmin or the cashier who submitted it.
+  app.get("/api/shift-checks/photos/:photoId", async (req, res) => {
+    const photoId = Number(req.params.photoId);
+    if (!Number.isInteger(photoId) || photoId <= 0) { res.status(400).send("Invalid photo"); return; }
+    let user: Awaited<ReturnType<typeof sdk.authenticateRequest>> | null = null;
+    try { user = await sdk.authenticateRequest(req); } catch { user = null; }
+    if (!user) { res.status(401).send("Authentication required"); return; }
+    try {
+      const photo = await getShiftCheckPhoto(photoId);
+      if (!photo) { res.status(404).send("Not found"); return; }
+      if (photo.submittedByUserId !== user.id && !canManageStore(user, ENV.ownerOpenId)) { res.status(403).send("Forbidden"); return; }
+      res.setHeader("Content-Type", photo.contentType);
+      res.setHeader("Cache-Control", "private, max-age=3600");
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.send(Buffer.from(photo.data));
+    } catch (error) {
+      console.error("[ShiftCheckPhoto] failed", error);
+      res.status(503).send("Photo temporarily unavailable");
+    }
+  });
   app.get("/api/reports/monthly-artifacts/:year/:month/:kind", async (req, res) => {
     const year = Number(req.params.year);
     const month = Number(req.params.month);

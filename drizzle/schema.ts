@@ -18,6 +18,7 @@ export const saleStatus = pgEnum("sale_status", ["completed", "partially_refunde
 export const paymentMethod = pgEnum("payment_method", ["cash", "card"]);
 export const stockMovementType = pgEnum("stock_movement_type", ["purchase", "adjustment", "waste", "opname", "sale", "void", "refund", "partial_refund", "exchange_return", "exchange_sale"]);
 export const opnameFollowUpStatus = pgEnum("opname_follow_up_status", ["needs_follow_up", "in_progress", "resolved"]);
+export const shiftCheckStatus = pgEnum("shift_check_status", ["matched", "pending", "approved", "rejected"]);
 export const artifactLifecycleStatus = pgEnum("artifact_lifecycle_status", ["generated", "verified", "retained", "eligible_for_archive", "archived"]);
 
 /** Owner-admin (OWNER_OPEN_ID) and member (staff) accounts. */
@@ -72,6 +73,8 @@ export const ingredients = pgTable("ingredients", {
   minimumStock: decimal("minimumStock", { precision: 14, scale: 2, mode: "number" }).notNull(),
   currentStock: decimal("currentStock", { precision: 14, scale: 3, mode: "number" }).default(0).notNull(),
   isActive: boolean("isActive").default(true).notNull(),
+  /** Counted by the cashier at every end of shift (Phase 2.24). Set by owner/sysadmin only. */
+  shiftCheck: boolean("shiftCheck").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
 });
@@ -276,6 +279,8 @@ export const businessSettings = pgTable("businessSettings", {
   opnameCriticalAgeDays: int("opnameCriticalAgeDays").default(7).notNull(),
   inventoryVarianceAbsoluteTolerance: decimal("inventoryVarianceAbsoluteTolerance", { precision: 14, scale: 3, mode: "number" }).default(0.001).notNull(),
   inventoryVariancePercentageTolerance: decimal("inventoryVariancePercentageTolerance", { precision: 6, scale: 3, mode: "number" }).default(0).notNull(),
+  /** Phase 2.24: fixed cash float (modal kas) in the drawer at the start of every shift. */
+  shiftOpeningCash: decimal("shiftOpeningCash", { precision: 14, scale: 2, mode: "number" }).default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
 });
@@ -407,6 +412,61 @@ export const storedObjects = pgTable("storedObjects", {
 }, (table) => [
   uniqueIndex("stored_objects_key_unique").on(table.storageKey),
 ]);
+
+/** Phase 2.24 end-of-shift blind count of owner-flagged ingredients, with photo evidence and approval. */
+export const shiftChecks = pgTable("shiftChecks", {
+  id: id(),
+  reference: varchar("reference", { length: 64 }).notNull().unique(),
+  status: shiftCheckStatus("status").notNull(),
+  submittedByUserId: int("submittedByUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+  submittedByName: varchar("submittedByName", { length: 120 }).notNull(),
+  note: text("note"),
+  /** Shift window: from the previous end-of-shift check (or 00:00 WIB) to submittedAt. */
+  shiftStartedAt: timestamp("shiftStartedAt").notNull(),
+  varianceItemCount: int("varianceItemCount").notNull(),
+  /** Stock variance value in Rupiah: Σ (counted − expected) × cost per unit. */
+  totalVarianceValue: decimal("totalVarianceValue", { precision: 14, scale: 2, mode: "number" }).notNull(),
+  // Income reconciliation (pemasukan) for sales completed within the shift window.
+  saleCount: int("saleCount").notNull(),
+  grossSales: decimal("grossSales", { precision: 14, scale: 2, mode: "number" }).notNull(),
+  voidRefundValue: decimal("voidRefundValue", { precision: 14, scale: 2, mode: "number" }).notNull(),
+  netSales: decimal("netSales", { precision: 14, scale: 2, mode: "number" }).notNull(),
+  openingCash: decimal("openingCash", { precision: 14, scale: 2, mode: "number" }).notNull(),
+  countedCash: decimal("countedCash", { precision: 14, scale: 2, mode: "number" }).notNull(),
+  countedNonCash: decimal("countedNonCash", { precision: 14, scale: 2, mode: "number" }).notNull(),
+  /** (countedCash − openingCash + countedNonCash) − netSales. */
+  incomeVariance: decimal("incomeVariance", { precision: 14, scale: 2, mode: "number" }).notNull(),
+  submittedAt: timestamp("submittedAt").defaultNow().notNull(),
+  reviewedByUserId: int("reviewedByUserId").references(() => users.id, { onDelete: "restrict" }),
+  reviewedByName: varchar("reviewedByName", { length: 120 }),
+  reviewNote: text("reviewNote"),
+  reviewedAt: timestamp("reviewedAt"),
+}, (table) => [index("shift_checks_status_idx").on(table.status, table.submittedAt), index("shift_checks_submitter_idx").on(table.submittedByUserId, table.submittedAt)]);
+
+export const shiftCheckItems = pgTable("shiftCheckItems", {
+  id: id(),
+  shiftCheckId: int("shiftCheckId").notNull().references(() => shiftChecks.id, { onDelete: "cascade" }),
+  ingredientId: int("ingredientId").notNull().references(() => ingredients.id, { onDelete: "restrict" }),
+  ingredientName: varchar("ingredientName", { length: 180 }).notNull(),
+  unit: varchar("unit", { length: 40 }).notNull(),
+  /** Stok awal shift + pembelian − pemakaian penjualan + lain-lain (waste/penyesuaian/opname) = systemQuantity. */
+  openingQuantity: decimal("openingQuantity", { precision: 14, scale: 3, mode: "number" }).notNull(),
+  purchaseQuantity: decimal("purchaseQuantity", { precision: 14, scale: 3, mode: "number" }).notNull(),
+  usageQuantity: decimal("usageQuantity", { precision: 14, scale: 3, mode: "number" }).notNull(),
+  otherQuantity: decimal("otherQuantity", { precision: 14, scale: 3, mode: "number" }).notNull(),
+  systemQuantity: decimal("systemQuantity", { precision: 14, scale: 3, mode: "number" }).notNull(),
+  countedQuantity: decimal("countedQuantity", { precision: 14, scale: 3, mode: "number" }).notNull(),
+  variance: decimal("variance", { precision: 14, scale: 3, mode: "number" }).notNull(),
+  costPerUnit: decimal("costPerUnit", { precision: 14, scale: 2, mode: "number" }).notNull(),
+}, (table) => [index("shift_check_items_check_idx").on(table.shiftCheckId)]);
+
+export const shiftCheckPhotos = pgTable("shiftCheckPhotos", {
+  id: id(),
+  shiftCheckId: int("shiftCheckId").notNull().references(() => shiftChecks.id, { onDelete: "cascade" }),
+  storageKey: varchar("storageKey", { length: 512 }).notNull(),
+  contentType: varchar("contentType", { length: 64 }).notNull(),
+  byteSize: int("byteSize").notNull(),
+}, (table) => [index("shift_check_photos_check_idx").on(table.shiftCheckId)]);
 
 export type BusinessSettings = typeof businessSettings.$inferSelect;
 export type MonthlyReportArtifact = typeof monthlyReportArtifacts.$inferSelect;

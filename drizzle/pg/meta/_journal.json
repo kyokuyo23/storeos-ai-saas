@@ -29,6 +29,13 @@
       "when": 1791874267977,
       "tag": "0003_user_access_level",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791875099378,
+      "tag": "0004_shift_checks",
+      "breakpoints": true
     }
   ]
 }

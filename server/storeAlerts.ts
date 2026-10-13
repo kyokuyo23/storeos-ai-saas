@@ -3,7 +3,7 @@
  * Pure function so every rule is unit-tested; the router composes it from the database.
  */
 export type AlertSeverity = "critical" | "warning" | "info";
-export type AlertCategory = "stock" | "menu" | "opname" | "variance";
+export type AlertCategory = "stock" | "menu" | "opname" | "variance" | "shift";
 
 export type StoreAlert = {
   id: string;
@@ -31,6 +31,8 @@ export function buildStoreAlerts(input: {
   opname: AlertOpnameSummary | null;
   variance: AlertVarianceRow[];
   thresholds: AlertThresholds;
+  /** Phase 2.24: end-of-shift checks with a variance waiting for owner/sysadmin approval. */
+  shiftChecks?: { pendingCount: number; oldestAgeHours: number | null };
 }): { alerts: StoreAlert[]; counts: Record<AlertSeverity, number> } {
   const alerts: StoreAlert[] = [];
   const ingredientById = new Map(input.ingredients.map((ingredient) => [ingredient.id, ingredient]));
@@ -73,6 +75,11 @@ export function buildStoreAlerts(input: {
   for (const row of input.variance) {
     if (row.status === "ok") continue;
     alerts.push({ id: `variance-${row.ingredientId}`, severity: "warning", category: "variance", title: `Selisih stok di luar toleransi: ${row.ingredientName}`, detail: `Stok aktual ${row.status === "over" ? "lebih" : "kurang"} ${qty(Math.abs(row.variance))} ${row.unit} dari perhitungan resep dalam 30 hari terakhir.`, href: "/" });
+  }
+
+  if (input.shiftChecks && input.shiftChecks.pendingCount > 0) {
+    const age = input.shiftChecks.oldestAgeHours ?? 0;
+    alerts.push({ id: "shift-check-pending", severity: age > 24 ? "critical" : "warning", category: "shift", title: `${input.shiftChecks.pendingCount} cek akhir shift menunggu persetujuan`, detail: `Ada selisih hitung fisik yang belum ditinjau. Cek tertua dikirim ${age < 1 ? "kurang dari 1 jam" : `${Math.floor(age)} jam`} lalu; stok belum disesuaikan sampai disetujui.`, href: "/shift-check" });
   }
 
   alerts.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || a.title.localeCompare(b.title, "id"));

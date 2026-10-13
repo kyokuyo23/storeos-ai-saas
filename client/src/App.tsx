@@ -21,6 +21,7 @@ function Router() {
     <Route path="/insights" component={() => <Foundation page="insights" />} />
     <Route path="/reports" component={() => <Foundation page="reports" />} />
     <Route path="/users" component={() => <Foundation page="users" />} />
+    <Route path="/shift-check" component={() => <Foundation page="shift" />} />
     <Route path="/login" component={OwnerLogin} />
     <Route path="/verify" component={GovernanceAuditQrVerification} />
     <Route component={() => <Foundation page="dashboard" />} />

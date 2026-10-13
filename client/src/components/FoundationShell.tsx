@@ -1,9 +1,9 @@
 import { Link } from "wouter";
-import { AlertTriangle, BarChart3, Box, ChevronLeft, ClipboardList, Coffee, LayoutDashboard, Lock, LogOut, Menu, Package, Settings, Sparkles, Users } from "lucide-react";
+import { AlertTriangle, BarChart3, Box, ChevronLeft, ClipboardCheck, ClipboardList, Coffee, LayoutDashboard, Lock, LogOut, Menu, Package, Settings, Sparkles, Users } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 
-export type FoundationPage = "dashboard" | "products" | "inventory" | "settings" | "pos" | "sales" | "alerts" | "insights" | "reports" | "users";
+export type FoundationPage = "dashboard" | "products" | "inventory" | "settings" | "pos" | "sales" | "alerts" | "insights" | "reports" | "users" | "shift";
 
 const items: Array<{ page: FoundationPage; label: string; href: string; icon: typeof LayoutDashboard; ready?: boolean; ownerOnly?: boolean }> = [
   { page: "dashboard", label: "Dashboard", href: "/", icon: LayoutDashboard, ready: true },
@@ -11,6 +11,7 @@ const items: Array<{ page: FoundationPage; label: string; href: string; icon: ty
   { page: "products", label: "Products", href: "/products", icon: Package, ready: true },
   { page: "inventory", label: "Inventory", href: "/inventory", icon: Box, ready: true },
   { page: "sales", label: "Sales", href: "/sales", icon: BarChart3, ready: true },
+  { page: "shift", label: "Cek Shift", href: "/shift-check", icon: ClipboardCheck, ready: true },
   { page: "alerts", label: "Alerts", href: "/alerts", icon: AlertTriangle, ready: true },
   { page: "insights", label: "Insights", href: "/insights", icon: Sparkles, ready: true },
   { page: "reports", label: "Reports", href: "/reports", icon: ClipboardList, ready: true },

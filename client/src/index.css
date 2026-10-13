@@ -81,3 +81,4 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 @media (max-width: 560px) { .topbar-user-text { display: none; } }
 .password-input { position: relative; display: block; }.password-input .form-input { padding-right: 42px; }.password-toggle { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; display: grid; place-items: center; border: 0; background: transparent; color: #5b6b63; border-radius: 6px; cursor: pointer; }.user-actions { display: flex; flex-wrap: wrap; gap: 6px; }.danger-text { color: #b3261e !important; }
 .compact-select { min-height: 32px; padding: 4px 8px; font-size: 12px; width: auto; }
+.shift-flag { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }.shift-flag input { width: 16px; height: 16px; accent-color: #134e3a; }

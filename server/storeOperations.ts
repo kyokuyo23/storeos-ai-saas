@@ -1,4 +1,5 @@
 import * as db from "./db";
+import { getPendingShiftCheckSummary } from "./shiftChecks";
 import { buildStoreAlerts } from "./storeAlerts";
 import { buildStoreInsights } from "./storeInsights";
 
@@ -19,8 +20,8 @@ export function rollingJakartaPeriods(now: Date, days: number) {
 
 export async function getStoreAlerts(now = new Date()) {
   const { current } = rollingJakartaPeriods(now, 30);
-  const [ingredients, products, recipes, opname, settings, intelligence] = await Promise.all([
-    db.listIngredients(), db.listProducts(), db.listRecipes(), db.getOpenStockOpnameSummary(), db.getSettings(), db.getInventoryIntelligence(current),
+  const [ingredients, products, recipes, opname, settings, intelligence, pendingShift] = await Promise.all([
+    db.listIngredients(), db.listProducts(), db.listRecipes(), db.getOpenStockOpnameSummary(), db.getSettings(), db.getInventoryIntelligence(current), getPendingShiftCheckSummary(),
   ]);
   return {
     generatedAt: now,
@@ -28,6 +29,7 @@ export async function getStoreAlerts(now = new Date()) {
       ingredients, products, recipes, opname,
       variance: intelligence.rows,
       thresholds: { opnameWarningAgeDays: settings.opnameWarningAgeDays, opnameCriticalAgeDays: settings.opnameCriticalAgeDays },
+      shiftChecks: { pendingCount: pendingShift.pendingCount, oldestAgeHours: pendingShift.oldestSubmittedAt ? (now.getTime() - new Date(pendingShift.oldestSubmittedAt).getTime()) / 3_600_000 : null },
     }),
   };
 }
