@@ -8,7 +8,7 @@ import { archiveMonthlyManagementReport, isCompletedJakartaMonth } from "./autom
 import { mapFoundationError } from "./foundationErrors";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { ENV } from "./_core/env";
-import { hashPassword, memberActiveInput, memberCreateInput, memberPasswordInput, publicUser } from "./userAccounts";
+import { canManageStore, hashPassword, memberAccessInput, memberActiveInput, memberCreateInput, memberPasswordInput, publicUser } from "./userAccounts";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { categoryInput, exchangeInput, exchangeSettlementInput, ingredientInput, inventoryIntelligenceInput, inventoryMovementDrillDownInput, monthlyReportInput, partialRefundInput, productFinancialInput, productInput, recipeInput, saleCompletionInput, saleReversalInput, settlementDateRangeInput, settingsInput, stockMovementInput, stockOpnameBatchInput, stockOpnameFollowUpInput, stockOpnameFollowUpNoteInput, stockOpnameHistoryInput } from "./foundationSchemas";
@@ -23,11 +23,12 @@ import { GOVERNANCE_AUDIT_QR_REVOCATION_REASON_MAX_LENGTH } from "./governanceAu
 import { generateGovernanceAuditQrPolicyAuditArtifact, getGovernanceAuditQrPolicyAuditExport, verifyGovernanceAuditQrPolicyAuditBytes } from "./governanceAuditQrPolicyAuditExport";
 import { generateGovernanceAuditQrPolicyReceiptAuditArtifact, getGovernanceAuditQrPolicyReceiptAuditExport, verifyGovernanceAuditQrPolicyReceiptAuditBytes } from "./governanceAuditQrPolicyReceiptAuditExport";
 
-/** Owner-admin only (role admin + configured OWNER_OPEN_ID); members get FORBIDDEN. */
-const ownerProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (!canAccessMonthlyReportArtifacts(ctx.user)) throw new TRPCError({ code: "FORBIDDEN", message: "Hanya pemilik toko yang dapat melakukan ini." });
+/** Owner or sysadmin (admin sistem): Settings changes and user management. Kasir get FORBIDDEN. */
+const managerProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (!canManageStore(ctx.user, ENV.ownerOpenId)) throw new TRPCError({ code: "FORBIDDEN", message: "Hanya pemilik atau admin sistem yang dapat melakukan ini." });
   return next();
 });
+const forbidSelf = (ctxUserId: number, targetId: number, message: string) => { if (ctxUserId === targetId) throw new TRPCError({ code: "BAD_REQUEST", message }); };
 
 const idInput = z.object({ id: z.number().int().positive() });
 const runMutation = async <T>(entity: string, operation: () => Promise<T>) => {
@@ -323,25 +324,31 @@ export const appRouter = router({
     settleExchange: protectedProcedure.input(exchangeSettlementInput).mutation(({ input }) => runMutation("Pembayaran penukaran", () => db.settleExchange(input))),
   }),
   users: router({
-    list: ownerProcedure.query(() => db.listMemberAccounts()),
-    create: ownerProcedure.input(memberCreateInput).mutation(async ({ input }) => {
+    list: managerProcedure.query(() => db.listMemberAccounts()),
+    create: managerProcedure.input(memberCreateInput).mutation(async ({ input }) => {
       if (await db.getMemberByUsername(input.username)) throw new TRPCError({ code: "CONFLICT", message: "Nama pengguna sudah dipakai." });
       const passwordHash = await hashPassword(input.password);
-      return runMutation("Pengguna", () => db.createMemberAccount({ name: input.name, username: input.username, passwordHash }));
+      return runMutation("Pengguna", () => db.createMemberAccount({ name: input.name, username: input.username, passwordHash, accessLevel: input.accessLevel }));
     }),
-    resetPassword: ownerProcedure.input(memberPasswordInput).mutation(async ({ input }) => {
+    resetPassword: managerProcedure.input(memberPasswordInput).mutation(async ({ input }) => {
       const passwordHash = await hashPassword(input.password);
       if (!(await runMutation("Pengguna", () => db.setMemberPassword(input.id, passwordHash)))) throw new TRPCError({ code: "NOT_FOUND", message: "Pengguna tidak ditemukan." });
       return { success: true } as const;
     }),
-    setActive: ownerProcedure.input(memberActiveInput).mutation(async ({ input }) => {
+    setActive: managerProcedure.input(memberActiveInput).mutation(async ({ ctx, input }) => {
+      forbidSelf(ctx.user.id, input.id, "Anda tidak dapat menonaktifkan akun Anda sendiri.");
       if (!(await runMutation("Pengguna", () => db.setMemberActive(input.id, input.isActive)))) throw new TRPCError({ code: "NOT_FOUND", message: "Pengguna tidak ditemukan." });
+      return { success: true } as const;
+    }),
+    setAccessLevel: managerProcedure.input(memberAccessInput).mutation(async ({ ctx, input }) => {
+      forbidSelf(ctx.user.id, input.id, "Anda tidak dapat mengubah peran akun Anda sendiri.");
+      if (!(await runMutation("Pengguna", () => db.setMemberAccessLevel(input.id, input.accessLevel)))) throw new TRPCError({ code: "NOT_FOUND", message: "Pengguna tidak ditemukan." });
       return { success: true } as const;
     }),
   }),
   settings: router({
     get: protectedProcedure.query(() => db.getSettings()),
-    update: ownerProcedure.input(settingsInput).mutation(({ input }) => runMutation("Pengaturan", () => db.updateSettings(input))),
+    update: managerProcedure.input(settingsInput).mutation(({ input }) => runMutation("Pengaturan", () => db.updateSettings(input))),
   }),
 });
 export type AppRouter = typeof appRouter;

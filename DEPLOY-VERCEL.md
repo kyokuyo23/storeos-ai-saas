@@ -30,11 +30,11 @@ Migrasi kedua mengaktifkan Row Level Security di semua tabel tanpa policy: Data 
 ## Login
 Semua halaman dan API wajib login. Buka `https://<domain>/login`:
 
-- **Pemilik (owner-admin):** nama pengguna `pemilik`, kata sandi `OWNER_PASSWORD`. Sesi berlaku 1 tahun.
+- **Pemilik (owner-admin):** nama pengguna `pemilik` atau `owner`, kata sandi `OWNER_PASSWORD`. Sesi berlaku 1 tahun.
 - **Karyawan (member):** akun dibuat pemilik di menu **Pengguna** (nama pengguna + kata sandi, disimpan sebagai hash scrypt). Sesi berlaku 30 hari; ganti sandi atau nonaktifkan akun langsung mengeluarkan sesi karyawan tersebut.
-- Karyawan dapat memakai Dashboard, POS, Products, Inventory, Sales, Alerts, Insights, dan melihat Reports. Arsip/ekspor/governance laporan, Settings, dan Pengguna khusus pemilik (dicek di server).
+- Peran akun: **Kasir** (Dashboard, POS, Products, Inventory, Sales, Alerts, Insights, lihat Reports) dan **Admin sistem** (kasir + Settings + Pengguna). Arsip/ekspor/governance laporan tetap khusus pemilik (dicek di server).
 
-Migrasi kolom akun: `supabase/migrations/20261013000000_storeos_user_accounts.sql`. Mengganti `OWNER_PASSWORD` tidak mengeluarkan sesi lama; ganti `JWT_SECRET` untuk memaksa semua sesi keluar.
+Migrasi kolom akun: `supabase/migrations/20261013000000_storeos_user_accounts.sql` dan `20261013010000_storeos_user_access_level.sql`. Mengganti `OWNER_PASSWORD` tidak mengeluarkan sesi lama; ganti `JWT_SECRET` untuk memaksa semua sesi keluar.
 
 ## Keamanan (penting)
 - Fitur dasar (POS, produk, stok, penjualan, pengaturan) memakai endpoint publik sejak desain awal: tanpa login pun bisa dibaca dan diubah oleh siapa saja yang tahu URL. Sampai fitur dasar dikunci, aktifkan **Settings → Deployment Protection → Vercel Authentication** atau jangan sebarkan URL.

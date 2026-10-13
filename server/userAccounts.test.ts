@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const h = vi.hoisted(() => ({
+const h = vi.hoisted(() => (process.env.OWNER_OPEN_ID = "owner-1", {
   listProducts: vi.fn(async () => []),
   getSettings: vi.fn(async () => ({ id: 1 })),
   updateSettings: vi.fn(async () => undefined),
@@ -9,6 +9,7 @@ const h = vi.hoisted(() => ({
   createMemberAccount: vi.fn(async (input: { name: string; username: string; passwordHash: string }) => ({ id: 7, name: input.name, username: input.username })),
   setMemberPassword: vi.fn(async () => true),
   setMemberActive: vi.fn(async () => false),
+  setMemberAccessLevel: vi.fn(async () => true),
 }));
 
 vi.mock("./db", () => h);
@@ -22,6 +23,7 @@ import { hashPassword, isOwnerUsername, memberCreateInput, publicUser, verifyPas
 const caller = (user: Record<string, unknown> | null) => appRouter.createCaller({ user: user as any, req: {} as any, res: { clearCookie: vi.fn() } as any });
 const owner = { id: 1, openId: "owner-1", role: "admin", name: "Pemilik", lastSignedIn: new Date() };
 const member = { id: 2, openId: "member_abc", role: "user", name: "Sari", username: "sari", passwordHash: "scrypt$secret", isActive: true, lastSignedIn: new Date() };
+const sysadmin = { ...member, id: 5, openId: "member_sys", username: "sysadmin", accessLevel: "sysadmin" };
 const settings = { businessName: "Kopi", storeLocation: "Bekasi", currency: "IDR", timezone: "Asia/Jakarta", opnameWarningAgeDays: 3, opnameCriticalAgeDays: 7, inventoryVarianceAbsoluteTolerance: 0, inventoryVariancePercentageTolerance: 0 };
 
 describe("member passwords", () => {
@@ -82,5 +84,20 @@ describe("access by role", () => {
     await expect(caller(owner).users.create({ name: "Budi 2", username: "budi", password: "kasir-budi-01" })).rejects.toMatchObject({ code: "CONFLICT" });
     await expect(caller(owner).users.resetPassword({ id: 3, password: "baru-12345" })).resolves.toEqual({ success: true });
     await expect(caller(owner).users.setActive({ id: 99, isActive: false })).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("sysadmin manages settings and users, but not report archives, and cannot lock itself out", async () => {
+    await caller(sysadmin).settings.update(settings);
+    expect(h.updateSettings).toHaveBeenCalledTimes(1);
+    await expect(caller(sysadmin).users.list()).resolves.toEqual([]);
+    await caller(sysadmin).users.create({ name: "Kasir 1", username: "kasir1", password: "kasir-satu-01", accessLevel: "member" });
+    expect(h.createMemberAccount.mock.calls[0][0]).toMatchObject({ username: "kasir1", accessLevel: "member" });
+    await expect(caller(sysadmin).users.setActive({ id: 5, isActive: false })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(caller(sysadmin).users.setAccessLevel({ id: 5, accessLevel: "member" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(caller(sysadmin).users.setAccessLevel({ id: 2, accessLevel: "sysadmin" })).resolves.toEqual({ success: true });
+    await expect(caller(sysadmin).reports.archiveMonthlyArtifact({ year: 2026, month: 9 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(await caller(sysadmin).auth.me()).toMatchObject({ accessLevel: "sysadmin", canManage: true, isOwner: false });
+    expect(await caller({ ...sysadmin, isActive: false }).users.list().catch((error) => error.code)).toBe("FORBIDDEN");
+    expect(await caller(member).auth.me()).toMatchObject({ accessLevel: "member", canManage: false });
   });
 });

@@ -35,6 +35,8 @@ export const users = pgTable("users", {
   passwordHash: text("passwordHash"),
   isActive: boolean("isActive").default(true).notNull(),
   sessionVersion: integer("sessionVersion").default(1).notNull(),
+  /** Member access level: "member" (kasir/karyawan) or "sysadmin" (admin sistem: also Settings + Pengguna). */
+  accessLevel: varchar("accessLevel", { length: 16 }).default("member").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),

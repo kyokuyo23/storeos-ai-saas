@@ -47,16 +47,29 @@ const passwordSchema = z.string()
   .max(128, "Kata sandi maksimal 128 karakter.")
   .refine((value) => value.trim() === value, "Kata sandi tidak boleh diawali atau diakhiri spasi.");
 
+export const ACCESS_LEVELS = ["member", "sysadmin"] as const;
+export type AccessLevel = (typeof ACCESS_LEVELS)[number];
+const accessLevelSchema = z.enum(ACCESS_LEVELS);
+
 export const memberCreateInput = z.object({
   name: z.string().trim().min(1, "Nama wajib diisi.").max(80),
   username: usernameSchema,
   password: passwordSchema,
+  accessLevel: accessLevelSchema.default("member"),
 });
+export const memberAccessInput = z.object({ id: z.number().int().positive(), accessLevel: accessLevelSchema });
+
+type AccessUser = { openId: string; role: string; username?: string | null; isActive?: boolean; accessLevel?: string | null; passwordHash?: string | null } | null | undefined;
+/** The single owner-admin of this store (OWNER_OPEN_ID). Only they reach report archives/exports/governance. */
+export const isStoreOwner = (user: AccessUser, ownerOpenId: string) => Boolean(user && ownerOpenId && user.role === "admin" && user.openId === ownerOpenId);
+/** Owner or an active sysadmin member: may change Settings and manage user accounts. */
+export const canManageStore = (user: AccessUser, ownerOpenId: string) => isStoreOwner(user, ownerOpenId) || Boolean(user && user.role === "user" && user.username && user.isActive !== false && user.accessLevel === "sysadmin");
 export const memberPasswordInput = z.object({ id: z.number().int().positive(), password: passwordSchema });
 export const memberActiveInput = z.object({ id: z.number().int().positive(), isActive: z.boolean() });
 
 /** Fields of a user that are safe to send to the browser (never the password hash). */
-export function publicUser<T extends { id: number; openId: string; name: string | null; email?: string | null; role: string; username?: string | null; isActive?: boolean; lastSignedIn: Date }>(user: T, ownerOpenId: string) {
-  const isOwner = Boolean(ownerOpenId) && user.role === "admin" && user.openId === ownerOpenId;
-  return { id: user.id, openId: user.openId, name: user.name, email: user.email ?? null, role: user.role, username: user.username ?? null, isActive: user.isActive ?? true, lastSignedIn: user.lastSignedIn, isOwner };
+export function publicUser<T extends { id: number; openId: string; name: string | null; email?: string | null; role: string; username?: string | null; isActive?: boolean; accessLevel?: string | null; lastSignedIn: Date }>(user: T, ownerOpenId: string) {
+  const isOwner = isStoreOwner(user, ownerOpenId);
+  const accessLevel = isOwner ? "owner" : user.accessLevel === "sysadmin" ? "sysadmin" : "member";
+  return { id: user.id, openId: user.openId, name: user.name, email: user.email ?? null, role: user.role, username: user.username ?? null, isActive: user.isActive ?? true, lastSignedIn: user.lastSignedIn, isOwner, accessLevel, canManage: canManageStore(user, ownerOpenId) };
 }

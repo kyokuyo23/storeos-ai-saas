@@ -57,7 +57,7 @@ export async function getUserByOpenId(openId: string) {
 }
 
 // ---- Member (staff) accounts, managed by the owner-admin ----
-const memberColumns = { id: users.id, name: users.name, username: users.username, isActive: users.isActive, lastSignedIn: users.lastSignedIn, createdAt: users.createdAt };
+const memberColumns = { id: users.id, name: users.name, username: users.username, accessLevel: users.accessLevel, isActive: users.isActive, lastSignedIn: users.lastSignedIn, createdAt: users.createdAt };
 export async function getMemberByUsername(username: string) {
   return (await (await requireDb()).select().from(users).where(eq(users.username, username)).limit(1))[0];
 }
@@ -65,9 +65,9 @@ export async function listMemberAccounts() {
   const db = await requireDb();
   return db.select(memberColumns).from(users).where(and(eq(users.role, "user"), isNotNull(users.username))).orderBy(asc(users.username));
 }
-export async function createMemberAccount(input: { name: string; username: string; passwordHash: string }) {
+export async function createMemberAccount(input: { name: string; username: string; passwordHash: string; accessLevel: "member" | "sysadmin" }) {
   const db = await requireDb();
-  const [row] = await db.insert(users).values({ openId: `member_${nanoid(24)}`, name: input.name, username: input.username, passwordHash: input.passwordHash, role: "user", loginMethod: "password", isActive: true, sessionVersion: 1 }).returning(memberColumns);
+  const [row] = await db.insert(users).values({ openId: `member_${nanoid(24)}`, name: input.name, username: input.username, passwordHash: input.passwordHash, accessLevel: input.accessLevel, role: "user", loginMethod: "password", isActive: true, sessionVersion: 1 }).returning(memberColumns);
   return row;
 }
 /** Only member rows (role user with a username) can be changed here; returns false when no such member. */
@@ -79,6 +79,11 @@ export async function setMemberPassword(id: number, passwordHash: string) {
 export async function setMemberActive(id: number, isActive: boolean) {
   const db = await requireDb();
   const rows = await db.update(users).set({ isActive, sessionVersion: sql`${users.sessionVersion} + 1` }).where(and(eq(users.id, id), eq(users.role, "user"), isNotNull(users.username))).returning({ id: users.id });
+  return rows.length > 0;
+}
+export async function setMemberAccessLevel(id: number, accessLevel: "member" | "sysadmin") {
+  const db = await requireDb();
+  const rows = await db.update(users).set({ accessLevel }).where(and(eq(users.id, id), eq(users.role, "user"), isNotNull(users.username))).returning({ id: users.id });
   return rows.length > 0;
 }
 export async function recordMemberSignIn(id: number) {

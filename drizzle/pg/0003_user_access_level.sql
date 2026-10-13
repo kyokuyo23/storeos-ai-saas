@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "accessLevel" varchar(16) DEFAULT 'member' NOT NULL;
